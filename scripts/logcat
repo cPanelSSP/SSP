@@ -6,7 +6,7 @@ use strict;
 
 use DateTime;
 
-my $logfile = "/var/log/chksrvd.log";
+my $logfile = "/var/log/chkservd.log";
 my @log_times = ();
 
 open(LOG,"< $logfile") or die $!;
