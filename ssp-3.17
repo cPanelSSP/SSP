@@ -2051,6 +2051,9 @@ sub check_bash_history_for_certain_commands {
     my %shell_commands = (
         'chattr'        => 0,
         'chmod'         => 0,
+	'chown'         => 0,
+	'userdel'	=> 0,
+	'groupdel'	=> 0,
     );
 
     my $commands;
@@ -2069,6 +2072,14 @@ sub check_bash_history_for_certain_commands {
                 elsif ( /chmod/ ) {
                     $shell_commands{'chmod'} = 1;
                 }
+		elsif ( /chown/ ) {
+		    $shell_commands{'chown'} =1;
+		elsif ( /userdel/ ) {
+		    $shell_commands{'userdel'} = 1;
+		}
+		elsif ( /groupdel/ ) {
+		    $shell_commands{'groupdel'} = 1;
+		}
             }
             close $history_fh;
         }
