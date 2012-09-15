@@ -1,4 +1,6 @@
-This repo exists so that it can take "pull requests".
 
-This is not the official repo for SSP. This is simply a location where new
-versions are uploaded - nothing more. Use at your own risk.
+This is my working copy of cPanel's SSP (System Status Probe).
+
+Note that this is not an official repository for SSP and that this code comes with no guarantees of merchantability or fitness for a particular purpose.
+
+Use at your own risk.
