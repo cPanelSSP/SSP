@@ -2073,7 +2073,8 @@ sub check_bash_history_for_certain_commands {
                     $shell_commands{'chmod'} = 1;
                 }
 		elsif ( /chown/ ) {
-		    $shell_commands{'chown'} =1;
+		    $shell_commands{'chown'} = 1;
+		} 
 		elsif ( /userdel/ ) {
 		    $shell_commands{'userdel'} = 1;
 		}
