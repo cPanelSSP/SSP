@@ -3171,7 +3171,7 @@ sub get_mysql_error_log {
 }
 
 sub check_for_non_default_mysql_error_log_location {
-    if ( $mysql_error_log ) {
+    if ( $mysql_error_log and $mysql_error_log !~ m# \A /var/lib/mysql/${hostname}\.err \z #xms ) {
         print_warn( 'MySQL: ' );
         print_warning( "error log configured in /etc/my.cnf as $mysql_error_log" );
     }
