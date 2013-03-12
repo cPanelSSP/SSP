@@ -13,13 +13,18 @@ use Storable;
 use POSIX;
 use Time::Local;
 
+{
+  local @INC = (@INC, "/usr/local/cpanel");
+  eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require Cpanel::CachedCommand; };
+}
+
 if ( $< != 0 ) {
     die "SSP must be run as root\n";
 }
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.20';
+my $version = '4.21';
 
 $| = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -38,8 +43,8 @@ my %hostinfo                    = get_hostinfo();
 my %cpuinfo                     = get_cpuinfo();
 my $mysql_datadir               = get_mysql_datadir();
 my $mysql_error_log             = get_mysql_error_log();
-my @apache_version_output       = split /\n/, run( '/usr/local/apache/bin/httpd', '-v' );
-my @apache_modules_output       = split /\n/, run( '/usr/local/apache/bin/httpd', '-M' );
+my @apache_version_output       = split /\n/, cached_run( '/usr/local/apache/bin/httpd', '-v' );
+my @apache_modules_output       = split /\n/, cached_run( '/usr/local/apache/bin/httpd', '-M' );
 my @mysql_rpm_versions;         # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
 my @custom_opt_mods;            # items in /var/cpanel/easy/apache/custom_opt_mods/
 my @usr_local_cpanel_hooks;     # items in /usr/local/cpanel/hooks/
@@ -181,6 +186,7 @@ check_for_var_cpanel_roundcube_install();
 check_for_missing_etc_localtime();
 check_for_immutable_files();
 check_for_missing_perl_modules();
+check_for_rpmsave_conf();
 
 # [3RDP]
 print "\n";
@@ -845,7 +851,7 @@ sub check_for_cpanel_update {
 }
 
 sub check_perl_version_less_than_588 {
-    my @perl_v = split /\n/, run( 'perl', '-v' );
+    my @perl_v = split /\n/, cached_run( 'perl', '-v' );
 
     my $perl_version;
     for my $line ( @perl_v ) {
@@ -1051,7 +1057,7 @@ sub print_php_configuration {
 
     if ( $phpversion == 5 ) {
         if ( -x '/usr/bin/php' ) {
-            my @php_v = split /\n/, run( '/usr/bin/php', '-v' );
+            my @php_v = split /\n/, cached_run( '/usr/bin/php', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php5version = $1;
             }
@@ -1064,7 +1070,7 @@ sub print_php_configuration {
         }
 
         if ( $php4handler ne 'none' ) {
-            my @php_v = split /\n/, run( '/usr/local/php4/bin/php', '-v' );
+            my @php_v = split /\n/, cached_run( '/usr/local/php4/bin/php', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php4version = $1;
             }
@@ -1079,7 +1085,7 @@ sub print_php_configuration {
 
     if ( $phpversion == 4 ) {
         if ( -x '/usr/local/php4/bin/php' ) {
-            my @php_v = split /\n/, run( '/usr/local/php4/bin/php', '-v' );
+            my @php_v = split /\n/, cached_run( '/usr/local/php4/bin/php', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php4version = $1;
             }
@@ -1092,7 +1098,7 @@ sub print_php_configuration {
         }
 
         if ( $php5handler ne 'none' ) {
-            my @php_v = split /\n/, run( '/usr/bin/php', '-v' );
+            my @php_v = split /\n/, cached_run( '/usr/bin/php', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php5version = $1;
             }
@@ -1898,7 +1904,7 @@ sub check_var_cpanel_users_files_ownership {
     my @files;
     if ( -d $var_cpanel_users ) {
         opendir( my $dir_fh, $var_cpanel_users );
-        @files = grep { ! /^\.(\.?)$/ and ! /^(root|system|nobody)$/ } readdir $dir_fh;
+        @files = grep { !m/^(?:\.(\.?)|root|system|nobody)$/ } readdir $dir_fh;
         closedir $dir_fh;
     }
 
@@ -2914,16 +2920,15 @@ sub check_for_missing_or_commented_customlog {
     }
 
     if ( open my $httpdconf_fh, '<', $httpdconf ) {
-        while ( <$httpdconf_fh> ) {
-            if ( /#(?:\s+)?CustomLog\s/i ) {
-                $httpdconf_commented_customlog = 1;
-                last;
-            }
-            elsif ( /CustomLog\s/i ) {
-                $httpdconf_customlog_exists = 1;
-            }
-        }
+        local $/ = undef;
+        my $httpdconf_txt = readline($httpdconf_fh);
         close $httpdconf_fh;
+        if ( $httpdconf_txt =~ m/\n[\t ]*#[\t ]*CustomLog\s/si ) {
+            $httpdconf_commented_customlog = 1;
+        }
+        if ( $httpdconf_txt =~ m/\n[\t ]*CustomLog\s/si ) {
+            $httpdconf_customlog_exists = 1;
+        }
     }
 
     if ( $httpdconf_commented_customlog ) {
@@ -2959,18 +2964,18 @@ sub check_for_apache_rlimits {
     my $output;
 
     if ( open my $httpdconf_fh, '<', $httpdconf ) {
-        while ( <$httpdconf_fh> ) {
-            if ( /^RLimitMEM (\d+)/ ) {
-                $rlimitmem = $1;
-            }
-            if ( /^RLimitCPU (\d+)/ ) {
-                $rlimitcpu = $1;
-            }
-        }
+        local $/ = undef;
+        my $httpdconf_txt = readline($httpdconf_fh);
         close $httpdconf_fh;
+        if ( $httpdconf_txt =~ m/\n[\t ]+RLimitMEM (\d+)/s ) {
+            $rlimitmem = $1;
+        }
+        if ( $httpdconf_txt =~ m/\n[\t ]+RLimitCPU (\d+)/s ) {
+            $rlimitcpu = $1;
+        }
     }
 
-    if ( $rlimitmem ) {
+    if ($rlimitmem) {
         my $rlimitmem_converted = sprintf('%.0f MB', $rlimitmem / 1024 / 1024);
         $output = "RLimitMEM $rlimitmem [$rlimitmem_converted]";
     }
@@ -3509,7 +3514,7 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
 
     my $log = '/usr/local/apache/logs/error_log';
     my $size = ( stat( $log ))[7];
-    my $bytes_to_check = 20_971_520; # 20M limit of logs to check, may need adjusting, depending how much time it adds to SSP
+    my $bytes_to_check = 20_971_520 / 2; # 10M limit of logs to check, may need adjusting, depending how much time it adds to SSP
     my $seek_position = 0;
     my $log_data;
     my @logs;
@@ -3524,26 +3529,26 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
         read $file_fh, $log_data, $bytes_to_check;
         close $file_fh;
     }
-
-    @logs = split /\n/, $log_data;
-    undef $log_data;
-    @logs = reverse @logs;
-
-    for my $log_line ( @logs ) {
-        if ( $apache_version eq '2.2' ) {
-            # [Wed Nov 14 05:55:04 2012] [error] server reached MaxClients setting, consider raising the MaxClients setting
-            if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s+ \[error\] \s+ server \s+ reached \s+ MaxClients }xms ) {
-                $limit_last_hit_date = $1;
-                last;
-            }
-        }
-        elsif ( $apache_version eq '2.4' ) {
-            # [Fri Feb 08 09:58:45.875187 2013] [mpm_prefork:error] [pid 23220] AH00161: server reached MaxRequestWorkers
-            if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s (.*) server \s reached \s MaxRequestWorkers }xms ) {
-                $limit_last_hit_date = $1;
-                last;
-            }
-        }
+    if ($log_data =~ m/(?:MaxClients|MaxRequestWorkers)/s) {
+      @logs = split /\n/, $log_data;
+      undef $log_data;
+      @logs = reverse @logs;
+      for my $log_line ( @logs ) {
+          if ( $apache_version eq '2.2' ) {
+              # [Wed Nov 14 05:55:04 2012] [error] server reached MaxClients setting, consider raising the MaxClients setting
+              if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s+ \[error\] \s+ server \s+ reached \s+ MaxClients }xms ) {
+                  $limit_last_hit_date = $1;
+                  last;
+              }
+          }
+          elsif ( $apache_version eq '2.4' ) {
+              # [Fri Feb 08 09:58:45.875187 2013] [mpm_prefork:error] [pid 23220] AH00161: server reached MaxRequestWorkers
+              if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s (.*) server \s reached \s MaxRequestWorkers }xms ) {
+                  $limit_last_hit_date = $1;
+                  last;
+              }
+          }
+      }
     }
 
     if ( $limit_last_hit_date ) {
@@ -3628,9 +3633,12 @@ sub check_for_custom_locales {
   
     my $user_count = scalar @cpanel_users;
  
-    print_warn("cpusers: ");
-    print_warning("Too many cpanel users to do locales check: $user_count");
-   
+    if ($user_count > 2000) {
+      print_warn("cpusers: ");
+      print_warning("Too many cpanel users to do locales check: $user_count");
+      return;
+    }
+ 
     for my $user ( @cpanel_users ) {
         if ( open my $user_fh, '<', "${users_dir}/${user}" ) {
             while ( <$user_fh> ) {
@@ -3854,12 +3862,12 @@ sub check_if_httpdconf_ipaddrs_exist {
     return if !$httpdconf;
 
     if ( open my $httpdconf_fh, '<', $httpdconf ) {
-        while ( <$httpdconf_fh> ) {
-            if ( /<VirtualHost\s+(\d+\.\d+\.\d+\.\d+):(?:\d+)>/i ) {
-                push @vhost_ipaddrs, $1;
-            }
-        }
+        local $/ = undef;
+        my $httpdconf_txt = readline($httpdconf_fh);
         close $httpdconf_fh;
+        while ( $httpdconf_txt =~ m/<VirtualHost\s+(\d+\.\d+\.\d+\.\d+):(?:\d+)>/sig ) {
+            push @vhost_ipaddrs, $1;
+        }
     }
 
     # uniq IP addrs only
@@ -4592,6 +4600,24 @@ sub check_for_missing_perl_modules {
             print_warn("Missing perl module (see case 64015): ");
             print_warning("$module: $@");
         }
+    }
+}
+
+sub check_for_rpmsave_conf {
+    foreach my $cfg ( '/etc/proftpd.conf', '/etc/pure-ftpd.conf' ) {
+        if ( -e $cfg . '.rpmsave' ) {
+            print_warn("Found .rpmsave: ");
+            print_warning( $cfg . '.rpmsave' );
+        }
+    }
+}
+
+sub cached_run {
+    if ( $INC{'Cpanel/CachedCommand.pm'} ) {
+        goto \&Cpanel::CachedCommand::cachedcommand;
+    }
+    else {
+        goto \&run;
     }
 }
 
