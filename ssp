@@ -19,7 +19,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.17';
+my $version = '4.18';
 
 $| = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -51,6 +51,7 @@ my @rpm_list;                   # rpm -qa
 ##  END GLOBALS     ##
 ######################
 
+$|=1;
 
 ## [INFO]
 print "\n";
@@ -114,6 +115,7 @@ check_for_oracle_linux();
 check_for_usr_local_cpanel_hooks();
 check_for_sql_safe_mode();
 check_mysql_non_default_datadir();
+check_mysqld_warnings_errors();
 check_for_domain_forwarding();
 check_for_empty_apache_templates();
 check_for_empty_postgres_config();
@@ -308,6 +310,38 @@ sub get_cpanel_version {
 # shameless rip of /usr/local/cpanel/Cpanel/SafeRun/Simple.pm which, along with
 # all other current cPanel modules, is not guaranteed to work with 11.35+ apparently.
 # so, we take what we need and put it here
+sub run_trap_stderr {
+    my $cmdline = \@_;
+    my $output;
+
+    local ($/);
+    my ( $pid, $prog_fh );
+
+    if ( $pid = open( $prog_fh, '-|' ) ) { 
+
+    }   
+    else {
+        open STDERR, '>&STDOUT';
+        ( $ENV{'PATH'} ) = $ENV{'PATH'} =~ m/(.*)/;    # untaint, FB 6622
+        exec(@$cmdline);
+        exit(127);
+    }
+
+    if ( !$prog_fh || !$pid ) { 
+        $? = -1; 
+
+        return \$output;
+    }   
+    $output = readline($prog_fh);
+    close($prog_fh);
+
+    return $output;
+}
+
+
+# shameless rip of /usr/local/cpanel/Cpanel/SafeRun/Simple.pm which, along with
+# all other current cPanel modules, is not guaranteed to work with 11.35+ apparently.
+# so, we take what we need and put it here
 sub run {
     my $cmdline = \@_;
     my $output;
@@ -315,16 +349,15 @@ sub run {
     local ($/);
     my ( $pid, $prog_fh );
 
-    open STDERR, '>', '/dev/null';
     if ( $pid = open( $prog_fh, '-|' ) ) { 
 
     }   
     else {
+        open STDERR, '>', '/dev/null';
         ( $ENV{'PATH'} ) = $ENV{'PATH'} =~ m/(.*)/;    # untaint, FB 6622
         exec(@$cmdline);
         exit(127);
     }
-    close STDERR;
 
     if ( !$prog_fh || !$pid ) { 
         $? = -1; 
@@ -995,19 +1028,19 @@ sub print_php_configuration {
         if ( /^phpversion: (\d)/ ) {
             $phpversion = $1;
         }
-        if ( /^php4: (.*)/ ) {
+        if ( /^php4:[ \t]+['"]?([^'"]+)/ ) {
             $php4handler = $1;
         }
-        if ( /^php5: (.*)/ ) {
+        if ( /^php5:[ \t]+['"]?([^'"]+)/ ) {
             $php5handler = $1;
         }
-        if ( /^suexec: (.*)/ ) {
+        if ( /^suexec:[ \t]+['"]?([^'"]+)/ ) {
             $suexec = $1;
         }
     }    
     close $phpconf_fh;
 
-    if ( $suexec == 1 ) {
+    if ( $suexec && $suexec == 1 ) {
         $suexec = '/w suexec';
     }    
     else {
@@ -1030,7 +1063,7 @@ sub print_php_configuration {
 
         if ( $php4handler ne 'none' ) {
             my @php_v = split /\n/, run( '/usr/local/php4/bin/php', '-v' );
-            if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
+            if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php4version = $1;
             }
             else {
@@ -2272,6 +2305,19 @@ sub get_mysql_datadir {
     }
 
     return $datadir;
+}
+
+sub check_mysqld_warnings_errors {
+    foreach my $mysql_err ( grep ( m{\[(?:err)}i, split( /\n/, run_trap_stderr( 'mysqld', '-u', 'mysql', '--help' ) ) ) ) {
+        if ( $mysql_err =~ m/open_files_limit=/ ) {
+            print_warn('MySQL config missing newline: [see case 64008]: ');
+            print_warning($mysql_err);
+        }
+        else {
+            print_warn('MySQL config errors: ');
+            print_warning($mysql_err);
+        }
+    }
 }
 
 sub check_mysql_non_default_datadir {
@@ -3577,7 +3623,12 @@ sub check_for_custom_locales {
     closedir $users_dir_fh;
 
     return if !@cpanel_users;   
-    
+  
+    my $user_count = scalar @cpanel_users;
+ 
+    print_warn("cpusers: ");
+    print_warning("Too many cpanel users to do locales check: $user_count");
+   
     for my $user ( @cpanel_users ) {
         if ( open my $user_fh, '<', "${users_dir}/${user}" ) {
             while ( <$user_fh> ) {
@@ -3932,7 +3983,7 @@ sub check_for_rpm_overrides {
         $md5 = run( 'md5sum', $local_versions );
     }
 
-    if ( $md5 =~ m{ \A fd3f270edda79575343e910369b75ab7 \s }xms ) {
+    if ( $md5 && $md5 =~ m{ \A fd3f270edda79575343e910369b75ab7 \s }xms ) {
         $is_default = 1;
     }
 
@@ -3949,20 +4000,20 @@ sub check_for_rpm_overrides {
         print_warn('RPM override: ');
         print_warning("$rpm_override_dir contains entries, manually review. More info: http://go.cpanel.net/rpmversions");
 
-        eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require YAML::Syck; };
-        if ( !$@ ) {
-            my $ref = YAML::Syck::LoadFile($local_versions);
-            if ( $ref && $ref->{'target_settings'} ) {
-use Data::Dumper;
-print STDERR Dumper( $ref->{'target_settings'} );
-                foreach my $package ( keys %{ $ref->{'target_settings'} } ) {
-                    if ( $ref->{'target_settings'}{$package} =~ m{uninstalled} ) {
-                        print_warn("$package is listed as uninstalled in $local_versions");
+        if ( -r $local_versions ) {
+            eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require YAML::Syck; };
+            if ( !$@ ) {
+                my $ref = YAML::Syck::LoadFile($local_versions);
+                if ( $ref && $ref->{'target_settings'} ) {
+                    foreach my $package ( keys %{ $ref->{'target_settings'} } ) {
+                        if ( $ref->{'target_settings'}{$package} =~ m{uninstalled} ) {
+                            print_warn("$package is listed as uninstalled in $local_versions");
 
+                        }
                     }
                 }
-            }
 
+            }
         }
     }
 }
@@ -4227,9 +4278,9 @@ sub check_for_networkmanager {
         }
     }
 
-    if ( $networkmanager_running == 1 ) {
-        print_warn( 'NetworkManager: ' );
-        print_warning( 'found in the process list' );
+    if ( $networkmanager_running && $networkmanager_running == 1 ) {
+        print_warn('NetworkManager: ');
+        print_warning('found in the process list');
     }
 }
 
