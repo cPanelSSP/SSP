@@ -19,7 +19,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.18';
+my $version = '4.19';
 
 $| = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -179,6 +179,7 @@ check_for_homeloader_php_extension();
 check_for_networkmanager();
 check_for_var_cpanel_roundcube_install();
 check_for_missing_etc_localtime();
+check_for_immutable_files();
 
 # [3RDP]
 print "\n";
@@ -4571,6 +4572,17 @@ sub build_rpm_list {
       map { $_->{'name'} . '-' . $_->{'version'} . '-' . $_->{'release'} } @extended_rpm_list;
 
     return @rpm_list;
+}
+
+sub check_for_immutable_files {
+    return if !-x '/usr/bin/lsattr';
+
+    my @path_dirs = split( m{:}, $ENV{'PATH'} );
+
+    foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, run( 'lsattr', @path_dirs ) ) ) ) {
+        print_warn('Immutable file: ');
+        print_warning("$file");
+    }
 }
 
 1;
