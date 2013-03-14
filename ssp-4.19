@@ -13,18 +13,13 @@ use Storable;
 use POSIX;
 use Time::Local;
 
-{
-  local @INC = (@INC, "/usr/local/cpanel");
-  eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require Cpanel::CachedCommand; };
-}
-
 if ( $< != 0 ) {
     die "SSP must be run as root\n";
 }
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.27';
+my $version = '4.19';
 
 $| = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -51,8 +46,6 @@ my @usr_local_cpanel_hooks;     # items in /usr/local/cpanel/hooks/
 my @easyapache_templates;       # items in /var/cpanel/easy/apache/profile/
 my @extended_rpm_list;          # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n'
 my @rpm_list;                   # rpm -qa
-my %cpconf;                     # cpanel.config
-my %pureftpdconf;               # /etc/pure-ftpd.conf
 
 ######################
 ##  END GLOBALS     ##
@@ -187,12 +180,6 @@ check_for_networkmanager();
 check_for_var_cpanel_roundcube_install();
 check_for_missing_etc_localtime();
 check_for_immutable_files();
-check_for_missing_perl_modules();
-check_for_rpmsave_conf();
-check_for_cloudlinux_mysql_gov();
-check_cpanel_config_for_low_maxmem();
-check_pure_ftpd_conf_for_upload_script_and_dead(); #must come after check_cpanel_config_for_low_maxmem
-check_for_extra_uid_0_user(); # this is NOT a security check, but for FB 62467
 
 # [3RDP]
 print "\n";
@@ -448,7 +435,6 @@ sub print_tip {
         '[FB 61516] cPanel\'s Java SSH term app may say shell access is disabled, even when it is enabled',
         '[FB 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and "PCRE is not compiled with UTF-8 support"',
         '[FB 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale',
-        '[FB 46853] Customer complaining that they can\'t log into cPanel as root? Update FB 46853',
         '[FB 44884] upcp resets Mailman lists\' hostnames. pre/postupcp hooks workaround in ticket 3541643',
         '[FB 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net',
         'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)',
@@ -858,7 +844,7 @@ sub check_for_cpanel_update {
 }
 
 sub check_perl_version_less_than_588 {
-    my @perl_v = split /\n/, cached_run( 'perl', '-v' );
+    my @perl_v = split /\n/, run( 'perl', '-v' );
 
     my $perl_version;
     for my $line ( @perl_v ) {
@@ -1040,7 +1026,6 @@ sub print_php_configuration {
 
     open my $phpconf_fh, '<', $phpconf;
     while ( <$phpconf_fh> ) {
-        chomp;
         if ( /^phpversion: (\d)/ ) {
             $phpversion = $1;
         }
@@ -1065,7 +1050,7 @@ sub print_php_configuration {
 
     if ( $phpversion == 5 ) {
         if ( -x '/usr/bin/php' ) {
-            my @php_v = split /\n/, cached_run( '/usr/bin/php', '-v' );
+            my @php_v = split /\n/, run( '/usr/bin/php', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php5version = $1;
             }
@@ -1078,7 +1063,7 @@ sub print_php_configuration {
         }
 
         if ( $php4handler ne 'none' ) {
-            my @php_v = split /\n/, cached_run( '/usr/local/php4/bin/php', '-v' );
+            my @php_v = split /\n/, run( '/usr/local/php4/bin/php', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php4version = $1;
             }
@@ -1093,7 +1078,7 @@ sub print_php_configuration {
 
     if ( $phpversion == 4 ) {
         if ( -x '/usr/local/php4/bin/php' ) {
-            my @php_v = split /\n/, cached_run( '/usr/local/php4/bin/php', '-v' );
+            my @php_v = split /\n/, run( '/usr/local/php4/bin/php', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php4version = $1;
             }
@@ -1106,7 +1091,7 @@ sub print_php_configuration {
         }
 
         if ( $php5handler ne 'none' ) {
-            my @php_v = split /\n/, cached_run( '/usr/bin/php', '-v' );
+            my @php_v = split /\n/, run( '/usr/bin/php', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php5version = $1;
             }
@@ -1912,7 +1897,7 @@ sub check_var_cpanel_users_files_ownership {
     my @files;
     if ( -d $var_cpanel_users ) {
         opendir( my $dir_fh, $var_cpanel_users );
-        @files = grep { !m/^(?:\.(\.?)|root|system|nobody)$/ } readdir $dir_fh;
+        @files = grep { ! /^\.(\.?)$/ and ! /^(root|system|nobody)$/ } readdir $dir_fh;
         closedir $dir_fh;
     }
 
@@ -2326,7 +2311,7 @@ sub get_mysql_datadir {
 sub check_mysqld_warnings_errors {
     foreach my $mysql_err ( grep ( m{\[(?:err)}i, split( /\n/, run_trap_stderr( 'mysqld', '-u', 'mysql', '--help' ) ) ) ) {
         if ( $mysql_err =~ m/open_files_limit=/ ) {
-            print_warn('MySQL config missing newline: [see FB 64008]: ');
+            print_warn('MySQL config missing newline: [see case 64008]: ');
             print_warning($mysql_err);
         }
         else {
@@ -2523,12 +2508,11 @@ sub check_for_mysql_4 {
 sub check_for_additional_rpms {
     return if ! @rpm_list;
 
-
     my @additional_rpms = grep { /^(php-|kde-|psa-|clamav|clamd|rrdtool-)|(http|apache|pear|sendmail)/ } @rpm_list;
     if ( @additional_rpms ) {
         @additional_rpms = sort @additional_rpms;
         for my $additional_rpm ( @additional_rpms ) {
-            next if ( $additional_rpm =~ /httpd-tools|cpanel-|alt-php/ );
+            next if ( $additional_rpm =~ /sendmail-(cf|doc|devel)-|httpd-tools|cpanel-|alt-php/ );
             print_start( 'Additional RPM: ' );
             print_warning( $additional_rpm );
         }
@@ -2736,23 +2720,14 @@ sub check_for_empty_yumconf {
 
     my $yumconf = '/etc/yum.conf';
 
-    if ( !-e $yumconf ) {
-        print_warn('YUM: ');
-        print_warning("$yumconf is missing!");
+    if ( ! -e $yumconf ) {
+        print_warn( 'YUM: ' );
+        print_warning( "$yumconf is missing!" );
     }
     elsif ( -z $yumconf ) {
-        print_warn('YUM: ');
-        print_warning("$yumconf is empty!");
+        print_warn( 'YUM: ' );
+        print_warning( "$yumconf is empty!" );
     }
-    if ( open( my $yum_conf_fh, '<', '/etc/yum.conf' ) ) {
-        local $/ = undef;
-        my $yum_conf_text = readline($yum_conf_fh);
-        if ( $yum_conf_text =~ m/exclude=.*?wget/ ) {
-            print_warn('YUM: ');
-            print_warning("$yumconf has wget excluded!");
-        }
-    }
-
 }
 
 sub check_for_cpanel_files {
@@ -2938,15 +2913,16 @@ sub check_for_missing_or_commented_customlog {
     }
 
     if ( open my $httpdconf_fh, '<', $httpdconf ) {
-        local $/ = undef;
-        my $httpdconf_txt = readline($httpdconf_fh);
+        while ( <$httpdconf_fh> ) {
+            if ( /#(?:\s+)?CustomLog\s/i ) {
+                $httpdconf_commented_customlog = 1;
+                last;
+            }
+            elsif ( /CustomLog\s/i ) {
+                $httpdconf_customlog_exists = 1;
+            }
+        }
         close $httpdconf_fh;
-        if ( $httpdconf_txt =~ m/\n[\t ]*#[\t ]*CustomLog\s/si ) {
-            $httpdconf_commented_customlog = 1;
-        }
-        if ( $httpdconf_txt =~ m/\n[\t ]*CustomLog\s/si ) {
-            $httpdconf_customlog_exists = 1;
-        }
     }
 
     if ( $httpdconf_commented_customlog ) {
@@ -2982,18 +2958,18 @@ sub check_for_apache_rlimits {
     my $output;
 
     if ( open my $httpdconf_fh, '<', $httpdconf ) {
-        local $/ = undef;
-        my $httpdconf_txt = readline($httpdconf_fh);
+        while ( <$httpdconf_fh> ) {
+            if ( /^RLimitMEM (\d+)/ ) {
+                $rlimitmem = $1;
+            }
+            if ( /^RLimitCPU (\d+)/ ) {
+                $rlimitcpu = $1;
+            }
+        }
         close $httpdconf_fh;
-        if ( $httpdconf_txt =~ m/\n[\t ]+RLimitMEM (\d+)/s ) {
-            $rlimitmem = $1;
-        }
-        if ( $httpdconf_txt =~ m/\n[\t ]+RLimitCPU (\d+)/s ) {
-            $rlimitcpu = $1;
-        }
     }
 
-    if ($rlimitmem) {
+    if ( $rlimitmem ) {
         my $rlimitmem_converted = sprintf('%.0f MB', $rlimitmem / 1024 / 1024);
         $output = "RLimitMEM $rlimitmem [$rlimitmem_converted]";
     }
@@ -3532,7 +3508,7 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
 
     my $log = '/usr/local/apache/logs/error_log';
     my $size = ( stat( $log ))[7];
-    my $bytes_to_check = 20_971_520 / 2; # 10M limit of logs to check, may need adjusting, depending how much time it adds to SSP
+    my $bytes_to_check = 20_971_520; # 20M limit of logs to check, may need adjusting, depending how much time it adds to SSP
     my $seek_position = 0;
     my $log_data;
     my @logs;
@@ -3547,26 +3523,26 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
         read $file_fh, $log_data, $bytes_to_check;
         close $file_fh;
     }
-    if ($log_data =~ m/(?:MaxClients|MaxRequestWorkers)/s) {
-      @logs = split /\n/, $log_data;
-      undef $log_data;
-      @logs = reverse @logs;
-      for my $log_line ( @logs ) {
-          if ( $apache_version eq '2.2' ) {
-              # [Wed Nov 14 05:55:04 2012] [error] server reached MaxClients setting, consider raising the MaxClients setting
-              if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s+ \[error\] \s+ server \s+ reached \s+ MaxClients }xms ) {
-                  $limit_last_hit_date = $1;
-                  last;
-              }
-          }
-          elsif ( $apache_version eq '2.4' ) {
-              # [Fri Feb 08 09:58:45.875187 2013] [mpm_prefork:error] [pid 23220] AH00161: server reached MaxRequestWorkers
-              if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s (.*) server \s reached \s MaxRequestWorkers }xms ) {
-                  $limit_last_hit_date = $1;
-                  last;
-              }
-          }
-      }
+
+    @logs = split /\n/, $log_data;
+    undef $log_data;
+    @logs = reverse @logs;
+
+    for my $log_line ( @logs ) {
+        if ( $apache_version eq '2.2' ) {
+            # [Wed Nov 14 05:55:04 2012] [error] server reached MaxClients setting, consider raising the MaxClients setting
+            if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s+ \[error\] \s+ server \s+ reached \s+ MaxClients }xms ) {
+                $limit_last_hit_date = $1;
+                last;
+            }
+        }
+        elsif ( $apache_version eq '2.4' ) {
+            # [Fri Feb 08 09:58:45.875187 2013] [mpm_prefork:error] [pid 23220] AH00161: server reached MaxRequestWorkers
+            if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s (.*) server \s reached \s MaxRequestWorkers }xms ) {
+                $limit_last_hit_date = $1;
+                last;
+            }
+        }
     }
 
     if ( $limit_last_hit_date ) {
@@ -3651,12 +3627,9 @@ sub check_for_custom_locales {
   
     my $user_count = scalar @cpanel_users;
  
-    if ($user_count > 2000) {
-      print_warn("cpusers: ");
-      print_warning("Too many cpanel users to do locales check: $user_count");
-      return;
-    }
- 
+    print_warn("cpusers: ");
+    print_warning("Too many cpanel users to do locales check: $user_count");
+   
     for my $user ( @cpanel_users ) {
         if ( open my $user_fh, '<', "${users_dir}/${user}" ) {
             while ( <$user_fh> ) {
@@ -3880,12 +3853,12 @@ sub check_if_httpdconf_ipaddrs_exist {
     return if !$httpdconf;
 
     if ( open my $httpdconf_fh, '<', $httpdconf ) {
-        local $/ = undef;
-        my $httpdconf_txt = readline($httpdconf_fh);
-        close $httpdconf_fh;
-        while ( $httpdconf_txt =~ m/<VirtualHost\s+(\d+\.\d+\.\d+\.\d+):(?:\d+)>/sig ) {
-            push @vhost_ipaddrs, $1;
+        while ( <$httpdconf_fh> ) {
+            if ( /<VirtualHost\s+(\d+\.\d+\.\d+\.\d+):(?:\d+)>/i ) {
+                push @vhost_ipaddrs, $1;
+            }
         }
+        close $httpdconf_fh;
     }
 
     # uniq IP addrs only
@@ -4007,8 +3980,6 @@ sub check_for_rpm_overrides {
     my $md5;
     my $is_default = 0;
 
-    return if !-d $rpm_override_dir;
-
     if ( -f $local_versions ) {
         $md5 = run( 'md5sum', $local_versions );
     }
@@ -4038,7 +4009,7 @@ sub check_for_rpm_overrides {
                     foreach my $package ( keys %{ $ref->{'target_settings'} } ) {
                         if ( $ref->{'target_settings'}{$package} =~ m{uninstalled} ) {
                             print_warn("$package is listed as uninstalled in $local_versions");
-                            print_warning('');
+
                         }
                     }
                 }
@@ -4292,7 +4263,7 @@ sub check_for_libkeyutils_malware {
 
     if ( $warning ) {
         print "\n\n";
-        print_warn( '!! [LIBKEYUTILS / EBURY ] !! ' );
+        print_warn( '!! [LIBKEYUTILS] !! ' );
         print_warning( 'L1/L2 escalate this ticket to L3' );
         print "$warning\n";
     }
@@ -4328,25 +4299,6 @@ sub check_for_missing_etc_localtime {
         print_warn( '/etc/locatime: ' );
         print_warning( 'Missing! upcp may fail with "Error testing if the RPMs will install" (see ticket 3811269)' );
     }
-}
-
-sub check_for_extra_uid_0_user {
-    my $uid_0_users = 0;
-
-    open my $file_fh, '<', '/etc/passwd' or die $!;  
-    while ( <$file_fh> ) {  
-        if ( m{ \A ([^:]+) :x:0: }xms ) {
-            next if $1 =~ m{ \A root | toor \z }xms;
-            $uid_0_users = 1;
-            last;
-        }    
-    }    
-    close $file_fh;
-
-    if ( $uid_0_users == 1 ) {
-        print_warn( 'non root/toor uid 0 user(s): ' );
-        print_warning( 'EasyApache failing with "can\'t create [...] all_iplist.db"? See FB 62467. Do *not* escalate as security issue.' );
-    }    
 }
 
 ##############################
@@ -4630,81 +4582,6 @@ sub check_for_immutable_files {
     foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, run( 'lsattr', @path_dirs ) ) ) ) {
         print_warn('Immutable file: ');
         print_warning("$file");
-    }
-}
-
-sub check_for_missing_perl_modules {
-    foreach my $module ( 'Digest::SHA1', 'Crypt::PasswdMD5' ) {
-        my $output = run_trap_stderr( '/usr/bin/perl', '-M' . $module, '-e', "print q{ok};" );
-        if ( $output ne 'ok' ) {
-            print_warn("Missing perl module (see FB 64015): ");
-            print_warning("$module: $output");
-        }
-    }
-}
-
-sub check_for_rpmsave_conf {
-    foreach my $cfg ( '/etc/proftpd.conf', '/etc/pure-ftpd.conf' ) {
-        if ( -e $cfg . '.rpmsave' ) {
-            print_warn("Found .rpmsave (see FB 63887 if TLS is broken): ");
-            print_warning( $cfg . '.rpmsave' );
-        }
-    }
-}
-
-sub cached_run {
-    if ( $INC{'Cpanel/CachedCommand.pm'} ) {
-        goto \&Cpanel::CachedCommand::cachedcommand;
-    }
-    else {
-        goto \&run;
-    }
-}
-
-sub check_for_cloudlinux_mysql_gov {
-    if ( my @cl_mysql_rpms = grep ( m{^cl-MySQL-}, @rpm_list ) ) {
-        print_warn("CloudLinux MySQL (see FB 64017): ");
-        print_warning( join( " ", @cl_mysql_rpms ) );
-    }
-}
-
-sub check_cpanel_config_for_low_maxmem {
-    if ( open( my $cpconf_fh, '<', '/var/cpanel/cpanel.config' ) ) {
-        local $/ = undef;
-        %cpconf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($cpconf_fh) );
-    }
-
-    if ( $cpconf{'maxmem'} && $cpconf{'maxmem'} < 512 ) {
-        print_warn("/var/cpanel/cpanel.config: ");
-        print_warning("maxmem < 512M, value=$cpconf{'maxmem'} phpmyadmin may fail");
-    }
-
-    if ( $cpconf{'use_safe_quotas'} ) {
-        print_warn("/var/cpanel/cpanel.config: ");
-        print_warning("use_safe_quotas=1 suspend and unsuspend will be slow");
-    }
-}
-
-sub check_pure_ftpd_conf_for_upload_script_and_dead {
-    return unless $cpconf{'ftpserver'} && $cpconf{'ftpserver'} eq 'pure-ftpd';
-
-    if ( open( my $pureftpdconf_fh, '<', '/etc/pure-ftpd.conf' ) ) {
-        local $/ = undef;
-        %pureftpdconf = map { ( split( /\s+/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($pureftpdconf_fh) );
-    }
-
-    if ( $pureftpdconf{'CallUploadScript'} && $pureftpdconf{'CallUploadScript'} eq 'yes' ) {
-        if ( !-e '/var/run/pure-ftpd.upload.pipe' ) {
-            print_warn("/etc/pure-ftpd.conf: ");
-            print_warning("CallUploadScript set to yes, /var/run/pure-ftpd.upload.pipe is missing [might be broken ConfigServer's cxs ( http://configserver.com/cp/cxs.html )]");
-        }
-        else {
-            my $out = run( 'lsof', '-n', '/var/run/pure-ftpd.upload.pipe' );
-            if ( !$out ) {
-                print_warn("/etc/pure-ftpd.conf: ");
-                print_warning("CallUploadScript set to yes, and /var/run/pure-ftpd.upload.pipe does not seem to have anything listening on it. [might be broken ConfigServer's cxs ( http://configserver.com/cp/cxs.html )]");
-            }
-        }
     }
 }
 
