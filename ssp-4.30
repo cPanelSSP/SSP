@@ -24,7 +24,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.29';
+my $version = '4.30';
 
 $| = 1;
 $Term::ANSIColor::AUTORESET = 1;
