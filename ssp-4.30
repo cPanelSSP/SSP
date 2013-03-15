@@ -273,7 +273,6 @@ sub check_for_dnsonly {
         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
         check_cron_processes();
         check_etc_hosts_sanity();
-        check_for_missing_limits_h();
         check_for_C_compiler_optimization();
         check_perl_version_less_than_588();
         check_for_fork_bomb_protection();
