@@ -24,7 +24,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.27';
+my $version = '4.30';
 
 $| = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -43,8 +43,8 @@ my %hostinfo                    = get_hostinfo();
 my %cpuinfo                     = get_cpuinfo();
 my $mysql_datadir               = get_mysql_datadir();
 my $mysql_error_log             = get_mysql_error_log();
-my @apache_version_output       = split /\n/, cached_run( '/usr/local/apache/bin/httpd', '-v' );
-my @apache_modules_output       = split /\n/, cached_run( '/usr/local/apache/bin/httpd', '-M' );
+my @apache_version_output       = split /\n/, run( '/usr/local/apache/bin/httpd', '-v' );
+my @apache_modules_output       = split /\n/, run( '/usr/local/apache/bin/httpd', '-M' );
 my @mysql_rpm_versions;         # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
 my @custom_opt_mods;            # items in /var/cpanel/easy/apache/custom_opt_mods/
 my @usr_local_cpanel_hooks;     # items in /usr/local/cpanel/hooks/
@@ -192,6 +192,7 @@ check_for_rpmsave_conf();
 check_for_cloudlinux_mysql_gov();
 check_cpanel_config_for_low_maxmem();
 check_pure_ftpd_conf_for_upload_script_and_dead(); #must come after check_cpanel_config_for_low_maxmem
+check_for_extra_uid_0_user(); # this is NOT a security check, but for FB 62467
 
 # [3RDP]
 print "\n";
@@ -272,7 +273,6 @@ sub check_for_dnsonly {
         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
         check_cron_processes();
         check_etc_hosts_sanity();
-        check_for_missing_limits_h();
         check_for_C_compiler_optimization();
         check_perl_version_less_than_588();
         check_for_fork_bomb_protection();
@@ -447,6 +447,7 @@ sub print_tip {
         '[FB 61516] cPanel\'s Java SSH term app may say shell access is disabled, even when it is enabled',
         '[FB 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and "PCRE is not compiled with UTF-8 support"',
         '[FB 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale',
+        '[FB 46853] Customer complaining that they can\'t log into cPanel as root? Update FB 46853',
         '[FB 44884] upcp resets Mailman lists\' hostnames. pre/postupcp hooks workaround in ticket 3541643',
         '[FB 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net',
         'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)',
@@ -1038,6 +1039,7 @@ sub print_php_configuration {
 
     open my $phpconf_fh, '<', $phpconf;
     while ( <$phpconf_fh> ) {
+        chomp;
         if ( /^phpversion: (\d)/ ) {
             $phpversion = $1;
         }
@@ -2317,13 +2319,17 @@ sub get_mysql_datadir {
         close $my_cnf_fh;
     }
 
+    if ( $datadir !~ m{ / \z }xms ) {
+        $datadir .= '/';
+    }
+
     return $datadir;
 }
 
 sub check_mysqld_warnings_errors {
     foreach my $mysql_err ( grep ( m{\[(?:err)}i, split( /\n/, run_trap_stderr( 'mysqld', '-u', 'mysql', '--help' ) ) ) ) {
         if ( $mysql_err =~ m/open_files_limit=/ ) {
-            print_warn('MySQL config missing newline: [see case 64008]: ');
+            print_warn('MySQL config missing newline: [see FB 64008]: ');
             print_warning($mysql_err);
         }
         else {
@@ -3527,6 +3533,8 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
         $apache_version = '2.4';
     }
 
+    return if !$apache_version;
+
     my $log = '/usr/local/apache/logs/error_log';
     my $size = ( stat( $log ))[7];
     my $bytes_to_check = 20_971_520 / 2; # 10M limit of logs to check, may need adjusting, depending how much time it adds to SSP
@@ -4004,6 +4012,8 @@ sub check_for_rpm_overrides {
     my $md5;
     my $is_default = 0;
 
+    return if !-d $rpm_override_dir;
+
     if ( -f $local_versions ) {
         $md5 = run( 'md5sum', $local_versions );
     }
@@ -4287,7 +4297,7 @@ sub check_for_libkeyutils_malware {
 
     if ( $warning ) {
         print "\n\n";
-        print_warn( '!! [LIBKEYUTILS] !! ' );
+        print_warn( '!! [LIBKEYUTILS / EBURY ] !! ' );
         print_warning( 'L1/L2 escalate this ticket to L3' );
         print "$warning\n";
     }
@@ -4323,6 +4333,25 @@ sub check_for_missing_etc_localtime {
         print_warn( '/etc/locatime: ' );
         print_warning( 'Missing! upcp may fail with "Error testing if the RPMs will install" (see ticket 3811269)' );
     }
+}
+
+sub check_for_extra_uid_0_user {
+    my $uid_0_users = 0;
+
+    open my $file_fh, '<', '/etc/passwd' or die $!;  
+    while ( <$file_fh> ) {  
+        if ( m{ \A ([^:]+) :x:0: }xms ) {
+            next if $1 =~ m{ \A root | toor \z }xms;
+            $uid_0_users = 1;
+            last;
+        }    
+    }    
+    close $file_fh;
+
+    if ( $uid_0_users == 1 ) {
+        print_warn( 'non root/toor uid 0 user(s): ' );
+        print_warning( 'EasyApache failing with "can\'t create [...] all_iplist.db"? See FB 62467. Do *not* escalate as security issue.' );
+    }    
 }
 
 ##############################
@@ -4613,7 +4642,7 @@ sub check_for_missing_perl_modules {
     foreach my $module ( 'Digest::SHA1', 'Crypt::PasswdMD5' ) {
         my $output = run_trap_stderr( '/usr/bin/perl', '-M' . $module, '-e', "print q{ok};" );
         if ( $output ne 'ok' ) {
-            print_warn("Missing perl module (see case 64015): ");
+            print_warn("Missing perl module (see FB 64015): ");
             print_warning("$module: $output");
         }
     }
@@ -4622,7 +4651,7 @@ sub check_for_missing_perl_modules {
 sub check_for_rpmsave_conf {
     foreach my $cfg ( '/etc/proftpd.conf', '/etc/pure-ftpd.conf' ) {
         if ( -e $cfg . '.rpmsave' ) {
-            print_warn("Found .rpmsave (see case 63887 if TLS is broken): ");
+            print_warn("Found .rpmsave (see FB 63887 if TLS is broken): ");
             print_warning( $cfg . '.rpmsave' );
         }
     }
@@ -4639,7 +4668,7 @@ sub cached_run {
 
 sub check_for_cloudlinux_mysql_gov {
     if ( my @cl_mysql_rpms = grep ( m{^cl-MySQL-}, @rpm_list ) ) {
-        print_warn("CloudLinux MySQL (see case 64017): ");
+        print_warn("CloudLinux MySQL (see FB 64017): ");
         print_warning( join( " ", @cl_mysql_rpms ) );
     }
 }
