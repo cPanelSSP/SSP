@@ -24,7 +24,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.31';
+my $version = '4.32';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -680,14 +680,14 @@ sub print_os {
     }
 
     if ( $is_cloudlinux == 1 ) {
-        if ( $php_selector_disabled == 1 ) {
+        if ( $php_selector_disabled eq 'status unknown' ) {
+            $os_info .= ' [PHP Selector: status unknown]';
+        }
+        elsif ( $php_selector_disabled == 1 ) {
             $os_info .= ' [PHP Selector: disabled for x3]';
         }
         elsif ( $php_selector_disabled == 0 ) {
             $os_info .= ' [PHP Selector: enabled for x3]';
-        }
-        elsif ( $php_selector_disabled eq 'status unknown' ) {
-            $os_info .= ' [PHP Selector: status unknown]';
         }
     }
 
@@ -3548,6 +3548,8 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
     my @logs;
     my $limit_last_hit_date;
 
+    return if !$size;
+
     if ( $size > $bytes_to_check ) {
         $seek_position = ( $size - $bytes_to_check );
     }
@@ -3716,7 +3718,7 @@ sub check_eximstats_size {
         $size += ( stat($file) )[7];
     }
 
-    if ( $size > 5_000_000_000 ) {
+    if ( $size && $size > 5_000_000_000 ) {
         $size = sprintf( "%0.2fGB", $size / 1073741824 );
         print_warn('eximstats db: ');
         print_warning($size);
