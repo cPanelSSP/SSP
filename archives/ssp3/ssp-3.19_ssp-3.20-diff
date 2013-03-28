@@ -1,0 +1,20 @@
+--- ssp-3.19	2012-09-06 19:57:08.000000000 +0400
++++ ssp-3.20	2012-09-10 17:02:06.000000000 +0400
+@@ -20,7 +20,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.19';
++my $version = '3.20';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ my $os                  = Cpanel::OSSys::getos();
+@@ -2106,7 +2106,7 @@
+         close $wwwacctconf_fh;
+     }
+ 
+-    if ( $minuid =~ /\d+/ ) {
++    if ( $minuid and $minuid =~ /\d+/ ) {
+         if ( $minuid < 500 or $minuid > 60000 ) {
+             print_warn( 'MINUID: ' );
+             print_warning( "$wwwacctconf has a MINUID value of $minuid (should be between 500 and 60000)" );

@@ -1,0 +1,7 @@
+[FIXED] Fixed the logic which checks for cPanel updates. Previously
+it could report that an installed version which was lower than an
+available version was higher than the available version.
+
+
+[FIXED] Fixed erroneous output stating that the server's local clock
+is off by 31.0 days.

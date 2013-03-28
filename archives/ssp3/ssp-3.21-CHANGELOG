@@ -1,0 +1,63 @@
+[NEW] Check for commands in root's cron which could cause issues.
+Currently we check for rm, chmod, and chown. This may not be 100%
+effective at the moment, since it requires a space before and after
+the command, which is done to avoid false positives.
+
+--------------------------
+
+[NEW] Print an INFO message if mod_ruid2 is enabled.
+
+Example output:
+
+	[INFO] * mod_ruid2: is enabled
+
+--------------------------
+
+[NEW] Check all templates in /var/cpanel/templates/apache(1|2)
+(depending on the current Apache version) for commented out
+CustomLog lines, or for no CustomLog lines. httpd.conf is
+checked as well.
+
+Example output:
+
+	[WARN] * CustomLog commented out: /var/cpanel/templates/apache2/vhost.local 
+	[WARN] * CustomLog entries missing: /var/cpanel/templates/apache2/main.local  httpd.conf
+
+--------------------------
+
+[NEW] Check permissions of /usr/bin/passwd and /usr/bin/crontab
+which should be 4755 and 6755, respectively.
+
+--------------------------
+
+[UPDATED] Don't print an unnecessary warning about /usr/sbin having
+non-default permissions of 711.
+
+--------------------------
+
+[UPDATED] If the Postgres config is empty, instead of just printing
+that it's empty, also print "install via WHM >> Postgres Config".
+
+--------------------------
+
+[UPDATED] If there are more than 10 files in /var/cpanel/easy/apache/custom_opt_mods,
+don't print them all. Instead, print "many custom opt mods exist, check manually".
+
+--------------------------
+
+[UPDATED] The MailScanner check now ensures that the user running
+it is "mailnull". This will help to avoid potential false positives
+when checking the process list for "MailScanner" in the output.
+
+--------------------------
+
+[UPDATED] Moved the check that looks to see if /usr/local/apache/bin/httpd
+is executable or not.
+
+--------------------------
+
+[UPDATED] The Apache version info and modules output are now stored
+in globally accessible arrays. This allows us to only ever have to
+execute "httpd -v" and "httpd -M" one time.
+
+

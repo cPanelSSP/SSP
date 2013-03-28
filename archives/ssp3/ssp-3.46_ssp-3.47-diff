@@ -1,0 +1,52 @@
+--- ssp-3.46	2012-12-06 13:07:36.000000000 -0600
++++ ssp-3.47	2012-12-10 08:04:33.000000000 -0600
+@@ -17,7 +17,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.46';
++my $version = '3.47';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -1472,7 +1472,7 @@
+             my $mode = ( stat( $resource ))[2] & 07777;
+             $mode = sprintf "%lo", $mode;
+             if ( $mode != $resources_and_perms{$resource} ) {
+-                next if ( $resource =~ '^(/(s?)bin|/usr/bin|/)$' and $mode == '555' ); # CentOS 6.2
++                next if ( $resource =~ '^(/(s?)bin|/usr/(s?)bin|/)$' and $mode == '555' ); # CentOS 6.2+
+                 next if ( $resource =~ '^/(var|sbin|usr/local/sbin|usr|usr/sbin)?$' and $mode == '711' );
+                 print_warn( 'Non-default Permissions: ' );
+                 print_warning( "$resource (mode: $mode | default: $resources_and_perms{$resource})" );
+@@ -2083,7 +2083,7 @@
+     if ( @additional_rpms ) {
+         @additional_rpms = sort @additional_rpms;
+         for my $additional_rpm ( @additional_rpms ) {
+-            next if ( $additional_rpm =~ /sendmail-(cf|doc|devel)-|httpd-tools/ );
++            next if ( $additional_rpm =~ /sendmail-(cf|doc|devel)-|httpd-tools|cpanel-/ );
+             print_start( 'Additional RPM: ' );
+             print_warning( $additional_rpm );
+         }
+@@ -3245,6 +3245,22 @@
+     }
+ }
+ 
++sub check_for_haproxy {
++    my $haproxy = 0;
++
++    for my $process ( @process_list ) {
++        if ( $process =~ m{ \A root (?:.*) haproxy }xms ) {
++            $haproxy = 1;
++            last;
++        }
++    }
++
++    if ( $haproxy == 1 ) {
++        print_3rdp( 'HAProxy: ' );
++        print_3rdp2( 'found haproxy in process list' );
++    }
++}
++
+ ##############################
+ #  END [3RDP] CHECKS
+ ##############################

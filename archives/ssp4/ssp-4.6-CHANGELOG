@@ -1,0 +1,42 @@
+[FIXED] Put the tips info back into SSP rather than separating it into
+the "run" file, due to csh (mainly used on FreeBSD boxes) which handles
+arrays differently than bash/sh. I don't think anyone noticed this,
+probably because no one uses FreeBSD.
+
+
+[NEW] Print a warning if /etc/yum.conf contains multiple "exclude" lines.
+
+
+[NEW] Print a warning if /etc/yum.conf is excluding kernel updates.
+
+
+[NEW] Print a warning if anything exists in /var/cpanel/rpm.versions.d/ .
+See ticket 3692893 for an example of how this prevented cPanel's PureFTPd
+rpm from being installed.
+
+
+[NEW] Print a warning if /etc/yum.repos.d/pgdg-(\d+)-centos.repo exists, since
+this can prevent proper Postgres installation. References to 2 tickets are
+printed which contain the known resolution for the issue. This is the same
+issue I emailed the list about on 1/29/13 at 11:48 AM, subject line
+"[NotABug] Custom PostgreSQL repos".
+
+
+[NEW] Print a warning if multiple cron processes are found in the process list,
+as this can cause "Cpanel update hanging" emails.
+
+
+[UPDATED] Added a tip that seeing sshcmdpermissiondeny when trying to copy accounts
+could mean that the customer has a modified ssh client:
+
+    Transfers showing 'sshcmdpermissiondeny'? Check for modified openssh-clients package (see ticket 3664533)
+
+
+[UPDATED] Added 11.36 to check_for_cpanel_update(). In the future this will need to be redone
+so it's handled automatically.
+
+
+[UPDATED] Ignore a few more default CloudLinux script hooks:
+
+    86f9b53c81a8f2fd77a8626ddd3b2c71  /scripts/prekillacct
+    e464adf0531fea2af4fe57361d9a43fb  /scripts/postupcp

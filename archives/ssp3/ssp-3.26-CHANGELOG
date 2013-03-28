@@ -1,0 +1,24 @@
+[FIX] If /usr/bin/passwd had permissions of 6755, a conflicting message would
+be printed that the permissions were not default, and that default permissions
+may include 6755. Since permissions of 6755 are ok, we now simply ignore them
+instead of printing a warning.
+
+[FIX] If /etc/cpupdate.conf contained a CPANEL=  line that started with something
+other than the 6 tiers listed at http://httpupdate.cpanel.net/cpanelsync/TIERS
+(such as "manual-release", or "11.32.4.5", etc), an erroneous comparison occurred.
+To address this, we simply no longer check for cPanel updates on tiers that are
+not listed in the TIERS file, which currently are:
+
+edge
+current
+release
+stable
+11.30
+11.32
+
+[UPDATED] Since the array that stores the list of rpms was recently made global,
+populate_mysql_rpm_versions_array() was updated to return if the @rpm_list array
+is not populated.
+
+[UPDATED] Improve check_for_mysql_4() by returning if @mysql_rpm_versions is not
+populated.

@@ -1,0 +1,30 @@
+[UPDATED] Combine all /etc/hosts checks:
+  1) does it exist?
+  2) check_for_etc_hosts_no_loopback
+  3) check_for_httpupdate_in_etc_hosts
+  4) check_for_non_127_in_etc_hosts # this breaks EA
+  5) check for entry for server's hostname
+
+
+
+[NEW] Print a warning if /etc/hosts doesn't contain an entry for the server's hostname
+
+
+
+[FIX] If /etc/hosts was missing, the following warning would be printed:
+
+    [WARN] * /etc/hosts: no entry for localhost, or commented out
+
+Now we just print a warning that /etc/hosts doesn't exist.
+
+
+
+[NEW] If DNS clustering is enabled and there are active cluster members,
+print sorted output based on the cluster members' hostnames.
+
+
+[FIX] Fixed a misspelling that would cause this when the ASSP check was run:
+    Undefined subroutine &main::print_3rpd called at - line 2599.
+
+[UPDATED] Renamed check_for_extra_uid_or_gid_0_user() to check_for_extra_uid_0_user()
+since we only check the uid.

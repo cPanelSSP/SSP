@@ -1,0 +1,12 @@
+[NEW] Print a warning if /bin/bash is not 755 (700 breaks PHP's
+exec() functionality since only root will be able to exec bash).
+
+[NEW] Print a warning if critical cPanel files are missing:
+/usr/local/cpanel/cpanel
+/usr/local/cpanel/cpsrvd
+/usr/local/cpanel/cpsrvd-ssl
+
+[UPDATED] The nginx check now examines both the process name as
+it appears in the process list (nginx:) and the owner of the
+process (root). Previously, the username was not verified,
+which could potentially lead to a false positive.

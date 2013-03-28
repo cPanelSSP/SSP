@@ -1,0 +1,13 @@
+[UPDATED] Removed the @tips stuff from SSP, adding it to the shell script
+called "run" which is what gets executed first (and then runs SSP). This
+will make it so that new tips can be updated without having to push a new
+SSP release each time.
+
+[UPDATED] Added these tips:
+
+    [Case 63193] File Manager showing 'Out of memory' in cPanel error_log? Try renaming $HOME/$USER/.cpanel/datastore/SYSTEMMIME
+
+    'Allowed memory size of x bytes exhausted' when uploading a db via phpMyAdmin may be resolved by increasing max_allowed_packet
+
+    Need to edit php.ini for Horde, RoundCube, phpMyAdmin, or phpPgAdmin? Edit /u/l/c/3rdparty/etc/php.ini, then run /u/l/c/b/install_php_inis
+

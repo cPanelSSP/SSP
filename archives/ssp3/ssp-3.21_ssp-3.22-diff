@@ -1,0 +1,35 @@
+--- ssp-3.21	2012-09-11 19:57:22.000000000 +0400
++++ ssp-3.22	2012-09-11 21:23:29.000000000 +0400
+@@ -20,7 +20,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.21';
++my $version = '3.22';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -1236,7 +1236,6 @@
+         '/tmp'                          => '1777',
+         '/usr'                          => '755',
+         '/usr/bin'                      => '755',
+-        '/usr/bin/crontab'              => '6755',
+         '/usr/bin/passwd'               => '4755',
+         '/usr/sbin'                     => '755',
+         '/usr/local/apache'             => '755',
+@@ -1270,6 +1269,15 @@
+         }
+     }
+ 
++    if ( -e '/usr/bin/crontab' ) {
++        my $mode = ( stat( '/usr/bin/crontab' ))[2] & 07777;
++        $mode = sprintf "%lo", $mode;
++        if ( $mode != '4755' and $mode != '6755' ) {
++            print_warn( 'Non-default Permissions: ' );
++            print_warning( "/usr/bin/crontab (mode: $mode | default: 4755 or 6755)" );
++        }
++    }
++
+     if ( -e '/sbin/ifconfig' ) {
+         my $mode = ( stat( '/sbin/ifconfig' ))[2] & 07777;
+         $mode = sprintf "%lo", $mode;

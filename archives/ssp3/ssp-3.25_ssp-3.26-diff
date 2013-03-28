@@ -1,0 +1,55 @@
+--- ssp-3.25	2012-09-20 17:37:37.000000000 +0400
++++ ssp-3.26	2012-09-24 18:20:48.000000000 +0400
+@@ -20,7 +20,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.25';
++my $version = '3.26';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -487,6 +487,13 @@
+         $local_tier_version = "Unknown (could not open/read /u/l/c/version ?)";
+     }    
+ 
++    ## As of 09/24/2012, http://httpupdate.cpanel.net/cpanelsync/TIERS  has these tiers:
++    ## edge     current     release     stable      11.30       11.32
++    ## We skip checking for updates of anything else such as "manual-release", "11.32.4.5", etc.
++    if ( $local_tier_name !~ m{ ( edge | current | release | stable | 11\.30 | 11\.32 ) }xmsi ) {
++        return;
++    }
++
+     if ( $local_tier_name !~ /Unknown/ ) {
+         if ( $local_tier_version !~ /Unknown/ ) {
+ 
+@@ -1328,9 +1335,9 @@
+     if ( -e '/usr/bin/passwd' ) {
+         my $mode = ( stat( '/usr/bin/passwd' ))[2] & 07777;
+         $mode = sprintf "%lo", $mode;
+-        if ( $mode != '4755' and $mode != '4511' and $mode != '4555' ) {
++        if ( $mode !~ m{ \A ( 4755 | 6755 | 4511 | 4555 ) \z }xms ) {
+             print_warn( 'Non-default Permissions: ' );
+-            print_warning( "/usr/bin/passwd (mode: $mode | default: 4755 or 6755 or 4555)" );
++            print_warning( "/usr/bin/passwd (mode: $mode | default: 4755 or 6755 or 4511 or 4555)" );
+         }
+     }
+ 
+@@ -1909,6 +1916,8 @@
+ }
+ 
+ sub populate_mysql_rpm_versions_array {
++    return if ! @rpm_list;
++
+     for my $rpm ( @rpm_list ) {
+         if ( $rpm =~ m{ \A MySQL-server-(.*) \z }xms ) {
+             push @mysql_rpm_versions, $1;
+@@ -1932,6 +1941,8 @@
+ }
+ 
+ sub check_for_mysql_4 {
++    return if ! @mysql_rpm_versions;
++
+     my $mysql_4 = 0;
+ 
+     for my $rpm ( @mysql_rpm_versions ) {

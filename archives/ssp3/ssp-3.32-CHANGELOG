@@ -1,0 +1,14 @@
+[FIXED] Do not print a warning if an IPv6 entry for localhost (::1) exists in /etc/hosts .
+
+[FIXED] Ignore all commented lines when checking /etc/hosts .
+
+[NEW] Print a warning if apache_port=127.0.0.1:80 in cpanel.config, as this could indicate
+that Apache is only listening on localhost. I suspect we've seen this due to 3rd party
+Apache replacements.
+
+[NEW] Check for missing /etc/userdatadomains, print a message for how to generate it
+(/scripts/updateuserdatacache --force).
+
+[UPDATED] Removed uid 0 check, as it can easily be construed as a security check.
+If MySQL ever shows as offline due to the extra uid 0 user, that's an issue that
+should be brought to the attention of our developers.

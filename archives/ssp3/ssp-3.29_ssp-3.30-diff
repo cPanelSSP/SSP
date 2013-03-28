@@ -1,0 +1,243 @@
+--- ssp-3.29	2012-09-28 00:45:29.000000000 +0400
++++ ssp-3.30	2012-10-16 00:52:36.000000000 +0400
+@@ -17,13 +17,14 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.29';
++my $version = '3.30';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+ ##  BEGIN GLOBALS   ##
+ ######################
+ 
++my $hostname            = hostname();
+ my $os                  = Cpanel::OSSys::getos();
+ my @local_ipaddrs_list  = Cpanel::Ips::Fetch::fetch_ips_array();
+ chomp( my %hostinfo     = get_hostinfo() );
+@@ -116,7 +117,6 @@
+ check_for_easyapache_hooks();
+ check_for_home_noexec();
+ check_for_nat();
+-check_for_etc_hosts_no_loopback();
+ check_for_portreserve_entries();
+ check_for_oracle_linux();
+ check_for_usr_local_cpanel_hooks();
+@@ -142,9 +142,9 @@
+ check_for_apache_rlimits();
+ check_if_crond_is_running();
+ check_for_usr_local_lib_libz_so();
+-check_for_extra_uid_or_gid_0_user();
+-check_for_httpupdate_in_etc_hosts();
++check_for_extra_uid_0_user();
+ check_for_non_default_modsec_rules();
++check_etc_hosts_sanity();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -210,7 +210,6 @@
+         check_for_redhat_firewall();
+         check_for_home_noexec();
+         check_for_nat();
+-        check_for_etc_hosts_no_loopback();
+         check_for_portreserve_entries();
+         check_for_oracle_linux();
+         check_for_proc_mdstat_recovery();
+@@ -224,7 +223,7 @@
+         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
+         check_if_crond_is_running();
+         check_for_extra_uid_or_gid_0_user();
+-        check_for_httpupdate_in_etc_hosts();
++        check_etc_hosts_sanity();
+ 
+         ## [3RDP]
+         check_for_apf();
+@@ -369,7 +368,6 @@
+ ##############################
+ 
+ sub print_hostname {
+-    my $hostname = hostname();
+ 
+     print_info( 'Hostname: ' );
+ 
+@@ -571,6 +569,7 @@
+ 
+     my $cluster_dir = '/var/cpanel/cluster/root/config';
+     my @dir_contents;
++    my @cluster_members;
+     my ( $cluster_member_ipaddr, $cluster_member_hostname, $cluster_member_role );
+ 
+     if ( -d $cluster_dir ) {
+@@ -609,7 +608,17 @@
+                 $cluster_member_role = '?';
+             }
+ 
+-            print "\t \\_ $cluster_member_hostname  ($cluster_member_ipaddr)  [$cluster_member_role]\n";
++            push @cluster_members, $cluster_member_hostname . '_SSP_' . $cluster_member_ipaddr . '_SSP_' . "[${cluster_member_role}]";
++        }
++    }
++
++    ## print sorted output for cluster members, by hostname
++    if ( @cluster_members ) {
++        @cluster_members = sort @cluster_members;
++
++        for my $member ( @cluster_members ) {
++            $member =~ s/_SSP_/ /g;
++            print "\t \\_ $member\n";
+         }
+     }
+ }
+@@ -1707,32 +1716,6 @@
+     }
+ }
+ 
+-sub check_for_etc_hosts_no_loopback {
+-    my $hosts = '/etc/hosts';
+-    my $localhost;
+-
+-    if ( ! -f $hosts ) {
+-        print_warn( '/etc/hosts: ' );
+-        print_warning( 'missing!' );
+-    }
+-    else {
+-        if ( open my $hosts_fh, '<', $hosts ) {
+-            while ( my $line = <$hosts_fh> ) {
+-                chomp $line;
+-                if ( ( $line =~ m{  127\.0\.0\.1 (.*) localhost }xms ) and ( $line !~ /^\#/ ) ) {
+-                    $localhost = 1;
+-                }
+-            }
+-            close $hosts_fh;
+-        }
+-    }
+-
+-    if ( !$localhost ) {
+-        print_warn( '/etc/hosts: ' );
+-        print_warning( 'no entry for localhost, or commented out' );
+-    }
+-}
+-
+ sub check_for_portreserve_entries {
+     my $portreserve_dir = '/etc/portreserve';
+     my @dir_entries;
+@@ -2492,44 +2475,24 @@
+     }
+ }
+ 
+-sub check_for_extra_uid_or_gid_0_user {
+-    my $extra_uid_or_gid_0_users;
++sub check_for_extra_uid_0_user {
++    my $extra_uid_0_users;
+ 
+     if ( open my $passwd_fh, '<', '/etc/passwd' ) {
+         while ( <$passwd_fh> ) {
+             if ( m{ \A ([^:]+) : x : (\d+) : }xms ) {
+                 my ( $user, $uid ) = ( $1, $2 );
+                 if ( $uid == 0 and $user ne 'root' ) {
+-                    $extra_uid_or_gid_0_users .= "$user ";
++                    $extra_uid_0_users .= "$user ";
+                 }
+             }
+         }
+         close $passwd_fh;
+     }
+ 
+-    if ( $extra_uid_or_gid_0_users ) {
++    if ( $extra_uid_0_users ) {
+         print_warn( 'UID 0 users: ' );
+-        print_warning( $extra_uid_or_gid_0_users );
+-    }
+-}
+-
+-sub check_for_httpupdate_in_etc_hosts {
+-    my $hosts = '/etc/hosts';
+-    my $httpupdate = 0;
+-
+-    if ( open my $hosts_fh, '<', $hosts ) {
+-        while ( <$hosts_fh> ) {
+-            if ( m{ httpupdate\.cpanel\.net }xmsi ) {
+-                $httpupdate = 1;
+-                last;
+-            }
+-        }
+-        close $hosts_fh;
+-    }
+-
+-    if ( $httpupdate == 1 ) {
+-        print_warn( '/etc/hosts: ' );
+-        print_warning( 'contains an entry for httpupdate.cpanel.net' );
++        print_warning( $extra_uid_0_users );
+     }
+ }
+ 
+@@ -2574,6 +2537,60 @@
+     }
+ }
+ 
++sub check_etc_hosts_sanity {
++    my $hosts = '/etc/hosts';
++    my $localhost = 0;
++    my $httpupdate = 0;
++    my $localhost_not_127 = 0;
++    my $hostname_entry = 0;
++
++    if ( ! -f $hosts ) {
++        print_warn( '/etc/hosts: ' );
++        print_warning( 'missing!' );
++        return;
++    }    
++    else {
++        if ( open my $hosts_fh, '<', $hosts ) {
++            while ( my $line = <$hosts_fh> ) {
++                chomp $line;
++                if ( ( $line =~ m{  127\.0\.0\.1 (.*) localhost }xms ) and ( $line !~ /^\#/ ) ) {
++                    $localhost = 1; 
++                }
++                if ( ( $line =~ m{ localhost }xmsi )  and ( $line !~ /127\.0\.0\.1/ ) ) {
++                    $localhost_not_127 = 1;
++                }
++                if ( $line =~ m{ httpupdate\.cpanel\.net }xmsi ) {
++                    $httpupdate = 1;
++                }
++                if ( $line =~ m{ $hostname }xmsi ) {
++                    $hostname_entry = 1;
++                }
++            }
++            close $hosts_fh;
++        }
++    }    
++
++    if ( $localhost == 0 ) {
++        print_warn( '/etc/hosts: ' );
++        print_warning( 'no entry for localhost, or commented out' );
++    }    
++
++    if ( $httpupdate == 1 ) {
++        print_warn( '/etc/hosts: ' );
++        print_warning( 'contains an entry for httpupdate.cpanel.net' );
++    }
++
++    if ( $localhost_not_127 == 1 ) {
++        print_warn( '/etc/hosts: ' );
++        print_warning( 'contains an entry for "localhost" that isn\'t 127.0.0.1 ! This can break EA' );
++    }
++
++    if ( $hostname_entry == 0 ) {
++        print_warn( '/etc/hosts: ' );
++        print_warning( "no entry found for the server's hostname! [$hostname]" );
++    }
++}
++
+ ##############################
+ #  END [WARN] CHECKS
+ ##############################
+@@ -2596,7 +2613,7 @@
+         }
+ 
+         if ( grep { m{ \A assp\.pl }xms } @port_25_processes ) {
+-            print_3rpd( 'ASSP: ' );
++            print_3rdp( 'ASSP: ' );
+             print_warning( 'assp.pl is listening on port 25' );
+         }
+ 

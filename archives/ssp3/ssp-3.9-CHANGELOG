@@ -1,0 +1,7 @@
+[UPDATED] Improved the Sandy Bridge / AVX checking:
+
+1. Don't check CentOS/RHEL 5.x
+
+2. If CentOS/RHEL 6.3 and /proc/cpuinfo's "model name" section matches on "QEMU" (case insensitive), run the check
+
+3. Check all CentOS/RHEL 6.0, 6.1, 6.2

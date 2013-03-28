@@ -1,0 +1,71 @@
+[NEW] Print a warning if /var/cpanel/sysinfo.config contains 'rpm_dist_ver=unknown'.
+Suggest that running '/scripts/gensysinfo' may fix this.
+
+
+[UPDATED] If Apache is 2.4, check for the time that MaxRequestWorkers was reached
+instead of MaxClients.
+
+
+[UPDATED] Added a $cpanel_version global variable and tidied up a number of
+subs that independently obtained the cPanel version.
+
+
+[UPDATED] Since makecpphp was removed from 11.36+, don't print a warning about
+the existence of /var/cpanel/easy/apache/profile/makecpphp.profile.yaml.local
+if cPanel is >= 11.36.
+
+
+[UPDATED] Since /var/cpanel/usecpphp isn't used in 11.36+, don't print information
+about which services use which php binary if the server is 11.36+.
+
+
+[UPDATED] Added a tip about FB 61516, which disallows logins through cPanel's Java
+based SSH terminal due to shell access not being enabled, even when it is.
+
+---------------------------------------------
+
+Everything below is just general maintanence.
+
+
+[UPDATED] get_cpuinfo() had a lexcially scoped hash named %cpuinfo while
+there is an existing global hash of the same name. Renamed %cpuinfo to
+%cpuinfos in get_cpuinfo().
+
+
+[UPDATED] Same as above, with get_hostinfo() and %hostinfo .
+
+
+[UPDATED] Same as above, with get_mysql_datadir() and $mysql_datadir .
+
+
+[UPDATED] Same as above, with get_os() and $os .
+
+
+[UPDATED] Same as above, with get_process_list() and @process_list .
+
+
+[UPDATED] Same as above, with check_for_cpanel_update() and $TIERS .
+
+
+[UPDATED] Same as above, with get_release_version() and $version .
+
+--
+
+[UPDATED] Removed unused $assp variable from check_for_assp().
+
+
+[UPDATED] Removed unused $atime variable from print_cpanel_info().
+
+
+[UPDATED] Removed unused $process_list variable from get_process_list().
+
+
+[UPDATED] Removed unused $varnish variable from check_for_varnish() .
+
+
+[UPDATED] Removed unused $unbound_ipaddrs variable from check_if_httpdconf_ipaddrs_exist().
+
+--
+
+[UPDATED] Cleaned up a bunch of numeric/string comparisons (e.g.,
+changed if $foo == '1' to if $foo == 1, etc).

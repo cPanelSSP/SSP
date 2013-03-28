@@ -1,0 +1,10 @@
+[bugfix] Supress the output about the existence of the post_sync_cleanup file,
+as this is a default file and not a custom hook.
+
+
+[new] On Linux, print a message if the current runlevel is not 3.
+
+[new] Print a message if /var/cpanel/easy_skip_cpanelsync exists.
+
+[new] Print a message if suphp.log is > 2.1GB.
+

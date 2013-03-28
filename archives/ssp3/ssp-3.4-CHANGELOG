@@ -1,0 +1,17 @@
+[NEW] check MySQL rpm version mismatch
+
+[NEW] check if home is mounted noexec
+
+[NEW] NAT check (checks if external IP addr exists on server. failing that, checks if local IP addrs are only internal)
+
+[NEW] check for no valid 127.0.0.1 / localhost entry in /etc/hosts
+
+[NEW] print a warning if /etc/portreserve/ contains entries
+
+[FIX] since runlevel 0 has been seen in the wild, fixed check_runlevel() to account for this
+
+[FIX] print_apache_uptime() - only print Apache uptime if $apache_uptime and $apache_generations are populated
+
+[FIX] better remote MySQL host detection
+
+removed check_network_mismatch() due to adding new NAT check

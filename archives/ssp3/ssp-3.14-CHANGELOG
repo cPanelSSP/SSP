@@ -1,0 +1,2 @@
+[NEW] Print a warning if "pecl config-get php_ini" contains "cpanel"
+in the output, and refer to case 59764.

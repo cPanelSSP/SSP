@@ -1,0 +1,12 @@
+[NEW] Print a warning if Redhat/CentOS 6.3, and /etc/resolv.conf
+contains "options rotate". See case 60347.
+
+Redhat bug report: https://bugzilla.redhat.com/show_bug.cgi?id=841787
+
+CentOS bug report: http://bugs.centos.org/view.php?id=5857
+
+NOTE: This has been fixed by Redhat already here:
+http://rhn.redhat.com/errata/RHBA-2012-1158.html
+
+If this check becomes too annoying (e.g., too many unnecessary
+warnings), it may be removed in the future.

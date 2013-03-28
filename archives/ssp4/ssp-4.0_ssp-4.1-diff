@@ -1,0 +1,252 @@
+--- ssp-4.0	2013-01-09 09:20:20.000000000 -0600
++++ ssp-4.1	2013-01-16 08:57:51.000000000 -0600
+@@ -20,7 +20,7 @@
+     die "SSP must be run as root\n";
+ }
+ 
+-my $version = '4.0';
++my $version = '4.1';
+ 
+ $| = 1;
+ $Term::ANSIColor::AUTORESET = 1;
+@@ -36,6 +36,8 @@
+ my @process_list                = get_process_list();
+ my %hostinfo                    = get_hostinfo();
+ my %cpuinfo                     = get_cpuinfo();
++my $mysql_datadir               = get_mysql_datadir();
++my $mysql_error_log             = get_mysql_error_log();
+ my @apache_version_output       = split /\n/, run( '/usr/local/apache/bin/httpd', '-v' );
+ my @apache_modules_output       = split /\n/, run( '/usr/local/apache/bin/httpd', '-v' );
+ my @mysql_rpm_versions;         # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
+@@ -152,6 +154,8 @@
+ check_for_non_default_umask();
+ check_for_multiple_imagemagick_installs();
+ check_for_custom_locales();
++check_eximstats_size();
++check_eximstats_corrupt();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -332,16 +336,20 @@
+ }
+ 
+ sub print_version {
+-    print BOLD YELLOW ON_BLACK "\tSSP $version\n\n";
++    print BOLD YELLOW ON_BLACK "\tSSP $version (use ssp.cptechs.info/ssp.previous for previous version)\n\n";
+ }
+ 
+ sub print_tip {
+     my @tips = (
+-        "[Case 61735] [By design] '/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings' destroys\n\tcustom proxy subdomain records. Use WHM >> Tweak Settings instead.",
++        "[Case 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net",
+         "[Case 44884] upcp resets Mailman lists' hostnames. pre/postupcp hooks workaround in ticket 3541643",
+-        "mod_userdir URLs (/~username) are not compatible with FCGI when Apache's suexec is enabled (tinyurl.com/bbd8fn2)",
++        "[Case 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale",
++        "[Case 61735] (By design) '/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings' destroys\n\tcustom proxy subdomain records. Use WHM >> Tweak Settings instead.",
++        "[Case 62054] (By design) The 'Dedicated IP' box can only be modified when creating a package - not when editing",
++        "mod_userdir URLs (/~username) are not compatible with FCGI when Apache's suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)",
+         "For a list of obscure issues, see the 'RareIssues' wiki article",
+-        "[Case 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net",
++        "11.36: Use /scripts/check_cpanel_rpms to fix problems in /usr/local/cpanel/3rdparty/  - not checkperlmodules",
++        "php.ini for phpMyAdmin, phpPgAdmin, Horde, and RoundCube can be found in /usr/local/cpanel/3rdparty/etc/",
+     );
+ 
+     my $size = scalar @tips;
+@@ -1017,7 +1025,7 @@
+     if ( open my $my_cnf_fh, '<', $my_cnf ) {
+         while ( <$my_cnf_fh> ) {
+             chomp( my $line = $_ );
+-            if ( $line =~ m{ \A host \s* = \s* (?:"?) ([^"]+) }xms ) {
++            if ( $line =~ m{ \A host \s* = \s* (?:["']?) ([^"']+) }xms ) {
+                 $mysql_host = $1;
+             }
+         }
+@@ -1071,7 +1079,7 @@
+     my $whm_php;
+     my $cpanel_php;
+ 
+-    # WHM, Webmail, phpMyAdmin
++    # WHM, Webmail, phpMyAdmin, phpPgAdmin
+     if ( -f '/var/cpanel/usecpphp' ) {
+         if ( -x '/var/cpanel/3rdparty/bin/php-cgi' ) {
+             $whm_php = '/var/cpanel/3rdparty/bin/php-cgi';
+@@ -1115,11 +1123,11 @@
+ 
+     if ( $whm_php eq $cpanel_php ) {
+         print_info( 'Internal PHP: ' );
+-        print_normal( "$whm_php (used by WHM, cPanel, webmail, and phpMyAdmin)" );
++        print_normal( "$whm_php (used by WHM, cPanel, webmail, phpMyAdmin, phpPgAdmin)" );
+     }
+     else {
+         print_info( 'Internal PHP: ' );
+-        print_normal( "$whm_php (used by WHM, webmail, and phpMyAdmin) $cpanel_php (used by cPanel)" );
++        print_normal( "$whm_php (used by WHM, webmail, phpMyAdmin, phpPgAdmin) $cpanel_php (used by cPanel)" );
+     }
+ }
+ 
+@@ -1782,13 +1790,15 @@
+         print_warning( '/usr/local/cpanel/Cpanel/CustomEventHandler.pm exists!' );
+     }
+ 
+-    # default CloudLinux hooks that can be ignored
++    # default CloudLinux, cPGs hooks that can be ignored
+     my %hooks_ignore = qw(
+         e5e13640299ec439fb4c7f79a054e42b    /scripts/posteasyapache
+         42a624c843f34085f1532b0b4e17fe8c    /scripts/postmodifyacct
+         57f8ea2d494e299827cc365c86a357ac    /scripts/postupcp
++        4988be925a6f50ec505618a7cec702e2    /scripts/postkillacct
+         a4df04a6440073fe40363cfd241b1fe7    /scripts/postwwwacct
+         03a0dc919c892bde254c52cefe4d0673    /scripts/postwwwacct
++        2401d6260dac6215596be1652b394200    /scripts/postwwwacct
+         44caf075fc0f9847ede43de5dd563edc    /scripts/prekillacct
+     );
+ 
+@@ -2088,22 +2098,29 @@
+     }
+ }
+ 
+-sub check_mysql_non_default_datadir {
++sub get_mysql_datadir {
+     my $my_cnf = '/etc/my.cnf';
++    my $mysql_datadir = '/var/lib/mysql/';
++
+     if ( open my $my_cnf_fh, '<', $my_cnf ) {
+         while ( <$my_cnf_fh> ) {
+             chomp ( my $line = $_ );
+-            if ( $line =~ m{ \A datadir \s* = \s* (?:"?) ([^"]+) }xms ) {
+-                my $datadir = $1;
+-                if ( $datadir !~ m{ /var/lib/mysql(/?) \z }xms ) {
+-                    print_warn( 'Non default MySQL datadir: ' );
+-                    print_warning( $datadir );
+-                }
++            if ( $line =~ m{ \A datadir \s* = \s* (?:["']?) ([^"']+) }xms ) {
++                $mysql_datadir = $1;
+                 last;
+             }
+         }
+         close $my_cnf_fh;
+     }
++
++    return $mysql_datadir;
++}
++
++sub check_mysql_non_default_datadir {
++    if ( $mysql_datadir !~ m{ /var/lib/mysql(/?) \z }xms ) {
++        print_warn( 'Non-default MySQL datadir: ' );
++        print_warning( $mysql_datadir );
++    }
+ }
+ 
+ sub check_for_domain_forwarding {
+@@ -2186,7 +2203,7 @@
+         while ( <$phpini_fh> ) {
+             my $line = $_;
+             chomp $line;
+-            if ( $line =~ m{ \A date\.timezone (?:\s+)? = (?:\s+)? (?:")? ([^/"]+) / ([^/"]+) (?:")? (?:\s+)? \z }xms ) {
++            if ( $line =~ m{ \A date\.timezone (?:\s+)? = (?:\s+)? (?:["'])? ([^/"']+) / ([^/"']+) (?:["'])? (?:\s+)? \z }xms ) {
+                 $timezone = $1 . '/' . $2;
+                 last;
+             }
+@@ -3134,14 +3151,16 @@
+     }
+ }
+ 
+-sub check_for_non_default_mysql_error_log_location {
+-    my $mysql_error_log;
++sub get_mysql_error_log {
++    my $mysql_error_log = $mysql_datadir . "/$hostname" . '.err';
++    $mysql_error_log =~ s#//#/#g;
+ 
+     if ( open my $file_fh, '<', '/etc/my.cnf' ) {
+         while ( <$file_fh> ) {
+             if ( m{ \A log-error \s? = \s? (.*) \z }xms ) {
+                 $mysql_error_log = $1;
+                 $mysql_error_log =~ s/\"//g;
++                $mysql_error_log =~ s/\'//g;
+                 chomp $mysql_error_log;
+                 last;
+             }
+@@ -3149,7 +3168,11 @@
+         close $file_fh;
+     }
+ 
+-    if ( $mysql_error_log ) {
++    return $mysql_error_log;
++}
++
++sub check_for_non_default_mysql_error_log_location {
++    if ( $mysql_error_log and $mysql_error_log !~ m# \A /var/lib/mysql/${hostname}\.err \z #xms ) {
+         print_warn( 'MySQL: ' );
+         print_warning( "error log configured in /etc/my.cnf as $mysql_error_log" );
+     }
+@@ -3418,6 +3441,70 @@
+     print_warning( '[Case 62119] Users with custom locales detected. Seeing "500 Internal Server Error" in cPanel? May be related, check case' );
+ }
+ 
++sub check_eximstats_size {
++    return if !$mysql_datadir;
++
++    my $eximstats_dir = $mysql_datadir . 'eximstats/';
++    my @dir_contents;
++    my $size;
++
++    if ( -d $eximstats_dir ) {
++        opendir( my $dir_fh, $eximstats_dir );
++        @dir_contents = grep { /(defers|failures|sends|smtp)\.(frm|MYI|MYD)$/ } readdir $dir_fh;
++        closedir $dir_fh;
++    }
++
++    for my $file ( @dir_contents ) {
++        $file = $eximstats_dir . $file;
++        $size += ( stat( $file ) )[7];
++    }
++
++    if ( $size > 5_000_000_000 ) {
++        $size = sprintf("%0.2fGB", $size/1073741824);
++        print_warn( 'eximstats db: ' );
++        print_warning( $size );
++    }
++}
++
++sub check_eximstats_corrupt {
++    return if !$mysql_error_log;
++
++    my $size = ( stat( $mysql_error_log ))[7];
++    my $bytes_to_check = 20_971_520; # 20M limit of logs to check
++    my $seek_position = 0;
++    my $log_data;
++    my @logs;
++    my $eximstats_is_crashed;
++
++    if ( $size > $bytes_to_check ) {
++        $seek_position = ( $size - $bytes_to_check );
++    }
++
++    if ( open my $file_fh, '<', $mysql_error_log ) {
++        seek $file_fh, $seek_position, 0;
++        read $file_fh, $log_data, $bytes_to_check;
++        close $file_fh;
++    }
++
++    @logs = split /\n/, $log_data;
++    undef $log_data;
++    @logs = reverse @logs;
++
++    for my $log_line ( @logs ) {
++        # /usr/sbin/mysqld: Table './eximstats/smtp' is marked as crashed and should be repaired
++        if ( $log_line =~ m{ /eximstats/ (.*) marked \s as \s crashed }xms  ) {
++            $eximstats_is_crashed = $log_line;
++            last;
++        }
++    }
++
++    if ( $eximstats_is_crashed ) {
++        print_warn( 'eximstats: ' );
++        print_warning( "latest crash: $eximstats_is_crashed" );
++    }
++}
++
++
+ ##############################
+ #  END [WARN] CHECKS
+ ##############################

@@ -1,0 +1,2 @@
+[NEW] Print a warning if MINUID from /etc/wwwacct.conf has no value,
+or has a value less than 500 or greater than 60000.

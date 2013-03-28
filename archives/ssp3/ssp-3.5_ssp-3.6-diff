@@ -1,0 +1,31 @@
+--- ssp-3.5	2012-07-19 05:20:07.000000000 +0400
++++ ssp-3.6	2012-07-20 00:07:34.000000000 +0400
+@@ -96,6 +96,7 @@
+ check_for_nat();
+ check_for_etc_hosts_no_loopback();
+ check_for_portreserve_entries();
++check_for_oracle_linux();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -1465,6 +1466,20 @@
+     }
+ }
+ 
++sub check_for_oracle_linux {
++    my $centos_5_oracle_release_file = '/etc/enterprise-release';
++    my $centos_6_oracle_release_file = '/etc/oracle-release';
++
++    if ( -f $centos_5_oracle_release_file ) {
++        print_warn( 'Oracle Linux: ' );
++        print_warning( "$centos_5_oracle_release_file detected!" );
++    }
++    elsif ( -f $centos_6_oracle_release_file ) {
++        print_warn( 'Oracle Linux: ' );
++        print_warning( "$centos_6_oracle_release_file detected!" );
++    }
++}
++
+ ##############################
+ #  END WARN
+ ##############################

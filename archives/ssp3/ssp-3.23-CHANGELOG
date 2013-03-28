@@ -1,0 +1,39 @@
+[NEW] Warn if MySQL 4 RPMs are found, as this can prevent upcp from completing successfully
+
+[NEW] Warn if /etc/passwd contains a user whose uid is 0 and is not the root user. This can
+cause various issues in cPanel, including MySQL showing as offline. You may need to move
+/var/cpanel/pw.cache/2:0 out of the way.
+
+[NEW] Warn if /usr/local/lib/libz.so exists, which can prevent EA from completing successfully
+
+[NEW] Warn if /etc/cpsources.conf exists and is not empty
+
+[NEW] Warn if "chattr" is found in root's cron
+
+[NEW] Warn if RLimitCPU or RLimitMEM is found in httpd.conf
+
+[NEW] Warn if crond is not found in the process list. crond is needed for certain tasks
+such as backups.
+
+[NEW] Warn if openssl*.tar exists in root's bash history
+
+
+
+[UPDATED] Huge Apache logs are now printed as "2.64GB" instead of "2837015752 bytes"
+
+[UPDATED] Don't print a warning if /usr/bin/passwd is 4511
+
+[UPDATED] Changed check_bash_history_for_certain_commands(), as the hash doesn't need to be populated in advance
+
+[UPDATED] Don't report empty hooks
+
+[UPDATED] Verify that what we get from http://cpanel.net/showip.cgi is actually in the format x.x.x.x
+
+[UPDATED] Separate the display of the cPanel version and tier.
+    Old way: 11.32.4.15-EDGE
+    New way: Version: 11.32.5.9   Tier: EDGE
+
+
+
+[FIXED] Fixed a logic issue with finding commands in root's shell history and cron (replaced elsifs with ifs)
+

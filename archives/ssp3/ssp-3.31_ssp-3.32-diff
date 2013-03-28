@@ -1,0 +1,118 @@
+--- ssp-3.31	2012-10-16 18:13:16.000000000 +0400
++++ ssp-3.32	2012-10-25 18:55:41.000000000 +0400
+@@ -17,7 +17,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.31';
++my $version = '3.32';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -142,9 +142,10 @@
+ check_for_apache_rlimits();
+ check_if_crond_is_running();
+ check_for_usr_local_lib_libz_so();
+-check_for_extra_uid_0_user();
+ check_for_non_default_modsec_rules();
+ check_etc_hosts_sanity();
++check_for_empty_or_missing_files();
++check_for_apache_listen_host_is_localhost();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -222,7 +223,6 @@
+         check_roots_cron_for_certain_commands();
+         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
+         check_if_crond_is_running();
+-        check_for_extra_uid_or_gid_0_user();
+         check_etc_hosts_sanity();
+ 
+         ## [3RDP]
+@@ -2475,27 +2475,6 @@
+     }
+ }
+ 
+-sub check_for_extra_uid_0_user {
+-    my $extra_uid_0_users;
+-
+-    if ( open my $passwd_fh, '<', '/etc/passwd' ) {
+-        while ( <$passwd_fh> ) {
+-            if ( m{ \A ([^:]+) : x : (\d+) : }xms ) {
+-                my ( $user, $uid ) = ( $1, $2 );
+-                if ( $uid == 0 and $user ne 'root' ) {
+-                    $extra_uid_0_users .= "$user ";
+-                }
+-            }
+-        }
+-        close $passwd_fh;
+-    }
+-
+-    if ( $extra_uid_0_users ) {
+-        print_warn( 'UID 0 users: ' );
+-        print_warning( $extra_uid_0_users );
+-    }
+-}
+-
+ sub check_for_non_default_modsec_rules {
+     my $modsec_enabled = 0;
+ 
+@@ -2553,10 +2532,13 @@
+         if ( open my $hosts_fh, '<', $hosts ) {
+             while ( my $line = <$hosts_fh> ) {
+                 chomp $line;
+-                if ( ( $line =~ m{  127\.0\.0\.1 (.*) localhost }xms ) and ( $line !~ /^\#/ ) ) {
++
++                next if ( $line =~ /^(\s+)?#/ );
++
++                if ( $line =~ m{  127\.0\.0\.1 (.*) localhost }xms )  {
+                     $localhost = 1; 
+                 }
+-                if ( ( $line =~ m{ localhost }xmsi )  and ( $line !~ m{ 127\.0\.0\.1 | ::1 }xms ) ) {
++                if ( ( $line =~ m{ localhost }xmsi ) and ( $line !~ m{ 127\.0\.0\.1 | ::1 }xms ) ) {
+                     $localhost_not_127 = 1;
+                 }
+                 if ( $line =~ m{ httpupdate\.cpanel\.net }xmsi ) {
+@@ -2591,6 +2573,42 @@
+     }
+ }
+ 
++sub check_for_empty_or_missing_files {
++    my $userdatadomains = '/etc/userdatadomains';
++
++    if ( ! -e $userdatadomains ) {
++        print_warn( 'Missing file: ' );
++        print_warning( $userdatadomains );
++    }
++    elsif ( -f $userdatadomains and -z $userdatadomains ) {
++        print_warn( 'Empty file: ' );
++        print_warning( "$userdatadomains (generate it with /scripts/updateuserdatacache --force)" );
++    }
++}
++
++sub check_for_apache_listen_host_is_localhost {
++    my $cpanel_config = '/var/cpanel/cpanel.config';
++    my $localhost_80;
++
++    return if ! $cpanel_config;
++
++    if ( open my $cpanel_config_fh, '<', $cpanel_config ) {
++        while ( <$cpanel_config_fh> ) {
++            if ( /^apache_port=(\d+\.\d+\.\d+\.\d+):(?:\d+)/ ) {
++                if ( $1 eq '127.0.0.1' ) {
++                    $localhost_80 = 1;
++                }
++            }
++        }
++        close $cpanel_config_fh;
++    }
++
++    if ( $localhost_80 ) {
++        print_warn( 'Apache listen host: ' );
++        print_warning( 'Apache may only be listening on 127.0.0.1' );
++    }
++}
++
+ ##############################
+ #  END [WARN] CHECKS
+ ##############################

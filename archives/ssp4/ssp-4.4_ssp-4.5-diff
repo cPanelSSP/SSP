@@ -1,0 +1,57 @@
+--- ssp-4.4	2013-01-22 14:29:44.000000000 -0600
++++ ssp-4.5	2013-01-23 12:11:23.000000000 -0600
+@@ -16,7 +16,7 @@
+     die "SSP must be run as root\n";
+ }
+ 
+-my $version = '4.4';
++my $version = '4.5';
+ 
+ $| = 1;
+ $Term::ANSIColor::AUTORESET = 1;
+@@ -50,7 +50,6 @@
+ 
+ ## [INFO]
+ check_for_dnsonly();
+-print_tip();
+ print_version();
+ print_hostname();
+ print_os();
+@@ -189,7 +188,6 @@
+ sub check_for_dnsonly {
+     if ( -e '/var/cpanel/dnsonly' ) {
+ 
+-        print_tip();
+         print_version();
+         print_start( "\t\tDNSONLY: " );
+         print_warning( "/var/cpanel/dnsonly detected, assuming DNSONLY\n" );
+@@ -344,29 +342,6 @@
+     print BOLD YELLOW ON_BLACK "\tSSP $version (use ssp.cptechs.info/ssp.previous for previous version)\n\n";
+ }
+ 
+-sub print_tip {
+-    my @tips = (
+-        "[Case 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net",
+-        "[Case 44884] upcp resets Mailman lists' hostnames. pre/postupcp hooks workaround in ticket 3541643",
+-        "[Case 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale",
+-        "[Case 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and 'PCRE is not compiled with UTF-8 support'",
+-        "[Case 61735] (By design) '/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings' destroys custom proxy subdomain records. Use WHM >> Tweak Settings instead.",
+-        "[Case 62054] (By design) The 'Dedicated IP' box can only be modified when creating a package - not when editing",
+-        "[Case 62819] 'License File Expired: LTD: 1334782495 NOW: 1246416504 FUT!' likely just means the server clock is wrong",
+-        "mod_userdir URLs (/~username) are not compatible with FCGI when Apache's suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)",
+-        "For a list of obscure issues, see the 'RareIssues' wiki article",
+-        "11.36: Use /scripts/check_cpanel_rpms to fix problems in /usr/local/cpanel/3rdparty/  - not checkperlmodules",
+-        "php.ini for phpMyAdmin, phpPgAdmin, Horde, and RoundCube can be found in /usr/local/cpanel/3rdparty/etc/",
+-        "If Dovecot/POP/IMAP dies every day around the same time, the server's clock could be skewed. Check /var/log/maillog for 'moved backwards'",
+-    );
+-
+-    my $size = scalar @tips;
+-    my $num = int rand $size;
+-
+-    print BOLD WHITE ON_BLACK "\tDid you know? ";
+-    print BOLD WHITE ON_BLACK "$tips[$num]\n\n";
+-}
+-
+ sub get_tiers_file {
+     local $SIG{'ALRM'} = sub { return(); };
+     alarm 5;

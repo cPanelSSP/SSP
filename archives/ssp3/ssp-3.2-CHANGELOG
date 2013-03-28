@@ -1,0 +1,4 @@
+[NEW] print a message if the server is using a remote MySQL host
+
+[FIX] the custom opt mods warning is only printed once, instead of
+one time for each opt mod

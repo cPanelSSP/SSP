@@ -1,0 +1,6 @@
+[UPDATED] The previous Sandy Bridge + AVX checking from SSP 3.9 would
+not ever work, because QEMU servers don't appear to put the CPU model
+info in /proc/cpuinfo . This check has been redone, and now prints a
+warning if a combination of QEMU + CentOS 6.3 is found, stating that
+the AVX glibc issue *could* exist on this server, *if* using a Sandy
+Bridge CPU.

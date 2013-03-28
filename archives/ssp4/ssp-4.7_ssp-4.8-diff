@@ -1,0 +1,151 @@
+--- ssp-4.7	2013-01-31 14:31:32.000000000 -0600
++++ ssp-4.8	2013-02-01 15:32:12.000000000 -0600
+@@ -16,7 +16,7 @@
+     die "SSP must be run as root\n";
+ }
+ 
+-my $version = '4.7';
++my $version = '4.8';
+ 
+ $| = 1;
+ $Term::ANSIColor::AUTORESET = 1;
+@@ -160,6 +160,9 @@
+ check_for_custom_postgres_repo();
+ check_for_rpm_overrides();
+ check_for_odd_yum_conf();
++check_var_cpanel_immutable_files();
++check_for_hordepass_newline();
++check_for_noxsave_in_grub_conf();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -247,6 +250,9 @@
+         check_for_percona_rpms();
+         check_for_mainip_newline();
+         check_for_rpm_overrides();
++        check_var_cpanel_immutable_files();
++        check_for_hordepass_newline();
++        check_for_noxsave_in_grub_conf();
+ 
+         ## [3RDP]
+         check_for_apf();
+@@ -1810,12 +1816,15 @@
+         42a624c843f34085f1532b0b4e17fe8c    /scripts/postmodifyacct
+         57f8ea2d494e299827cc365c86a357ac    /scripts/postupcp
+         e464adf0531fea2af4fe57361d9a43fb    /scripts/postupcp
++        941772daaa48999f1d5ae5fe2f881e36    /scripts/postupcp
+         4988be925a6f50ec505618a7cec702e2    /scripts/postkillacct
+         a4df04a6440073fe40363cfd241b1fe7    /scripts/postwwwacct
+         03a0dc919c892bde254c52cefe4d0673    /scripts/postwwwacct
+         2401d6260dac6215596be1652b394200    /scripts/postwwwacct
+         44caf075fc0f9847ede43de5dd563edc    /scripts/prekillacct
+         86f9b53c81a8f2fd77a8626ddd3b2c71    /scripts/prekillacct
++        46fee9faf2d5f83cbcda17ce0178a465    /scripts/prekillacct
++
+     );
+ 
+     my @hooks;
+@@ -3723,7 +3732,7 @@
+ 
+     if ( $has_newline == 1 ) {
+         print_warn( "$mainip: " );
+-        print_warning( 'contains a newline; /scripts/ipcheck may send incorrect "hostname [..] should resolve to" emails; see 54844' );
++        print_warning( 'contains a newline; /scripts/ipcheck may send incorrect "hostname [..] should resolve to" emails; see FB 54844' );
+     }                
+ }
+ 
+@@ -3754,13 +3763,29 @@
+ }
+ 
+ sub check_for_rpm_overrides {
+-# http://go.cpanel.net/rpmversions
+     my $rpm_override_dir = '/var/cpanel/rpm.versions.d/';
++    my $local_versions = '/var/cpanel/rpm.versions.d/local.versions';
++    my $md5;
++    my $is_default = 0;
++
++    if ( -f $local_versions ) {
++        $md5 = run( 'md5sum', $local_versions );
++    }
++
++    if ( $md5 =~ m{ \A fd3f270edda79575343e910369b75ab7 \s }xms ) {
++        $is_default = 1;
++    }
+ 
+     opendir( my $dir_fh, $rpm_override_dir );
+     my @dir_contents = grep { ! /^\.(\.?)$/ } readdir $dir_fh;
+     closedir $dir_fh;
+ 
++    if ( scalar @dir_contents == 1 ) {
++        if ( $dir_contents[0] eq 'local.versions' and $is_default == 1 ) {
++            return;
++        }
++    }
++
+     if ( @dir_contents ) {
+         print_warn( 'RPM override: ' );
+         print_warning( "$rpm_override_dir contains entries; manually review. More info: http://go.cpanel.net/rpmversions" );
+@@ -3801,6 +3826,63 @@
+     }
+ }
+ 
++sub check_var_cpanel_immutable_files {
++    my $immutable_files = '/var/cpanel/immutable_files';
++
++    if ( -e $immutable_files and !-z $immutable_files ) {
++        print_warn( 'immutable files: ' );
++        print_warning( "$immutable_files is not empty!" );
++    }
++}
++
++sub check_for_hordepass_newline {
++    my $hordepass = '/var/cpanel/hordepass';
++    my $has_newline = 0; 
++
++    if ( ! -e $hordepass ) {
++        print_warn( "$hordepass: " );
++        print_warning( 'missing!' );
++    }    
++    else {
++        if ( open my $hordepass_fh, '<', $hordepass ) {
++            while ( <$hordepass_fh> ) {
++                if ( /\n/ ) {
++                    $has_newline = 1; 
++                    last;
++                }
++            }
++            close $hordepass_fh;
++        }
++    }    
++
++    if ( $has_newline == 1 ) {
++        print_warn( "$hordepass: " );
++        print_warning( 'contains a newline; can cause leftover cptmpdb_* MySQL dbs; see FB 63364' );
++    }     
++}
++
++sub check_for_noxsave_in_grub_conf {
++    my $grub_conf = '/boot/grub/grub.conf';
++    my $has_noxsave = 0;
++
++    return if !$grub_conf;
++
++    if ( open my $grub_fh, '<', $grub_conf ) {
++        while ( <$grub_fh> ) {
++            if ( /noxsave/ ) {
++                $has_noxsave = 1;
++                last;
++            }
++        }
++        close $grub_fh;
++    }
++
++    if ( $has_noxsave == 1 ) {
++        print_warn( 'noxsave: ' );
++        print_warning( "found in ${grub_conf}. kernel panics? segfaults? see ticket 3689211" );
++    }
++}
++
+ ##############################
+ #  END [WARN] CHECKS
+ ##############################

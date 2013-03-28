@@ -1,0 +1,302 @@
+--- ssp-3.23	2012-09-19 17:40:01.000000000 +0400
++++ ssp-3.24	2012-09-19 23:31:18.000000000 +0400
+@@ -4,7 +4,7 @@
+ # Find and print useful troubleshooting info on cPanel servers
+ 
+ # Most of the testing has been done on Linux running full cPanel.
+-# DNSONLY and FBSD... not as much.
++# FBSD... not as much.
+ 
+ use strict;
+ use warnings;
+@@ -20,7 +20,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.23';
++my $version = '3.24';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -146,6 +146,7 @@
+ check_if_crond_is_running();
+ check_for_usr_local_lib_libz_so();
+ check_for_extra_uid_or_gid_0_user();
++check_for_httpupdate_in_etc_hosts();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -172,40 +173,65 @@
+ check_php_libmysqlclient_mismatch();
+ 
+ sub check_for_dnsonly {
+-    my $dnsonly;
+-
+     if ( -e '/var/cpanel/dnsonly' ) {
+-        $dnsonly = 1;
+-    }
+ 
+-    if ( $dnsonly ) {
+-        print_start( 'DNSONLY: ' );
+-        print_warning( '/var/cpanel/dnsonly detected, assuming DNSONLY' );
+         print_version();
++        print_start( "\t\tDNSONLY: " );
++        print_warning( "/var/cpanel/dnsonly detected, assuming DNSONLY\n" );
++
++        ## [INFO]
+         print_hostname();
+         print_os();
+-        check_selinux_status();
+-        check_runlevel();
++        print_kernel_and_cpu();
+         print_cpanel_birthday();
+         print_cpanel_version();
+         check_for_cpanel_update();
+-        check_if_upcp_is_running();
+-        print_kernel_and_cpu();
+-        check_for_sandy_bridge();
+         print_perl_version();
+         print_uptime();
++        check_sysinfo();
++
++        ## [WARN]
++        check_selinux_status();
++        check_runlevel();
++        check_for_missing_root_cron();
++        check_if_upcp_is_running();
++        check_for_sandy_bridge();
+         check_interface_lo();
++        check_cpanelconfig_filetype();
++        check_for_cpanelsync_exclude();
+         check_for_lve_environment();
+-        check_sysinfo();
+         check_perl_sanity();
++        check_for_non_default_permissions();
+         check_limitsconf();
+         check_disk_space();
+         check_disk_inodes();
++        check_for_gdm();
++        check_for_redhat_firewall();
++        check_for_home_noexec();
++        check_for_nat();
++        check_for_etc_hosts_no_loopback();
++        check_for_portreserve_entries();
++        check_for_oracle_linux();
++        check_for_proc_mdstat_recovery();
++        check_usr_local_cpanel_path_for_symlinks();
++        check_for_system_mem_below_512M();
++        check_for_options_rotate_redhat_centos_63();
++        check_for_empty_yumconf();
++        check_for_cpanel_files();
++        check_bash_history_for_certain_commands();
++        check_roots_cron_for_certain_commands();
++        # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
++        check_if_crond_is_running();
++        check_for_extra_uid_or_gid_0_user();
++        check_for_httpupdate_in_etc_hosts();
++
++        ## [3RDP]
+         check_for_apf();
+         check_for_csf();
+         check_for_prm();
+         check_for_les();
+         check_for_1h();
++        check_for_webmin();
+         
+         exit;
+     }
+@@ -221,7 +247,15 @@
+     ## better (?) would be to run lsof and check process names on listening ports.
+ 
+     my @process_list;
+-    my $process_list = Cpanel::SafeRun::Errors::saferunnoerror( 'ps', 'axwwwf', '-o', 'user,cmd' );
++    my $process_list;
++
++    if ( $os eq 'linux' ) {
++        $process_list = Cpanel::SafeRun::Errors::saferunnoerror( 'ps', 'axwwwf', '-o', 'user,cmd' );
++    }
++    elsif ( $os eq 'freebsd' ) {
++        $process_list = Cpanel::SafeRun::Errors::saferunnoerror( 'ps', 'axwwwf', '-o', 'user,comm' );
++    }
++
+     if ( $process_list ) { 
+         @process_list = split /\n/, $process_list;
+     }
+@@ -822,12 +856,19 @@
+ }
+ 
+ sub check_for_missing_root_cron {
+-    return if ( $os eq 'freebsd' );
+     return if ( $< != 0 );
++
++    my $cron;
++    if ( $os eq 'linux' ) {
++        $cron = '/var/spool/cron/root';
++    }
++    elsif ( $os eq 'freebsd' ) {
++        $cron = '/var/cron/tabs/root';
++    }
+     
+-    if ( ! -f '/var/spool/cron/root' ) {
++    if ( ! -f $cron ) {
+         print_warn( 'Missing cron: ' );
+-        print_warning( 'root\'s cron file is missing!' );
++        print_warning( "root's cron file $cron is missing!" );
+     }
+ }
+ 
+@@ -1232,7 +1273,6 @@
+         '/'                             => '755',
+         '/bin'                          => '755',
+         '/bin/bash'                     => '755',
+-        '/bin/ln'                       => '755',
+         '/etc/group'                    => '644',
+         '/etc/hosts'                    => '644',
+         '/etc/nsswitch.conf'            => '644',
+@@ -1279,36 +1319,36 @@
+     if ( -e '/usr/bin/crontab' ) {
+         my $mode = ( stat( '/usr/bin/crontab' ))[2] & 07777;
+         $mode = sprintf "%lo", $mode;
+-        if ( $mode != '4755' and $mode != '6755' ) {
++        if ( $mode != '4755' and $mode != '6755' and $mode != '4555' ) {
+             print_warn( 'Non-default Permissions: ' );
+-            print_warning( "/usr/bin/crontab (mode: $mode | default: 4755 or 6755)" );
++            print_warning( "/usr/bin/crontab (mode: $mode | default: 4755 or 6755 or 4555)" );
+         }
+     }
+ 
+     if ( -e '/usr/bin/passwd' ) {
+         my $mode = ( stat( '/usr/bin/passwd' ))[2] & 07777;
+         $mode = sprintf "%lo", $mode;
+-        if ( $mode != '4755' and $mode != '4511' ) {
++        if ( $mode != '4755' and $mode != '4511' and $mode != '4555' ) {
+             print_warn( 'Non-default Permissions: ' );
+-            print_warning( "/usr/bin/passwd (mode: $mode | default: 4755 or 6755)" );
++            print_warning( "/usr/bin/passwd (mode: $mode | default: 4755 or 6755 or 4555)" );
+         }
+     }
+ 
+     if ( -e '/sbin/ifconfig' ) {
+         my $mode = ( stat( '/sbin/ifconfig' ))[2] & 07777;
+         $mode = sprintf "%lo", $mode;
+-
+-        if ( $os eq 'freebsd' ) {
+-            if ( $mode ne '555' ) {
++        if ( $mode != '755' and $mode != '555' ) {
+               print_warn( 'Non-default Permissions: ' );
+-              print_warning( "/sbin/ifconfig (mode: $mode | default: 555)" );
+-            }
++              print_warning( "/sbin/ifconfig (mode: $mode | default: 755 or 555)" );
+         }
+-        else {
+-            if ( $mode ne '755' ) {
+-                print_warn( 'Non-default Permissions: ' );
+-                print_warning( "/sbin/ifconfig (mode: $mode | default: 755)" );
+-            }
++    }
++
++    if ( -e '/bin/ln' ) {
++        my $mode = ( stat( '/bin/ln' ))[2] & 07777;
++        $mode = sprintf "%lo", $mode;
++        if ( $mode != '755' and $mode != '555' ) {
++              print_warn( 'Non-default Permissions: ' );
++              print_warning( "/bin/ln (mode: $mode | default: 755 or 555)" );
+         }
+     }
+ }
+@@ -2039,6 +2079,21 @@
+ }
+ 
+ sub check_for_system_mem_below_512M {
++    if ( $os eq 'freebsd' ) {
++        my $memtotal = Cpanel::SafeRun::Errors::saferunnoerror( 'sysctl', 'hw.realmem' );
++
++        if ( $memtotal =~ m{ \A hw\.realmem: \s (\d+) }xms ) {
++            $memtotal = $1;
++        }
++
++        if ( $memtotal < 536870912 ) {
++            print_warn( 'Memory: ' );
++            print_warning( 'Server has less than 512M physical memory!' );
++        }
++
++        return;
++    }
++
+     my $meminfo = '/proc/meminfo';
+     my $memtotal;
+ 
+@@ -2103,6 +2158,8 @@
+ }
+ 
+ sub check_for_empty_yumconf {
++    return if ( $os eq 'freebsd' );
++
+     my $yumconf = '/etc/yum.conf';
+ 
+     if ( ! -e $yumconf ) {
+@@ -2189,9 +2246,14 @@
+ }
+ 
+ sub check_roots_cron_for_certain_commands {
+-    return if ( $os eq 'freebsd' );
++    my $cron;
+ 
+-    my $cron = '/var/spool/cron/root';
++    if ( $os eq 'linux' ) {
++        $cron = '/var/spool/cron/root';
++    }
++    elsif ( $os eq 'freebsd' ) {
++        $cron = '/var/cron/tabs/root';
++    }
+ 
+     return if ! -e $cron;
+ 
+@@ -2340,9 +2402,17 @@
+     my $crond_is_running = 0;
+ 
+     for my $process ( @process_list ) {
+-        if ( $process =~ m{ \A root (?:.*) crond }xms ) {
+-            $crond_is_running = 1;
+-            last;
++        if ( $os eq 'linux' ) {
++            if ( $process =~ m{ \A root (?:.*) crond }xms ) {
++                $crond_is_running = 1;
++                last;
++            }
++        }
++        elsif ( $os eq 'freebsd' ) {
++            if ( $process =~ m{ \A root (?:.*) cron }xms ) {
++                $crond_is_running = 1;
++                last;
++            }
+         }
+     }
+ 
+@@ -2380,6 +2450,26 @@
+     }
+ }
+ 
++sub check_for_httpupdate_in_etc_hosts {
++    my $hosts = '/etc/hosts';
++    my $httpupdate = 0;
++
++    if ( open my $hosts_fh, '<', $hosts ) {
++        while ( <$hosts_fh> ) {
++            if ( m{ httpupdate\.cpanel\.net }xmsi ) {
++                $httpupdate = 1;
++                last;
++            }
++        }
++        close $hosts_fh;
++    }
++
++    if ( $httpupdate == 1 ) {
++        print_warn( '/etc/hosts: ' );
++        print_warning( 'contains an entry for httpupdate.cpanel.net' );
++    }
++}
++
+ ##############################
+ #  END [WARN] CHECKS
+ ##############################

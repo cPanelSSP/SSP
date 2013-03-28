@@ -1,0 +1,13 @@
+[NEW] If RoundCube is configured to use MySQL, check that the
+password in /var/cpanel/roundcubepass matches the password in
+/usr/local/cpanel/base/3rdparty/roundcube/config/db.inc.php .
+Print a warning if they do not match.
+
+This could indicate that the current roundcube mysql pass
+differs from the one in db.inc.php, causing "DATABASE ERROR:
+CONNECTION FAILED!".
+
+
+[UPDATED] The portreserve check has been removed. The initial
+reason for which it was added has been resolved for a while by
+the vendor.

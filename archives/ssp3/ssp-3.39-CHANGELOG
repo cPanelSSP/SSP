@@ -1,0 +1,36 @@
+[UPDATED] DNS cluster member output is now colorized
+
+--
+
+[UPDATED] If the server has less than 512M of memory, print the physical memory in MB
+
+    [WARN] * Memory: Server has less than 512M physical memory! [256 MB]
+
+--
+
+[NEW] Don't print a warning if /usr/local/apache/conf/includes/pre_virtualhost_global.conf is the default provided by cPanel
+when fcgi is installed. This check is currently done by checking the md5 checksum of the file. I believe it will be
+'1693b9075fa54ede224bfeb8ad42a182' by default (set by /var/cpanel/perl/easy/Cpanel/Easy/Apache/Fastcgi.pm).
+
+--
+
+[UPDATED] If RLimitMEM or RLimitCPU values are found, print them. For RLimitMEM, print actual value, and value in MB in brackets.
+For example:
+
+    [WARN] * Apache RLimits: RLimitMEM 178956970 [171 MB] RLimitCPU 240
+
+--
+
+[NEW] Print the location of any hooks found in /var/cpanel/hooks.yaml. If just 1 hook is found, it will be printed on 1 line:
+
+    [WARN] * Hooks in /var/cpanel/hooks.yaml: /path/to/some/installed/hook 
+
+If multiple hooks are found, they are printed on separate lines for easier readability:
+
+    [WARN] * Hooks in /var/cpanel/hooks.yaml:
+	     \_ /path/to/some/installed/hook1 
+	     \_ /path/to/some/installed/hook2 
+	     \_ /path/to/some/installed/hook3 
+
+
+The default Attracta hook '/usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore' is ignored.

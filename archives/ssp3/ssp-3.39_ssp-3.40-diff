@@ -1,0 +1,38 @@
+--- ssp-3.39	2012-11-05 22:22:01.000000000 +0400
++++ ssp-3.40	2012-11-06 01:39:34.000000000 +0400
+@@ -17,7 +17,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.39';
++my $version = '3.40';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -2826,25 +2826,7 @@
+         }
+     }
+     ## TEST 2: cPanel >= 11.29, updates set to daily, not updated in >= 24 hours
+-    elsif ( $cpanel_version >= 1129 ) {
+-        if ( $updates eq 'daily' ) {
+-            if ( $TIERS !~ /$cpanel_version_orig/ ) {
+-                my $ctime = ( stat( '/usr/local/cpanel/version' ))[10];
+-                my $last_update = time() - $ctime;
+-                $last_update = $last_update / 86400;
+-                $last_update = sprintf '%.1f', $last_update;
+-
+-                if ( $last_update > 1 ) {
+-                    print "\n!! cPanel may not be updating on this server !!\n";
+-                    print_warn( 'L1/L2: ' );
+-                    print_warning( 'escalate the ticket to L3 now' );
+-                    print_warn( 'L3: ' );
+-                    print_warning( 'check cP updatelogs, see why cPanel isn\'t updated, try to update if needed. Escalate to L4 if it can\'t update' );
+-                    print "\n\n";
+-                }
+-            }
+-        }
+-    }
++    ## Check removed for now due to false positives
+ }
+ 
+ sub check_for_hooks_from_var_cpanel_hooks_yaml {

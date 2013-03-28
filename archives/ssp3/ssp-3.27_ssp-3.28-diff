@@ -1,0 +1,89 @@
+--- ssp-3.27	2012-09-25 16:50:26.000000000 +0400
++++ ssp-3.28	2012-09-25 23:40:14.000000000 +0400
+@@ -20,7 +20,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.27';
++my $version = '3.28';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -173,6 +173,7 @@
+ check_mysql_rpm_mismatch();
+ check_php_libmysqlclient_mismatch();
+ 
++# All checks for DNSONLY go here
+ sub check_for_dnsonly {
+     if ( -e '/var/cpanel/dnsonly' ) {
+ 
+@@ -189,6 +190,7 @@
+         check_for_cpanel_update();
+         print_perl_version();
+         print_uptime();
++        check_for_clustering();
+         check_sysinfo();
+ 
+         ## [WARN]
+@@ -233,6 +235,7 @@
+         check_for_les();
+         check_for_1h();
+         check_for_webmin();
++        check_for_symantec();
+         
+         exit;
+     }
+@@ -564,6 +567,53 @@
+         print_info( 'DNS Clustering: ' );
+         print_normal( 'is enabled' );
+     }
++    else {
++        return;
++    }
++
++    my $cluster_dir = '/var/cpanel/cluster/root/config';
++    my @dir_contents;
++    my ( $cluster_member_ipaddr, $cluster_member_hostname, $cluster_member_role );
++
++    if ( -d $cluster_dir ) {
++        opendir( my $dir_fh, $cluster_dir );
++        @dir_contents = grep { ! /^\.(\.?)$/ } readdir $dir_fh;
++        closedir $dir_fh;
++    }
++
++    chdir $cluster_dir or return;
++
++    for my $dirent ( @dir_contents ) {
++        # only active cluster members have -dnsrole files
++        if ( $dirent =~ m{ \A (\d+\.\d+\.\d+\.\d+)-dnsrole \z }xms ) {
++            $cluster_member_ipaddr = $1;
++
++            if ( open my $file_fh, '<', "${cluster_member_ipaddr}.cache" ) {
++                my $cache_ref;
++                eval 'local $SIG{__DIE__}; local $SIG{__WARN__}; $cache_ref = Storable::pretrieve($file_fh);'; # from upcp.static
++                close $file_fh;
++                if ( $cache_ref ) {
++                    $cluster_member_hostname = $cache_ref->{'host'};
++                }
++                close $file_fh;
++            }
++            else {
++                $cluster_member_hostname = '?';
++            }
++
++            if ( open my $file_fh, '<', "${cluster_member_ipaddr}-dnsrole" ) {
++                while ( <$file_fh> ) {
++                    $cluster_member_role = $_;
++                }
++                close $file_fh;
++            }
++            else {
++                $cluster_member_role = '?';
++            }
++
++            print "\t \\_ $cluster_member_hostname  ($cluster_member_ipaddr)  [$cluster_member_role]\n";
++        }
++    }
+ }
+ 
+ sub print_apache_version {

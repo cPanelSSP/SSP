@@ -1,0 +1,70 @@
+SSP 2.0 is here.
+
+If you run into any ohnoes and need to use the previous version, get "ssp.previous" (instead of "ssp").
+That will use ssp-1.3, which has been the default ssp since March 14th.
+
+SSP 2.0 is almost a complete rewrite, but it should work and feel very much like the original. It includes
+the checks that were previously missing (which was the result of updating the wrong file when I took over
+SSP), and a few new items.
+
+Note that the color scheme has changed. The best solution I could think of for making it look good on as
+many terminals as possible is to always use a black background when printing output. If this doesn't look
+good for you, send me a sceenshot please.
+
+This is a full list of what it does, in order:
+
+* prints the hostname, warns if not a FQDN
+* prints the OS ([NEW] and envtype)
+* warn if SELinux is enforcing (permissive mode is ignored)
+* warn if the runlevel isn't 3
+* print cPanel birthday
+* print cPanel version
+* check for cPanel update (now uses http://httpupdate.cpanel.net/cpanelsync/TIERS)
+* print warning if upcp is currently running
+* print kernel and CPU info
+* [NEW] print warning if AVX / Sandy Bridge detected
+* print perl version
+* print uptime
+* warn if /var/cpanel/mainip doesn't match external IP address
+* impossible-to-miss warning if in an LVE
+* print Apache version
+* print Apache uptime
+* warn if rawopts items exist
+* [NEW] warn if rawenv items exist
+* print php configuration (default php, version, handler)
+* rebuild /var/cpanel/sysinfo.config if not congruent with environment
+* warn if /usr/bin/perl and /usr/local/bin/perl are both sylinks, or both binaries, or if either doesn't exist
+* warn if root is suspended
+* [NEW] warn if custom limits exist in /etc/security/limits.conf
+* [NEW] warn if disk usage on any partition is 100%
+* [NEW] warn if inode usage on any partition is 100%
+* warn if hooks exist, including CustomEventHandler.pm
+* warn if ASSP is running
+* [UPDATED] warn about Apache related logs exceeding 2.1GB
+* check for "bad" rpms (php, http, gnome, etc)
+* warn if cpanelsync touchfile exists
+* warn if pkgacct override directory exists
+* warn if varnish is running
+* warn if litespeed is running
+* warn if nginx is running
+* warn if mailscanner is running
+* warn if apf is installed
+* warn if csf/lfd is running
+* warn if prm is installed
+* warn if les is installed
+* warn if 1h is installed
+* warn if webmin is installed
+
+
+Various internal improvements:
+
+* the 'strict' and 'warnings' pragmas now exist
+* less code in subroutines
+* the text printing mechanism is greatly simplified (e.g., print_red( 'Hostname:' ), print_warning( '273 versions of perl installed!'))
+* most subroutines no longer call other subroutines
+* 'ps' is only ever run once now, and the output stored in a global array
+* alarm()s when using LWP::Simple's get()
+* added more Apache logs to be checked for 2.1 size: access_log error_log suphp_log suexec_log mod_jk.log modsec_audit.log modsec_debug.log
+
+Found a bug? Something changed for the worse? Have a suggestion? Email me, find me on chat, send a singing telegram.. you get the picture.
+

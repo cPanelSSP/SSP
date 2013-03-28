@@ -1,0 +1,47 @@
+--- ssp-3.48	2012-12-11 13:22:17.000000000 -0600
++++ ssp-3.49	2012-12-19 08:40:03.000000000 -0600
+@@ -17,7 +17,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.48';
++my $version = '3.49';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -160,6 +160,7 @@
+ check_for_fork_bomb_protection();
+ #check_for_cpphpopts();
+ check_for_cPanel_lower_than_11_30_7_3();
++check_for_custom_exim_conf_local();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -3034,6 +3035,27 @@
+     }
+ }
+ 
++sub check_for_custom_exim_conf_local {
++    my $exim_conf_local = '/etc/exim.conf.local';
++    my $is_customized = 0;
++
++    if ( open my $file_fh, '<', $exim_conf_local ) {
++        while ( my $line = <$file_fh> ) {
++            chomp $line;
++            if ( $line !~ m{ \A ( @ | $ ) }xms ) {
++                $is_customized = 1;
++                last;
++            }
++        }
++        close $file_fh;
++    }
++
++    if ( $is_customized == 1 ) {
++        print_warn( 'Exim: ' );
++        print_warning( "$exim_conf_local contains customizations" );
++    }
++}
++
+ ##############################
+ #  END [WARN] CHECKS
+ ##############################

@@ -1,0 +1,127 @@
+--- ssp-3.7	2012-07-27 03:06:21.000000000 +0400
++++ ssp-3.8	2012-08-13 23:09:16.000000000 +0400
+@@ -20,7 +20,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.7';
++my $version = '3.8';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ my $os                  = Cpanel::OSSys::getos();
+@@ -30,6 +30,7 @@
+ my $apachectl           = '/usr/local/apache/bin/apachectl';
+ my @custom_opt_mods;
+ my @usr_local_cpanel_hooks;
++my @easyapache_templates;
+ 
+ my %cpuinfo;
+ if ( $os eq 'freebsd' ) {
+@@ -103,6 +104,10 @@
+ check_for_usr_local_cpanel_hooks();
+ check_for_sql_safe_mode();
+ check_mysql_non_default_datadir();
++check_for_domain_forwarding();
++check_for_empty_apache_templates();
++check_for_empty_postgres_config();
++check_for_empty_easyapache_profiles();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -818,6 +823,11 @@
+ sub check_for_sandy_bridge {
+     return if ! -e '/proc/cpuinfo';
+ 
++    my $release_version = Cpanel::Sys::OS::getreleaseversion();
++    $release_version =~ s/\.//g;
++
++    return if $release_version > 62;
++
+     my $sandy_bridge = 0; 
+ 
+     if ( open my $cpuinfo_fh, '<', '/proc/cpuinfo' ) {
+@@ -1176,7 +1186,7 @@
+             $mode = sprintf "%lo", $mode;
+             if ( $mode != $resources_and_perms{$resource} ) {
+                 next if ( $resource =~ '^(/(s?)bin|/usr/bin|/)$' and $mode == '555' ); # CentOS 6.2
+-                next if ( $resource =~ '^/(var|sbin|usr/local/sbin)$' and $mode == '711' );
++                next if ( $resource =~ '^/(var|sbin|usr/local/sbin|usr)?$' and $mode == '711' );
+                 print_warn( 'Non-default Permissions: ' );
+                 print_warning( "$resource (mode: $mode | default: $resources_and_perms{$resource})" );
+             }
+@@ -1599,6 +1609,75 @@
+     }
+ }
+ 
++sub check_for_domain_forwarding {
++    my $domainfwdip = '/var/cpanel/domainfwdip';
++
++    if ( -f $domainfwdip and ! -z $domainfwdip ) {
++        print_warn( 'Domain Forwarding: ' );
++        print_warning( "cat $domainfwdip to see what is being forwarded!" );
++    }
++}
++
++sub check_for_empty_apache_templates {
++    my $apache2_template_dir = '/var/cpanel/templates/apache2';
++    my @dir_contents;
++    my $empty_templates;
++
++    if ( -d $apache2_template_dir ) {
++        opendir( my $dir_fh, $apache2_template_dir );
++        @dir_contents = grep { ! /^\.(\.?)$/ } readdir $dir_fh;
++        closedir $dir_fh;
++    }    
++
++    if ( ! @dir_contents ) {
++        print_warn( 'Apache templates: ' );
++        print_warning( "none found in $apache2_template_dir !" );
++    }
++    else {
++        for my $template ( @dir_contents ) {
++            if ( -z "$apache2_template_dir/$template" ) {
++                $empty_templates .= "$template ";
++            }
++        }
++    }
++
++    if ( $empty_templates ) {
++        print_warn( "Empty Apache templates in $apache2_template_dir: ");
++        print_warning( "$empty_templates" );
++    }
++}
++
++sub check_for_empty_postgres_config {
++    my $postgres_config = '/var/lib/pgsql/data/pg_hba.conf';
++    if ( -f $postgres_config and -z $postgres_config ) {
++        print_warn( 'Postgres config: ' );
++        print_warning( "$postgres_config is empty" );
++    }
++}
++
++sub check_for_empty_easyapache_profiles {
++    my $templates;
++    my $dir = '/var/cpanel/easy/apache/profile';
++    find( \&find_easyapache_templates, $dir );
++
++    if ( @easyapache_templates ) {
++        for my $template ( @easyapache_templates ) {
++            $templates .= "$template ";
++        }
++
++        print_warn( "Empty template(s) in $dir: " );
++        print_warning( $templates );
++    }    
++}
++
++sub find_easyapache_templates {
++    my $file = $File::Find::name;
++    if ( -f $file and -z $file ) {
++        $file =~ s#/var/cpanel/easy/apache/profile/##g;
++        push @easyapache_templates, $file;
++    }    
++}
++
+ ##############################
+ #  END [WARN] CHECKS
+ ##############################

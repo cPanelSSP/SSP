@@ -1,0 +1,30 @@
+--- ssp-3.47	2012-12-10 08:04:33.000000000 -0600
++++ ssp-3.48	2012-12-11 13:22:17.000000000 -0600
+@@ -17,7 +17,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.47';
++my $version = '3.48';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -2606,7 +2606,7 @@
+         ## On 11.32.5.9 with EA v3.14.13, default modsec2.conf is 650 bytes.
+         ## It's always been small in size.
+         my $modsec2_conf_size = ( stat( $modsec2_conf ))[7];
+-        my $modsec2_conf_max_size = 800;
++        my $modsec2_conf_max_size = 1200;
+         if ( $modsec2_conf_size > $modsec2_conf_max_size ) {
+             print_warn( 'modsec: ' );
+             print_warning( "$modsec2_conf is > $modsec2_conf_max_size bytes, may contain custom rules" );
+@@ -2883,7 +2883,8 @@
+     if ( open my $file_fh, '<', $hooks_yaml ) {
+         while ( <$file_fh> ) {
+             if ( /hook: (.*)/ ) {
+-                next if $1 eq '/usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore'; # ignore default Attracta hook
++                # Ignore default Attracta hooks
++                next if ( $1 =~ m{ \A ( /usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore | /usr/local/cpanel/Cpanel/ThirdParty/Attracta/Hooks/pkgacct-restore ) \z }xms );
+                 push @hooks, "$1 ";
+             }
+         }

@@ -1,0 +1,152 @@
+--- ssp-2.4	2012-05-27 08:29:23.000000000 +0400
++++ ssp-2.5	2012-06-13 19:34:09.000000000 +0400
+@@ -11,7 +11,7 @@
+ use Sys::Hostname;
+ use File::Find;
+ 
+-my $version = '2.4';
++my $version = '2.5';
+ 
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+@@ -34,6 +34,7 @@
+ print_version();
+ print_hostname();
+ print_os();
++print_kernel_and_cpu();
+ check_selinux_status();
+ check_runlevel();
+ print_cpanel_birthday();
+@@ -42,12 +43,12 @@
+ check_for_missing_root_cron();
+ check_for_upcp();
+ check_valid_upcp();
+-print_kernel_and_cpu();
+ check_for_sandy_bridge();
+ print_perl_version();
+ print_uptime();
+ check_network_mismatch();
+ check_interface_lo();
++check_cpanelconfig_filetype();
+ check_for_cpanelsync_exclude();
+ check_for_lve_environment();
+ check_for_clustering();
+@@ -59,6 +60,7 @@
+ check_for_local_apache_templates();
+ check_for_local_makecpphp_template();
+ check_for_custom_apache_includes();
++check_for_tomcatoptions();
+ check_for_sneaky_htaccess();
+ print_php_configuration();
+ check_sysinfo();
+@@ -299,7 +301,7 @@
+     ## get local tier name 
+     if ( open my $cpupdateconf_fh, '<', '/etc/cpupdate.conf' ) {
+         while ( <$cpupdateconf_fh> ) {
+-            if ( m{ \A CPANEL=(\w+) }xms ) {
++            if ( m{ \A CPANEL=([\w\d\.]+) }xms ) {
+                 chomp( $local_tier_name =  lc( $1 ) );
+             }
+         }
+@@ -357,6 +359,9 @@
+ }
+ 
+ sub check_for_missing_root_cron {
++    return if ( $os eq 'freebsd' );
++    return if ( $< != 0 );
++    
+     if ( ! -f '/var/spool/cron/root' ) {
+         print_start( 'Missing cron: ' );
+         print_warning( 'root\'s cron file is missing!' );
+@@ -530,6 +535,15 @@
+     print_normal( $uptime );
+ }
+ 
++sub check_cpanelconfig_filetype {
++    chomp( my $file = Cpanel::SafeRun::Errors::saferunnoerror( 'file', '/var/cpanel/cpanel.config' ) );
++    if ( $file !~ m{ \A /var/cpanel/cpanel.config: \s ASCII \s text \z }xms ) {
++        print_start( '/var/cpanel/cpanel.config: ' );
++        print_warning( "filetype is something other than 'ASCII text'! ($file)" );
++    }
++}
++
++
+ sub check_for_cpanelsync_exclude {
+     my $cpanelsync_exclude = '/etc/cpanelsync.exclude';
+     if ( -f $cpanelsync_exclude and ! -z $cpanelsync_exclude ) {
+@@ -807,6 +821,14 @@
+     }
+ }
+ 
++sub check_for_tomcatoptions {
++    my $tomcat_options = '/var/cpanel/tomcat.options';
++    if ( -f $tomcat_options and ! -z $tomcat_options ) {
++        print_start( 'Tomcat options: ' );
++        print_warning( "$tomcat_options exists" );
++    }
++}
++
+ sub check_for_sneaky_htaccess {
+     ## this is lazy checking. ideally we'd check HOMEMATCH from wwwacct.conf and go from there
+     my @dirs = qw( / /home/ /home2/ /home3/ /home4/ /home5/ /home6/ /home7/ /home8/ /home9/ );
+@@ -978,8 +1000,12 @@
+     }
+ 
+     if ( -l $usr_bin_perl and -l $usr_local_bin_perl ) {
+-        print_start( 'perl: ' );
+-        print_warning( "$usr_bin_perl and $usr_local_bin_perl are both symlinks!" );
++        my $usr_bin_perl_link = readlink $usr_bin_perl;
++        my $usr_local_bin_perl_link = readlink $usr_local_bin_perl;
++        if ( -l $usr_bin_perl_link and -l $usr_local_bin_perl_link ) {
++            print_start( 'perl: ' );
++            print_warning( "$usr_bin_perl and $usr_local_bin_perl are both symlinks!" );
++        }
+     }
+ 
+     ## a symlink will test true for both -x AND -l
+@@ -1033,6 +1059,7 @@
+             my $mode = ( stat ( $resource ) )[2] & 07777;
+             $mode = sprintf "%lo", $mode;
+             if ( $mode != $resources_and_perms{$resource} ) {
++                next if ( $resource =~ '^(/(s?)bin|/usr/bin)$' and $mode == '555' ); # CentOS 6.2
+                 print_start( 'Non-default Permissions: ' );
+                 print_warning( "$resource (mode: $mode | default: $resources_and_perms{$resource})" );
+             }
+@@ -1105,6 +1132,7 @@
+ 
+     my $group_root_files;
+     for my $file ( @files ) {
++        next if ( $file !~ /^[a-z0-9]+$/ );
+         my $gid = ( stat ( '/var/cpanel/users/' . $file ) )[5];
+         if ( $gid == 0 ) {
+             $group_root_files .= " $file";
+@@ -1145,11 +1173,11 @@
+ sub check_disk_space {
+     my @df = Cpanel::SafeRun::Errors::saferunnoerror( 'df' );
+     for my $line ( @df ) {
+-        if ( $line =~ m{ 100% \s+ (.*) }xms ) {
+-            my $partition = $1;
++        if ( $line =~ m{ (9[8-9]|100)% \s+ (.*) }xms ) {
++            my ( $usage, $partition ) = ( $1, $2 );
+             unless ( $line =~ m{ /virtfs | /(dev|proc) \z }xms ) {
+                 print_start( 'Disk space: ' );
+-                print_warning( "100% usage on $partition" );
++                print_warning( "${usage}% usage on $partition" );
+             }
+         }
+     }
+@@ -1158,11 +1186,11 @@
+ sub check_disk_inodes {
+     my @df_i = Cpanel::SafeRun::Errors::saferunnoerror( 'df', '-i' );
+     for my $line ( @df_i ) {
+-        if ( $line =~ m{ 100% \s+ (.*) }xms ) {
+-            my $partition = $1;
++        if ( $line =~ m{ (9[8-9]|100)% \s+ (.*) }xms ) {
++            my ( $usage, $partition ) = ( $1, $2 );
+             unless ( $line =~ m{ /virtfs | /(dev|proc) \z }xms ) {
+                 print_start( 'Disk inodes: ' );
+-                print_warning( "100% inode usage on $partition" );
++                print_warning( "${usage}% inode usage on $partition" );
+             }
+         }
+     }

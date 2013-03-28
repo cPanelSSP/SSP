@@ -1,0 +1,43 @@
+[NEW] Print a warning if WHM >> Tweak Settings >> "Enable optimizations for the C compiler"
+is enabled, stating that when this option is enabled, and when a server's CPU is a Sandy
+Bridge, problems may occur:
+
+    [WARN] * Tweak Setting: "Enable optimizations for the C compiler" enabled. If Sandy Bridge CPU, problems MAY occur (see ticket 3355885)
+
+
+NOTE: Ideally this will only print the warning if the server is using a Sandy Bridge CPU. Until a better built in
+list of those CPU models can be created, you may need to reference http://ark.intel.com/products/codename/29900/Sandy-Bridge
+to see if the server is using a Sandy Bridge CPU (check /proc/cpuinfo on Linux).
+
+
+[NEW] In an effort to reduce the amount of extraneous output, the perl version is no longer printed
+by default. If perl is less than 5.8.8, a warning is printed which shows the current perl version.
+
+
+[NEW] In an effort to reduce the amount of space printed by SSP, the 3 Apache lines for version, built,
+and uptime are now printed on 1 line:
+
+    [INFO] * Apache: [ Apache/2.2.23 (Unix) ] [ Oct 26 2012 16:08:45 w/ v3.14.14 rev9999 ] [ Up 1:43:32 w/  1 generation(s) ]
+
+
+[NEW] In an effort to reduce the amount of space printed by SSP, the cPanel birthday is now printed on
+the cPanel version line:
+
+    [INFO] * cPanel Info: 11.34.0.8 (EDGE tier) Last update: 0.1 days ago [ Installed Thu Oct 28 09:38:33 2010 ]
+
+
+[NEW] If MySQL's error log is configured in /etc/my.cnf, print its location:
+
+    [WARN] * MySQL: error log configured in /etc/my.cnf as /var/log/mysqld.log
+
+
+[UPDATED] 4 more commands have been added to be checked for in root's cron:
+kill, pkill, skill, and unlink (the others we're already checking for are
+rm, chmod, chown, and chattr).
+
+
+[UPDATED] Improved regexps for detecting certain commands found in root's cron.
+
+
+[UPDATED] Improved regexp for detecting 'localhost' entries in /etc/hosts for
+non 127.0.0.1 IP addrs.

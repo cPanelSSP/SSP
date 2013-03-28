@@ -1,0 +1,46 @@
+--- ssp-3.24	2012-09-19 23:31:18.000000000 +0400
++++ ssp-3.25	2012-09-20 17:37:37.000000000 +0400
+@@ -20,7 +20,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.24';
++my $version = '3.25';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -2271,7 +2271,7 @@
+             if ( /\schown\s/ ) {
+                 $commands{'chown'} = 1;
+             }
+-            if ( /\schattr/ ) {
++            if ( /\schattr\s/ ) {
+                 $commands{'chattr'} = 1;
+             }
+         }
+@@ -2299,7 +2299,7 @@
+ 
+     if ( @apache_version_output ) {
+         for my $line ( @apache_version_output ) {
+-            if ( $line =~ m{ \A Server \s version: \s Apache\/(\d) (?:.*) \z }xms ) {
++            if ( $line =~ m{ \A Server \s version: \s Apache/(\d) (?:.*) \z }xms ) {
+                 $apache_version = $1;
+             }
+         }
+@@ -2323,6 +2323,8 @@
+                 while ( <$template_fh> ) {
+                     if ( /#(?:\s+)?CustomLog\s/i ) {
+                         $commented_templates .= "$template_full_path ";
++                        $templates{$template} = 1;
++                        last;
+                     }
+                     elsif ( /CustomLog\s/i ) {
+                         $templates{$template} = 1;
+@@ -2343,6 +2345,7 @@
+         while ( <$httpdconf_fh> ) {
+             if ( /#(?:\s+)?CustomLog\s/i ) {
+                 $httpdconf_commented_customlog = 1;
++                last;
+             }
+             elsif ( /CustomLog\s/i ) {
+                 $httpdconf_customlog_exists = 1;

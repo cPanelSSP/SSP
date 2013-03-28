@@ -1,0 +1,20 @@
+--- ssp-4.13	2013-02-20 08:44:07.000000000 -0600
++++ ssp-4.14	2013-02-21 07:47:56.000000000 -0600
+@@ -19,7 +19,7 @@
+ 
+ $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
+ 
+-my $version = '4.13';
++my $version = '4.14';
+ 
+ $| = 1;
+ $Term::ANSIColor::AUTORESET = 1;
+@@ -4129,7 +4129,7 @@
+     my @port_80_processes;
+ 
+     if ( $os eq 'linux' ) { 
+-        my @lsof_80 = run( 'lsof', '-n', '-i', 'tcp:80' );
++        my @lsof_80 = split /\n/, run( 'lsof', '-n', '-i', 'tcp:80' );
+         for my $line ( @lsof_80 ) {
+             if ( $line =~ m{ (\S+) \s+ (?:.*) \s TCP (?:.*):http \s \(LISTEN\) }xms ) { 
+                 push( @port_80_processes, $1 );

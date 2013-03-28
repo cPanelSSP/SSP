@@ -1,0 +1,9 @@
+* Reintroduced sysinfo.conf checking
+
+* Reintroduced varnish checking
+
+[bugfix] The FQDN detection now accounts for dashes in the hostname.
+
+[new] The cPanel version is now printed below the OS line.
+
+[new] Improved the ASSP / port 25 process detection.

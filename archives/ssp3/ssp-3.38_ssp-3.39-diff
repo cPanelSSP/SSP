@@ -1,0 +1,170 @@
+--- ssp-3.38	2012-11-02 23:14:01.000000000 +0400
++++ ssp-3.39	2012-11-05 22:22:01.000000000 +0400
+@@ -17,7 +17,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.38';
++my $version = '3.39';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -155,6 +155,7 @@
+ check_for_extra_uid0_pwcache_file();
+ check_for_11_30_scripts_not_a_symlink();
+ check_for_cpanel_not_updating();
++check_for_hooks_from_var_cpanel_hooks_yaml();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -381,6 +382,11 @@
+     print BOLD GREEN ON_BLACK "$text\n";
+ }
+ 
++sub print_magenta {
++    my $text = shift;
++    print BOLD MAGENTA ON_BLACK "$text\n";
++}
++
+ ##############################
+ #  BEGIN [INFO] CHECKS
+ ##############################
+@@ -632,7 +638,7 @@
+ 
+         for my $member ( @cluster_members ) {
+             $member =~ s/_SSP_/ /g;
+-            print "\t \\_ $member\n";
++            print_magenta( "\t \\_ $member" );
+         }
+     }
+ }
+@@ -1322,7 +1328,11 @@
+     my $custom_includes;
+     for my $include ( @includes ) {
+         if ( ! -z "${include_dir}/${include}" ) {
+-            $custom_includes .= " $include";
++            if ( $include eq 'pre_virtualhost_global.conf' ) {
++                my $md5 = Cpanel::SafeRun::Errors::saferunnoerror( 'md5sum', '/usr/local/apache/conf/includes/pre_virtualhost_global.conf' );
++                next if ( $md5 =~ m{ \A 1693b9075fa54ede224bfeb8ad42a182 \s }xms );
++                $custom_includes .= " $include";
++            }
+         }
+     }
+ 
+@@ -2175,12 +2185,12 @@
+         my $memtotal = Cpanel::SafeRun::Errors::saferunnoerror( 'sysctl', 'hw.realmem' );
+ 
+         if ( $memtotal =~ m{ \A hw\.realmem: \s (\d+) }xms ) {
+-            $memtotal = $1;
++            $memtotal = $1 / 1024 / 1024;
+         }
+ 
+-        if ( $memtotal < 536870912 ) {
++        if ( $memtotal < 512 ) {
+             print_warn( 'Memory: ' );
+-            print_warning( 'Server has less than 512M physical memory!' );
++            print_warning( "Server has less than 512M physical memory! [$memtotal MB]" );
+         }
+ 
+         return;
+@@ -2192,15 +2202,15 @@
+     if ( open my $meminfo_fh, '<', $meminfo ) {
+         while ( <$meminfo_fh> ) {
+             if ( m{ \A MemTotal: \s+ (\d+) \s+ kB \s+ \z }xms ) {
+-                $memtotal = $1;
++                $memtotal = $1 / 1024;
+             }
+         }
+         close $meminfo_fh;
+     }
+ 
+-    if ( $memtotal < 524288 ) {
++    if ( $memtotal < 512 ) {
+         print_warn( 'Memory: ' );
+-        print_warning( 'Server has less than 512M physical memory!' );
++        print_warning( "Server has less than 512M physical memory! [$memtotal MB]" );
+     }
+ }
+ 
+@@ -2475,21 +2485,33 @@
+ 
+ sub check_for_apache_rlimits {
+     my $httpdconf = '/usr/local/apache/conf/httpd.conf';
+-    my $rlimits = 0;
++    my ( $rlimitmem, $rlimitcpu );
++    my $output;
+ 
+     if ( open my $httpdconf_fh, '<', $httpdconf ) {
+         while ( <$httpdconf_fh> ) {
+-            if ( /(RLimitMEM|RLimitCPU)/i ) {
+-                $rlimits = 1;
+-                last;
++            if ( /^RLimitMEM (\d+)/ ) {
++                $rlimitmem = $1;
++            }
++            if ( /^RLimitCPU (\d+)/ ) {
++                $rlimitcpu = $1;
+             }
+         }
+         close $httpdconf_fh;
+     }
+ 
+-    if ( $rlimits == 1 ) {
++    if ( $rlimitmem ) {
++        my $rlimitmem_converted = sprintf('%.0f MB', $rlimitmem / 1024 / 1024);
++        $output = "RLimitMEM $rlimitmem [$rlimitmem_converted]";
++    }
++
++    if ( $rlimitcpu ) {
++        $output .= " RLimitCPU $rlimitcpu";
++    }
++
++    if ( $output ) {
+         print_warn( 'Apache RLimits: ' );
+-        print_warning( 'found in httpd.conf (RLimitMEM and/or RLimitCPU)' );
++        print_warning( $output );
+     }
+ }
+ 
+@@ -2587,7 +2609,7 @@
+                 if ( $line =~ m{  127\.0\.0\.1 (.*) localhost }xms )  {
+                     $localhost = 1; 
+                 }
+-                if ( ( $line =~ m{ localhost }xmsi ) and ( $line !~ m{ 127\.0\.0\.1 | ::1 }xms ) ) {
++                if ( ( $line =~ m{ \s localhost }xmsi ) and ( $line !~ m{ 127\.0\.0\.1 | ::1 }xms ) ) {
+                     $localhost_not_127 = 1;
+                 }
+                 if ( $line =~ m{ httpupdate\.cpanel\.net }xmsi ) {
+@@ -2824,6 +2846,32 @@
+         }
+     }
+ }
++
++sub check_for_hooks_from_var_cpanel_hooks_yaml {
++    my $hooks_yaml = '/var/cpanel/hooks.yaml';
++    my @hooks;
++
++    if ( open my $file_fh, '<', $hooks_yaml ) {
++        while ( <$file_fh> ) {
++            if ( /hook: (.*)/ ) {
++                next if $1 eq '/usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore'; # ignore default Attracta hook
++                push @hooks, "$1 ";
++            }
++        }
++        close $file_fh;
++    }
++
++    if ( scalar @hooks == 1 ) {
++        print_warn( 'Hooks in /var/cpanel/hooks.yaml: ' );
++        print_warning( @hooks );
++    }
++    elsif ( scalar @hooks > 1 ) {
++        print_warn( "Hooks in /var/cpanel/hooks.yaml:\n" );
++        for my $hook ( @hooks ) {
++            print_magenta( "\t \\_ $hook" );
++        }
++    }
++}
+ 
+ ##############################
+ #  END [WARN] CHECKS

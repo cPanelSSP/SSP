@@ -1,0 +1,23 @@
+[NEW] If root's ulimit -m or ulimit -v are <= 256M, print a warning that this can
+cause EA to fail when run from the shell.
+
+
+    [WARN] * ulimit: -m [ 256MB ] -v [ 256MB ] Low ulimits can cause EA to fail when run via the shell
+
+
+Note: EA can also fail when ulimits are unlimited, but cPanel's max mem is 256M, and you try to compile the fileinfo php module.
+See case 61731 for more info.
+
+--
+
+[NEW] If /var/cpanel/easy/apache/state.yaml contains 'Cpanel::Easy::PHP5::cPPHPOpts: 1',
+that indicates that 'Save my profile (...) so that it is compatible with cpphp' was
+enabled in EA. That can case EA to fail if Postgres isn't installed, since that option
+attempts to add the pgsql module:
+
+    [WARN] * EA: "Save my profile (...) so that it is compatible with cpphp" enabled. EA can fail if Postgres isn't installed (see case 59092)
+
+--
+
+[UPDATED] If there are no cPanel users on the server, don't print warnings about
+/etc/userdatadomains being empty or missing.

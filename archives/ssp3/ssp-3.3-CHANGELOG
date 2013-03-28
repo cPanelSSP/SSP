@@ -1,0 +1,8 @@
+[NEW] Added checks for these EasyApache hooks:
+
+/scripts/before_apache_make
+/scripts/after_apache_make_install
+/scripts/before_httpd_restart_tests
+/scripts/after_httpd_restart_tests
+
+http://docs.cpanel.net/twiki/bin/view/EasyApache3/EasyApacheHooks

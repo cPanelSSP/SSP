@@ -1,0 +1,341 @@
+--- ssp-3.3	2012-07-13 08:00:56.000000000 +0400
++++ ssp-3.4	2012-07-18 04:06:54.000000000 +0400
+@@ -1,26 +1,33 @@
+ #!/usr/bin/perl
+ 
++# SSP - System Status Probe
++# Find and print useful troubleshooting info on cPanel servers
++
++# Most of the testing has been done on Linux running full cPanel.
++# DNSONLY and FBSD... not as much.
++
+ use strict;
+ use warnings;
+ use lib '/usr/local/cpanel';
+ use Cpanel::SafeRun::Errors ();
+ use Cpanel::Ips::Fetch      ();
+-use LWP::Simple;
++use Cpanel::Sys::OS         ();
++use Cpanel::OSSys           ();
+ use Term::ANSIColor qw(:constants);
+-use Cpanel::Sys::OS;
+-use Cpanel::OSSys;
++use LWP::Simple;
+ use Sys::Hostname;
+ use File::Find;
+ 
+-my $version = '3.3';
+-
++$| = 1;
++my $version = '3.4';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+-my $apachectl = '/usr/local/apache/bin/apachectl';
+-my $os = Cpanel::OSSys::getos();
+-my @process_list = get_process_list();
+-chomp( my %hostinfo = get_hostinfo() );
+-my @custom_opt_mods; # used by check_for_custom_opt_mods() and find_custom_opt_mods()
++my $os                  = Cpanel::OSSys::getos();
++my @local_ipaddrs_list  = Cpanel::Ips::Fetch::fetch_ips_array();
++chomp( my %hostinfo     = get_hostinfo() );
++my @process_list        = get_process_list();
++my $apachectl           = '/usr/local/apache/bin/apachectl';
++my @custom_opt_mods;
+ 
+ my %cpuinfo;
+ if ( $os eq 'freebsd' ) {
+@@ -57,7 +64,6 @@
+ check_if_upcp_is_running();
+ check_valid_upcp();
+ check_for_sandy_bridge();
+-check_network_mismatch();
+ check_interface_lo();
+ check_cpanelconfig_filetype();
+ check_for_cpanelsync_exclude();
+@@ -86,6 +92,10 @@
+ check_for_redhat_firewall();
+ check_for_apache_update_no_restart();
+ check_for_easyapache_hooks();
++check_for_home_noexec();
++check_for_nat();
++check_for_etc_hosts_no_loopback();
++check_for_portreserve_entries();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -127,7 +137,6 @@
+         check_for_sandy_bridge();
+         print_perl_version();
+         print_uptime();
+-        check_network_mismatch();
+         check_interface_lo();
+         check_for_lve_environment();
+         check_sysinfo();
+@@ -501,8 +510,6 @@
+     my $apache_status = get( 'http://localhost/whm-server-status' );
+     alarm 0;
+ 
+-    print_info( 'Apache Uptime: ' );
+-
+     if ( $apache_status ) {
+         my @apache_status = split /\n/, $apache_status;
+ 
+@@ -514,7 +521,10 @@
+                 $apache_generations = $1;
+             }
+         }
+-        print_normal( "$apache_uptime w/ $apache_generations generation(s)" );
++        if ( $apache_uptime and $apache_generations ) {
++            print_info( 'Apache uptime: ' );
++            print_normal( "$apache_uptime w/ $apache_generations generation(s)" );
++        }
+     }    
+     else {
+         print_warning( 'Apache is not up (failed: http://localhost/whm-server-status)' );
+@@ -662,7 +672,6 @@
+ }
+ 
+ sub check_for_remote_mysql {
+-    my @local_ipaddrs_list = Cpanel::Ips::Fetch::fetch_ips_array();
+     my $mysql_host;
+     my $mysql_is_local;
+ 
+@@ -672,21 +681,25 @@
+         while ( <$my_cnf_fh> ) {
+             chomp( my $line = $_ );
+             if ( $line =~ m{ \A host \s* = \s* (?:"?) ([^"]+) }xms ) {
+-                if ( $line =~ m{ ( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3} )  }xms ) {
+-                    $mysql_host = $1;
+-                }
++                $mysql_host = $1;
+             }
+         }
+         close $my_cnf;
+     }
+ 
+-    ## if mysql host exists, compare with local IP addrs
+     if ( $mysql_host ) {
+-        for my $ipaddr ( @local_ipaddrs_list ) {
+-            if ( $ipaddr eq $mysql_host ) {
+-                $mysql_is_local = 1;
++        if ( $mysql_host =~ m{ ( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3} )  }xms ) {
++            return if ( $mysql_host eq '127.0.0.1' );
++            for my $ipaddr ( @local_ipaddrs_list ) {
++                if ( $ipaddr eq $mysql_host ) {
++                    $mysql_is_local = 1;
++                    last;
++                }
+             }
+         }
++        elsif ( $mysql_host eq 'localhost' or $mysql_host eq hostname() ) {
++            $mysql_is_local = 1;
++        }
+         if ( !$mysql_is_local ) {
+             print_info( 'Remote MySQL Host: ' );
+             print_warning( $mysql_host );
+@@ -724,11 +737,11 @@
+         #         run-level 3  2012-01-25 10:38                   last=S
+         if ( $who_r =~ m{ \A \s+ run-level \s (\d) }xms ) {
+             $runlevel = $1;
+-        }
+ 
+-        if ( $runlevel && $runlevel != '3' ) {
+-            print_warn( 'Runlevel: ' );
+-            print_warning(  "runlevel is not 3 (current runlevel: $runlevel)" );
++            if ( $runlevel != '3' ) {
++                print_warn( 'Runlevel: ' );
++                print_warning(  "runlevel is not 3 (current runlevel: $runlevel)" );
++            }
+         }
+     }    
+ }
+@@ -820,29 +833,6 @@
+     }    
+ }
+ 
+-sub check_network_mismatch {
+-    my $mainip;
+-
+-    if ( open my $mainip_fh, '<', '/var/cpanel/mainip' ) {
+-        chomp( $mainip = readline( $mainip_fh ) ); 
+-        close $mainip_fh;
+-    }    
+-
+-    local $SIG{'ALRM'} = sub {
+-        print_warning( 'Network Mismatch: check timed out' );
+-    };   
+-    alarm 5;
+-    my $external_ip_address = get( 'http://cpanel.net/showip.cgi' );
+-    alarm 0;
+-
+-    if ( $mainip and $external_ip_address ) {
+-        chomp $external_ip_address;
+-        if ( $mainip ne $external_ip_address ) {
+-            print_warn( 'Network Mismatch: ' );
+-            print_warning( "main IP address $mainip doesn't match external one $external_ip_address" );
+-        }
+-    }    
+-}
+ 
+ sub check_interface_lo {
+     my $is_up = 0;
+@@ -1374,6 +1364,104 @@
+     }
+ }
+ 
++sub check_for_home_noexec {
++    my @mount = Cpanel::SafeRun::Errors::saferunnoerror( 'mount' );
++    for my $mount ( @mount ) {
++        if ( $mount =~ m{ \s on \s (/home([^\s]?)) \s (:?.*) noexec }xms ) {
++            my $noexec_partition = $1;
++            print_warn( 'mounted noexec: ');
++            print_warning( $noexec_partition );
++        }
++    }
++}
++
++## compare external IP addr with local IP addrs, OR
++## check if only internal IP addrs are bound to server (this is not as reliable,
++## as NAT can still be used with external IP addrs of course)
++sub check_for_nat {
++    my @external_ipaddrs;
++    my $external_ip_address;
++    my $count = 0;
++
++    for ( 1 .. 3 ) {
++        local $SIG{'ALRM'} = sub {
++            $count++;
++            print_warn( 'NAT check timed out: ' );
++            print_warning( "attempt $count of 3" );
++        };
++        alarm 3;
++        $external_ip_address = get( 'http://cpanel.net/showip.cgi' );
++        if ( $external_ip_address ) {
++            chomp $external_ip_address;
++        }
++        alarm 0;
++
++        if ( $external_ip_address ) {
++            last;
++        }
++    }
++
++    if ( $external_ip_address ) {
++        if ( ! grep { /$external_ip_address/ } @local_ipaddrs_list ) {
++            print_warn( 'NAT: ' );
++            print_warning( "external IP address $external_ip_address is not bound to server" );
++        }
++    }
++    else {
++        for my $ipaddr ( @local_ipaddrs_list ) {
++            if ( $ipaddr !~ m{ \A ( ?: 127\. | 192\.168\. | 10\. | 172\.(1[6-9]|2[0-9]|3[0-1]) ) }xms ) {
++                push @external_ipaddrs, $ipaddr;
++            }
++        }
++        if ( !@external_ipaddrs ) {
++            print_warn( 'NAT: ' );
++            print_warning( 'no external IP addresses detected' );
++        }
++    }
++}
++
++sub check_for_etc_hosts_no_loopback {
++    my $hosts = '/etc/hosts';
++    my $localhost;
++
++    if ( ! -f $hosts ) {
++        print_warn( '/etc/hosts: ' );
++        print_warning( 'missing!' );
++    }
++    else {
++        if ( open my $hosts_fh, '<', $hosts ) {
++            while ( my $line = <$hosts_fh> ) {
++                chomp $line;
++                if ( ( $line =~ m{  127\.0\.0\.1 (.*) localhost }xms ) and ( $line !~ /^\#/ ) ) {
++                    $localhost = 1;
++                }
++            }
++        close $hosts_fh;
++        }
++    }
++
++    if ( !$localhost ) {
++        print_warn( '/etc/hosts: ' );
++        print_warning( 'no entry for localhost, or commented out' );
++    }
++}
++
++sub check_for_portreserve_entries {
++    my $portreserve_dir = '/etc/portreserve';
++    my @dir_entries;
++
++    if ( -d $portreserve_dir ) {
++        opendir( my $portreserve_fh, $portreserve_dir );
++        @dir_entries = grep { ! /^\.(\.?)$/ } readdir $portreserve_fh;
++        closedir $portreserve_fh;
++    }
++
++    if ( @dir_entries ) {
++        print_warn( 'Portreserve: ' );
++        print_warning( "$portreserve_dir is not empty!" );
++    }
++}
++
+ ##############################
+ #  END WARN
+ ##############################
+@@ -1576,7 +1664,8 @@
+ #  END 3RDP
+ ##############################
+ 
+-
++## TODO: run rpm -qa as soon as SSP is run, forked, to speed up overall SSP execution
++## Network checks may benefit from this as well
+ sub check_for_additional_rpms {
+     return if ( $os eq 'freebsd' );
+ 
+@@ -1603,11 +1692,37 @@
+         }
+     }
+ 
+-#    check for MySQL rpm version mismatches
+-#
+-#    for my $rpm ( @rpm_list ) {
+-#        if ( $rpm =~ /^MySQL-(client|devel|server|shared|test)-/ ) {
+-#            print "$rpm\n";
+-#        }
+-#    }
++    ## MySQL version mismatch check
++    my @mysql_rpm_versions;
++
++    for my $rpm ( @rpm_list ) {
++        if ( $rpm =~ m{ \A MySQL-server-(.*) \z }xms ) {
++            push @mysql_rpm_versions, $1;
++        }
++        elsif ( $rpm =~ m{ \A MySQL-shared-(.*) \z }xms ) {
++            push @mysql_rpm_versions, $1;
++        }
++        elsif ( $rpm =~ m{ \A MySQL-devel-(.*) \z }xms ) {
++            push @mysql_rpm_versions, $1;
++        }
++        elsif ( $rpm =~ m{ \A MySQL-client-(.*) \z }xms ) {
++            push @mysql_rpm_versions, $1;
++        }
++        elsif ( $rpm =~ m{ \A MySQL-test-(.*) \z }xms ) {
++            push @mysql_rpm_versions, $1;
++        }
++        elsif ( $rpm =~ m{ \A MySQL-embedded-(.*) \z }xms ) {
++            push @mysql_rpm_versions, $1;
++        }
++    }
++
++    my $first_rpm = pop @mysql_rpm_versions;
++    for ( 1 .. scalar @mysql_rpm_versions ) {
++        my $next_rpm = pop @mysql_rpm_versions;
++        if ( $first_rpm ne $next_rpm ) {
++            print_warn( 'MySQL RPMs: ' );
++            print_warning( 'version mismatch!' );
++            last;
++        }
++    }
+ }

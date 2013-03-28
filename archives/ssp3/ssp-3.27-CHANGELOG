@@ -1,0 +1,6 @@
+[NEW] Print a 3rd party notice if Symantec is installed.
+Specifically, we look for this in the process list, run as root:
+
+/opt/Symantec/symantec_antivirus
+
+This can interfere with ClamAV installs and other various things.

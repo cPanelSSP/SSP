@@ -1,0 +1,37 @@
+[FIXED] Explicitly set the $PATH to ensure all executed binaries actually get executed.
+Without this, various false positives would occur when root's $PATH wasn't what we
+expect it to be (e.g., lo would be reported as down, etc).
+
+
+[UPDATED] Completely rewrote the check_for_cpanel_update() subroutine.
+This will prevent manual maintenance when new tiers are added to the
+TIERS file. This also includes improved output for various scenarios
+involving the locally configured tier and the available tiers.
+
+
+[UPDATED] Added 2 new tips:
+
+  Learn how cPanel 11.36+ handles rpms: http://go.cpanel.net/rpmversions
+
+  Learn what's new in 11.36:
+http://docs.cpanel.net/twiki/bin/vief/AllDocumentation/1136ReleaseNotes
+
+
+[UPDATED] Ignore the CloudLinux /scripts/postupcp whose md5 checksum
+is 22cf7db1c069fd9672cd9dad3a3d371d.
+
+
+[UPDATED] Print a warning if permissionson /var/cpanel/resellers are
+not 644. This can prevent the accounts drop down menu from showing
+in cPanel when a reseller is logged in.
+
+
+[UPDATED] Print a warning if permissions on /usr/local/cpanel/bin/cpwrap
+are not 4755. This can cause EPERM when cpwrap attempts to setregid(),
+and may show as "There was an error setting gids" in the cPanel logs.
+
+
+[UPDATED] Separate the [INFO], [WARN], and [3RDP] sections in the output
+by adding a newline between them. Hopefully this will improve SSP output
+readability in tickets.
+

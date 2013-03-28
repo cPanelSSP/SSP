@@ -1,0 +1,233 @@
+--- ssp-4.5	2013-01-23 12:11:23.000000000 -0600
++++ ssp-4.6	2013-01-30 15:59:06.000000000 -0600
+@@ -16,7 +16,7 @@
+     die "SSP must be run as root\n";
+ }
+ 
+-my $version = '4.5';
++my $version = '4.6';
+ 
+ $| = 1;
+ $Term::ANSIColor::AUTORESET = 1;
+@@ -50,6 +50,7 @@
+ 
+ ## [INFO]
+ check_for_dnsonly();
++print_tip();
+ print_version();
+ print_hostname();
+ print_os();
+@@ -125,7 +126,7 @@
+ check_for_missing_or_commented_customlog();
+ check_for_cpsources_conf();
+ check_for_apache_rlimits();
+-check_if_crond_is_running();
++check_cron_processes();
+ check_for_usr_local_lib_libz_so();
+ check_for_non_default_modsec_rules();
+ check_etc_hosts_sanity();
+@@ -156,6 +157,9 @@
+ check_if_httpdconf_ipaddrs_exist();
+ check_distcache_and_libapr();
+ check_for_mainip_newline();
++check_for_custom_postgres_repo();
++check_for_rpm_overrides();
++check_for_odd_yum_conf();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -231,7 +235,7 @@
+         check_bash_history_for_certain_commands();
+         check_roots_cron_for_certain_commands();
+         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
+-        check_if_crond_is_running();
++        check_cron_processes();
+         check_etc_hosts_sanity();
+         check_for_missing_limits_h();
+         check_for_C_compiler_optimization();
+@@ -242,6 +246,7 @@
+         check_for_clock_skew();
+         check_for_percona_rpms();
+         check_for_mainip_newline();
++        check_for_rpm_overrides();
+ 
+         ## [3RDP]
+         check_for_apf();
+@@ -342,6 +347,34 @@
+     print BOLD YELLOW ON_BLACK "\tSSP $version (use ssp.cptechs.info/ssp.previous for previous version)\n\n";
+ }
+ 
++sub print_tip {
++    my @tips = (
++        "[Case 63193] File Manager showing 'Out of memory' in cPanel error_log? Try renaming \$HOME/\$USER/.cpanel/datastore/SYSTEMMIME",
++        "[Case 62819] 'License File Expired: LTD: 1334782495 NOW: 1246416504 FUT!' likely just means the server clock is wrong",
++        "[Case 62054] (By design) The 'Dedicated IP' box can only be modified when creating a package - not when editing",
++        "[Case 61735] (By design) '/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings' destroys custom proxy subdomain records. Use WHM >> Tweak Settings instead.",
++        "[Case 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and 'PCRE is not compiled with UTF-8 support'",
++        "[Case 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale",
++        "[Case 44884] upcp resets Mailman lists' hostnames. pre/postupcp hooks workaround in ticket 3541643",
++        "[Case 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net",
++        "mod_userdir URLs (/~username) are not compatible with FCGI when Apache's suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)",
++        "For a list of obscure issues, see the RareIssues wiki article",
++        "11.35+: Use /scripts/check_cpanel_rpms to fix problems in /usr/local/cpanel/3rdparty/  - not checkperlmodules",
++        "php.ini for phpMyAdmin, phpPgAdmin, Horde, and RoundCube can be found in /usr/local/cpanel/3rdparty/etc/",
++        "If Dovecot/POP/IMAP dies every day around the same time, the server's clock could be skewed. Check /var/log/maillog for 'moved backwards'",
++        "'Allowed memory size of x bytes exhausted' when uploading a db via phpMyAdmin may be resolved by increasing max_allowed_packet",
++        "Need to edit php.ini for Horde, RoundCube, phpMyAdmin, or phpPgAdmin? Edit /u/l/c/3rdparty/etc/php.ini, then run /u/l/c/b/install_php_inis",
++        "Seeing 'domainadmin' errors (e.g. 'domainadmin-domainexistsglobal')? Check the Domainadmin-Errors wiki article",
++        "Transfers showing 'sshcmdpermissiondeny'? Check for modified openssh-clients package (see ticket 3664533)",
++    );   
++
++    my $size = scalar @tips;
++    my $num = int rand $size;
++
++    print BOLD WHITE ON_BLACK "\tDid you know? ";
++    print BOLD WHITE ON_BLACK "$tips[$num]\n\n";
++}
++
+ sub get_tiers_file {
+     local $SIG{'ALRM'} = sub { return(); };
+     alarm 5;
+@@ -649,10 +682,8 @@
+         $local_tier_version = "Unknown (could not open/read /u/l/c/version ?)";
+     }    
+ 
+-    ## As of 09/24/2012, http://httpupdate.cpanel.net/cpanelsync/TIERS  has these tiers:
+-    ## edge     current     release     stable      11.30       11.32
+     ## We skip checking for updates of anything else such as "manual-release", "11.32.4.5", etc.
+-    if ( $local_tier_name !~ m{ ( edge | current | release | stable | 11\.3(0|2|4) ) }xmsi ) {
++    if ( $local_tier_name !~ m{ ( edge | current | release | stable | 11\.3(0|2|4|6) ) }xmsi ) {
+         return;
+     }
+ 
+@@ -1778,11 +1809,13 @@
+         e5e13640299ec439fb4c7f79a054e42b    /scripts/posteasyapache
+         42a624c843f34085f1532b0b4e17fe8c    /scripts/postmodifyacct
+         57f8ea2d494e299827cc365c86a357ac    /scripts/postupcp
++        e464adf0531fea2af4fe57361d9a43fb    /scripts/postupcp
+         4988be925a6f50ec505618a7cec702e2    /scripts/postkillacct
+         a4df04a6440073fe40363cfd241b1fe7    /scripts/postwwwacct
+         03a0dc919c892bde254c52cefe4d0673    /scripts/postwwwacct
+         2401d6260dac6215596be1652b394200    /scripts/postwwwacct
+         44caf075fc0f9847ede43de5dd563edc    /scripts/prekillacct
++        86f9b53c81a8f2fd77a8626ddd3b2c71    /scripts/prekillacct
+     );
+ 
+     my @hooks;
+@@ -2765,20 +2798,21 @@
+     }
+ }
+ 
+-sub check_if_crond_is_running {
++sub check_cron_processes {
+     my $crond_is_running = 0;
++    my $number_of_cron_processes = 0;
+ 
+     for my $process ( @process_list ) {
+         if ( $os eq 'linux' ) {
+             if ( $process =~ m{ \A root (?:.*) crond }xms ) {
+                 $crond_is_running = 1;
+-                last;
++                $number_of_cron_processes += 1;
+             }
+         }
+         elsif ( $os eq 'freebsd' ) {
+             if ( $process =~ m{ \A root (?:.*) cron }xms ) {
+                 $crond_is_running = 1;
+-                last;
++                $number_of_cron_processes += 1;
+             }
+         }
+     }
+@@ -2787,6 +2821,10 @@
+         print_warn( 'crond: ' );
+         print_warning( 'not found in the process list!' );
+     }
++    elsif ( $number_of_cron_processes > 1 ) {
++        print_warn( 'crond: ' );
++        print_warning( 'multiple cron processes found; this can cause "Cpanel update hanging" emails' );
++    }
+ }
+ 
+ sub check_for_usr_local_lib_libz_so {
+@@ -3689,6 +3727,80 @@
+     }                
+ }
+ 
++sub check_for_custom_postgres_repo {
++    return if ( $os eq 'freebsd' );
++
++    my $yum_repos_dir = '/etc/yum.repos.d/';
++    my @dir_contents;
++    my $has_postgres_repo = 0;
++
++    return if !-d $yum_repos_dir;
++
++    opendir( my $dir_fh, $yum_repos_dir );
++    @dir_contents = grep { ! /^\.(\.?)$/ } readdir $dir_fh;
++    closedir $dir_fh;
++
++    for my $repos ( @dir_contents ) {
++        if ( $repos =~ m{ \A pgdg-(\d+)-centos\.repo }xms ) {
++            $has_postgres_repo = 1;
++            last;
++        }
++    }
++
++    if ( $has_postgres_repo == 1 ) {
++        print_warn( 'PostgreSQL: ' );
++        print_warning( 'custom Postgres repo (pgdg-*) found in /etc/yum.repos.d/ . See tickets 3690445, 3568781' );
++    }
++}
++
++sub check_for_rpm_overrides {
++# http://go.cpanel.net/rpmversions
++    my $rpm_override_dir = '/var/cpanel/rpm.versions.d/';
++
++    opendir( my $dir_fh, $rpm_override_dir );
++    my @dir_contents = grep { ! /^\.(\.?)$/ } readdir $dir_fh;
++    closedir $dir_fh;
++
++    if ( @dir_contents ) {
++        print_warn( 'RPM override: ' );
++        print_warning( "$rpm_override_dir contains entries; manually review. More info: http://go.cpanel.net/rpmversions" );
++    }    
++}
++
++sub check_for_odd_yum_conf {
++    return if ( $os eq 'freebsd' );
++
++    my $yum_conf = '/etc/yum.conf';
++
++    return if !$yum_conf;
++
++    my $exclude_line_count = 0;
++    my $exclude_kernel = 0;
++    
++
++    if ( open my $file_fh, '<', $yum_conf ) {
++        while ( <$file_fh> ) {
++            if ( /^exclude/i ) {
++                $exclude_line_count += 1;
++            }
++            if ( /exclude(.*)kernel/ ) {
++                $exclude_kernel = 1;
++            }
++        }
++        close $file_fh;
++    }
++
++    if ( $exclude_line_count > 1 ) {
++        print_warn( 'yum.conf: ' );
++        print_warning( 'contains multiple "exclude" lines! See case 63311' );
++    }
++
++    if ( $exclude_kernel == 1 ) {
++        print_warn( 'yum.conf: ' );
++        print_warning( 'may be excluding kernel updates! See case 63311' );
++    }
++}
++
+ ##############################
+ #  END [WARN] CHECKS
+ ##############################

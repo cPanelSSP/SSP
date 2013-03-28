@@ -1,0 +1,12 @@
+[NEW] If homeloader.so is enabled in /usr/local/lib/php.ini, print a warning
+stating that this can cause errors, including the case ID #.
+
+
+[UPDATED] Added the following tips:
+
+ 388         '[FB 63530] When setting up a remote MySQL server, that server must have the openssh-clients package installed',
+ 409         'Use "rlog <file>" to see a file\'s revision history, and "co -p1.1 <file>" (for example) to see that revision',
+ 410         'Files under revision control: fstab, localdomains, named.conf, passwd, shadow, trueuserowners, httpd.conf, php.ini (system and cPanel)',
+ 411         'Imagick install issues on PHP 5.4? You may need to run \'pear config-set preferred_state beta\' (see ticket 3754991)',
+ 412         'Need to enable ZTS support for PHP? Try \'--enable-maintainer-zts\' (see ticket 3769493)',
+

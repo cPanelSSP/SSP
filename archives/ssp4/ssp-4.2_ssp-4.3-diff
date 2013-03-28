@@ -1,0 +1,260 @@
+--- ssp-4.2	2013-01-17 10:19:04.000000000 -0600
++++ ssp-4.3	2013-01-22 10:36:02.000000000 -0600
+@@ -2,11 +2,6 @@
+ # SSP - System Status Probe
+ # Find and print useful troubleshooting info on cPanel servers
+ 
+-# Avoid using cPanel modules, as they are not guaranteed to work
+-# in the future. The same could be said for other external modules.
+-# As of SSP 4.0, all external module dependencies have been removed,
+-# while all previous functionality remains in place.
+-
+ use strict;
+ use warnings;
+ use File::Find;
+@@ -15,12 +10,13 @@
+ use Term::ANSIColor qw(:constants);
+ use Storable;
+ use POSIX;
++use Time::Local;
+ 
+ if ( $< != 0 ) {
+     die "SSP must be run as root\n";
+ }
+ 
+-my $version = '4.2';
++my $version = '4.3';
+ 
+ $| = 1;
+ $Term::ANSIColor::AUTORESET = 1;
+@@ -39,7 +35,7 @@
+ my $mysql_datadir               = get_mysql_datadir();
+ my $mysql_error_log             = get_mysql_error_log();
+ my @apache_version_output       = split /\n/, run( '/usr/local/apache/bin/httpd', '-v' );
+-my @apache_modules_output       = split /\n/, run( '/usr/local/apache/bin/httpd', '-v' );
++my @apache_modules_output       = split /\n/, run( '/usr/local/apache/bin/httpd', '-M' );
+ my @mysql_rpm_versions;         # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
+ my @custom_opt_mods;            # items in /var/cpanel/easy/apache/custom_opt_mods/
+ my @usr_local_cpanel_hooks;     # items in /usr/local/cpanel/hooks/
+@@ -156,6 +152,10 @@
+ check_for_custom_locales();
+ check_eximstats_size();
+ check_eximstats_corrupt();
++check_for_clock_skew();
++check_for_zlib_h();
++check_if_httpdconf_ipaddrs_exist();
++check_distcache_and_libapr();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -182,6 +182,7 @@
+ check_for_additional_rpms();
+ check_mysql_rpm_mismatch();
+ check_php_libmysqlclient_mismatch();
++check_for_percona_rpms();
+ 
+ # All checks for DNSONLY go here
+ sub check_for_dnsonly {
+@@ -239,6 +240,8 @@
+         check_for_fork_bomb_protection();
+         check_for_cPanel_lower_than_11_30_7_3();
+         check_for_non_default_umask();
++        check_for_clock_skew();
++        check_for_percona_rpms();
+ 
+         ## [3RDP]
+         check_for_apf();
+@@ -344,8 +347,10 @@
+         "[Case 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net",
+         "[Case 44884] upcp resets Mailman lists' hostnames. pre/postupcp hooks workaround in ticket 3541643",
+         "[Case 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale",
+-        "[Case 61735] (By design) '/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings' destroys\n\tcustom proxy subdomain records. Use WHM >> Tweak Settings instead.",
++        "[Case 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and 'PCRE is not compiled with UTF-8 support'",
++        "[Case 61735] (By design) '/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings' destroys custom proxy subdomain records. Use WHM >> Tweak Settings instead.",
+         "[Case 62054] (By design) The 'Dedicated IP' box can only be modified when creating a package - not when editing",
++        "[Case 62819] 'License File Expired: LTD: 1334782495 NOW: 1246416504 FUT!' likely just means the server clock is wrong",
+         "mod_userdir URLs (/~username) are not compatible with FCGI when Apache's suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)",
+         "For a list of obscure issues, see the 'RareIssues' wiki article",
+         "11.36: Use /scripts/check_cpanel_rpms to fix problems in /usr/local/cpanel/3rdparty/  - not checkperlmodules",
+@@ -534,7 +539,7 @@
+             }
+             close $rr_fh;
+         }
+-        $os_info = $release_info . " ($hostinfo{'environment'})";
++        $os_info = $release_info . " [$hostinfo{'environment'}]";
+     }    
+     elsif ( $os eq 'freebsd' ) { 
+         $os_info = 'FreeBSD';
+@@ -1812,6 +1817,9 @@
+     # these exist by default
+     @hooks = grep { ! /postsuexecinstall/ && ! /post_sync_cleanup/ } @hooks;
+ 
++    # CloudLinux stuff
++    @hooks = grep { ! /postwwwacct\.l\.v\.e-manager\.bak/ } @hooks;
++
+     my $hooks_output;
+     if ( @hooks ) {
+         for my $hook ( @hooks ) {
+@@ -3506,6 +3514,162 @@
+     }
+ }
+ 
++sub check_for_clock_skew {
++    my $localtime = time();
++    my $rdate_time;
++    my $clock_skew;
++
++    if ( $os eq 'linux' ) {
++        $rdate_time = run( 'rdate', '-p', '-t', '1', 'rdate.cpanel.net' );
++
++        # fall back to UDP if necessary
++        if ( !$rdate_time ) {
++            $rdate_time = run( 'rdate', '-p', '-t', '1', '-u', 'rdate.cpanel.net' );
++        }
++    }
++    elsif ( $os eq 'freebsd' ) {
++        local $SIG{'ALRM'} = sub { return(); };
++        alarm 1;
++        $rdate_time = run( 'rdate', '-p', 'rdate.cpanel.net' );
++        alarm 0;
++    }
++
++    return if !$rdate_time;
++
++    $rdate_time =~ s/\A rdate: \s \[rdate\.cpanel\.net\] \s+//gxms;
++
++    if ( $rdate_time =~ m{ \A \S+ \s (\S+) \s (\d+) \s (\d+):(\d+):(\d+) \s (\d+) }xms ) {
++        my ( $mon, $mday, $hour, $min, $sec, $year ) = ( $1, $2, $3, $4, $5, $6 );
++        $rdate_time = timelocal( $sec, $min, $hour, $mday, $mon, $year );
++    }
++
++    return if ( $rdate_time !~ /\d{10}/ );
++
++    $clock_skew = ( $rdate_time - $localtime );
++    $clock_skew = abs $clock_skew; # convert negative numbers to positive
++
++    return if ( $clock_skew < 60 );
++
++    if ( $clock_skew >= 31536000 ) {
++        $clock_skew = sprintf '%.1f', ( $clock_skew / 31536000 );
++        $clock_skew .= ' years';
++    }
++    elsif ( $clock_skew >= 86400 ) {
++        $clock_skew = sprintf '%.1f', ( $clock_skew / 86400 );
++        $clock_skew .= ' days';
++    }
++    elsif ( $clock_skew >= 3600 ) {
++        $clock_skew = sprintf '%.1f', ( $clock_skew / 3600 );
++        $clock_skew .= ' hours';
++    }
++    elsif ( $clock_skew >= 60 ) {
++        $clock_skew = sprintf '%.1f', ( $clock_skew / 60 );
++        $clock_skew .= ' minutes';
++    }
++
++    print_warn( 'Clock skew: ' );
++    print_warning( "server time may be off by $clock_skew" );
++}
++
++sub check_for_zlib_h {
++    if ( -f '/usr/local/include/zlib.h' ) {
++        print_warn( '/usr/local/include/zlib.h: ' );
++        print_warning( 'This file can cause EA to fail with libxml issues; may need to mv it, run EA again' );
++    }        
++}
++
++sub check_for_percona_rpms {
++    return if !@rpm_list;
++
++    my $has_percona = 0;
++
++    for my $rpm ( @rpm_list ) {
++        if ( $rpm =~ /^Percona-/i ) {
++            $has_percona = 1;
++            last;
++        }
++    }
++    
++    if ( $has_percona == 1 ) {
++        print_warn( 'Percona: ' );
++        print_warning( 'rpms found. If Exim is segfaulting after STARTTLS, this may be why. See ticket 3658929' );
++    }
++}
++
++sub check_if_httpdconf_ipaddrs_exist {
++    my $httpdconf = '/usr/local/apache/conf/httpd.conf';
++    my @vhost_ipaddrs;
++    my ( @unbound_ipaddrs, $unbound_ipaddrs );
++
++    return if !$httpdconf;
++
++    if ( open my $httpdconf_fh, '<', $httpdconf ) {
++        while ( <$httpdconf_fh> ) {
++            if ( /<VirtualHost\s+(\d+\.\d+\.\d+\.\d+):(?:\d+)>/i ) {
++                push @vhost_ipaddrs, $1;
++            }
++        }
++        close $httpdconf_fh;
++    }
++
++    # uniq IP addrs only
++    @vhost_ipaddrs = do { my %seen; grep { !$seen{$_}++ } @vhost_ipaddrs };
++
++    for my $vhost_ipaddr ( @vhost_ipaddrs ) {
++        my $is_bound = 0;
++        for my $local_ipaddr ( @local_ipaddrs_list ) {
++            if ( $vhost_ipaddr eq $local_ipaddr ) {
++                $is_bound = 1;
++                last;
++            }
++        }
++        if ( $is_bound == 0 ) {
++            push @unbound_ipaddrs, $vhost_ipaddr;
++        }
++    }
++
++    if ( @unbound_ipaddrs ) {
++        print_warn( 'Apache: ' );
++        print_warning( 'httpd.conf has VirtualHosts for these IP addrs, which aren\'t bound to the server:' );
++
++        for my $unbound_ipaddr ( @unbound_ipaddrs ) {
++            print_magenta( "\t \\_ $unbound_ipaddr" );
++        }
++    }
++}
++
++sub check_distcache_and_libapr {
++    my $last_success_profile = '/var/cpanel/easy/apache/profile/_last_success.yaml';
++    my $has_distcache = 0;
++    my $httpd_not_linked_to_system_apr = 0;
++
++    if ( open my $profile_fh, '<', $last_success_profile ) {
++        while ( <$profile_fh> ) {
++            if ( /Distcache:/ ) {
++                $has_distcache = 1;
++                last;
++            }
++        }
++        close $profile_fh;
++    }
++
++    if ( $has_distcache == 1 ) {
++        my @ldd = split /\n/, run( 'ldd', '/usr/local/apache/bin/httpd' );
++        for my $line ( @ldd ) {
++            if ( $line =~ m{ libapr(?:.*) \s+ => \s+ (\S+) }xms ) {
++                if ( $line !~ m{ \A /usr/local/apache/lib/libapr/ }xms ) {
++                    $httpd_not_linked_to_system_apr = 1;
++                    last;
++                }
++            }
++        }
++    }
++
++    if ( $httpd_not_linked_to_system_apr == 1 ) {
++        print_warn( 'Apache: ' );
++        print_warning( 'httpd linked to system APR, not APR in /usr/local/apache/lib/ (see case 62676)' );
++    }
++}
+ 
+ ##############################
+ #  END [WARN] CHECKS

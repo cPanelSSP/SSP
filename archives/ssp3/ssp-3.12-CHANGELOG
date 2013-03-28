@@ -1,0 +1,28 @@
+[NEW] Print a warning if the libmysqlclient that php4 and/or php5 is linked
+against does not match the version provided by the installed MySQL-shared rpm.
+
+[NEW] Print a warning if the server has less than 512M of physical memory.
+
+[NEW] Print a warning if EasyApache is running.
+
+[NEW] Print a warning if /usr/local/apache/AN_EASYAPACHE_BUILD_IS_CURRENTLY_RUNNING
+exists, but no root-owned process named "easyapache" exists in the process list.
+
+[FIXED] Apache v1 is now detected. This was fixed by using /usr/local/apache/bin/httpd
+instead of /usr/local/apache/bin/apachectl when checking the Apache version. Previously
+if a server was using Apache v1, a message would be printed that said "Could not
+determine Apache info".
+
+[UPDATED] The list of rpms is built using its own sub now, and other subroutines
+which require checking that list now use the global @rpm_list array.
+
+[UPDATED] If /var/cpanel/mgmt_queue/apache_update_no_restart exists, we only print a
+warning now if EasyApache is not running, since EA will create that file while running.
+
+[UPDATED] Better process list checking. Instead of just checking for, say, "upcp" in the
+command part of the process list, we now verify that the owner of the process is the root
+user. This has been done for these processes: upcp, gdm, easyapache. This still needs to
+be done for these processes, once we confirm that these run as root: litespeed/lshttp,
+nginx, MailScanner, Guardian. This still isn't optimal checking (confirming the path of
+the binary would be even better), but it's much improved from the previous way, and is
+just that much more unlikely to cause a false positive.

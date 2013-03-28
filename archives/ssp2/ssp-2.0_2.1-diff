@@ -1,0 +1,491 @@
+--- ssp-2.0	2012-04-21 00:55:32.000000000 +0400
++++ ssp-2.1	2012-04-23 02:33:34.000000000 +0400
+@@ -1,6 +1,6 @@
+ #!/usr/bin/perl
+ 
+-# SSP 2.0
++# SSP 2.1
+ 
+ use strict;
+ use warnings;
+@@ -36,14 +36,20 @@
+ print_perl_version();
+ print_uptime();
+ check_network_mismatch();
++check_interface_lo();
++check_for_cpanelsync_exclude();
+ check_for_lve_environment();
+ print_apache_version();
+ print_apache_uptime();
+ check_for_rawopts();
+ check_for_rawenv();
++check_for_local_apache_templates();
++check_for_custom_apache_includes();
+ print_php_configuration();
+ check_sysinfo();
+-check_perl();
++check_perl_sanity();
++check_for_non_default_permissions();
++check_var_cpanel_users_files_ownership();
+ check_root_suspended();
+ check_limitsconf();
+ check_disk_space();
+@@ -53,7 +59,6 @@
+ check_for_huge_apache_logs();
+ check_easy_skip_cpanelsync();
+ check_pkgacct_override();
+-check_for_bad_rpms();
+ check_for_varnish();
+ check_for_litespeed();
+ check_for_nginx();
+@@ -64,7 +69,9 @@
+ check_for_les();
+ check_for_1h();
+ check_for_webmin();
+-
++check_for_gdm();
++check_for_redhat_firewall();
++check_for_additional_rpms();
+ 
+ sub get_process_list {
+ 
+@@ -72,7 +79,7 @@
+     ## better (?) would be to run lsof and check process names on listening ports.
+ 
+     my @process_list;
+-    my $process_list = Cpanel::SafeRun::Errors::saferunnoerror( 'ps', 'auxwwwf' );
++    my $process_list = Cpanel::SafeRun::Errors::saferunnoerror( 'ps', 'axwwwf', '-o', 'cmd' );
+     if ( $process_list ) { 
+         @process_list = split /\n/, $process_list;
+     }
+@@ -100,6 +107,10 @@
+     my $text = shift;
+     print BOLD UNDERLINE "$text\n";
+ }
++sub print_info {
++    my $text = shift;
++    print BOLD GREEN ON_BLACK "$text\n";
++}
+ 
+ sub print_hostname {
+     my $hostname = hostname();
+@@ -170,6 +181,7 @@
+ sub print_cpanel_birthday {
+     my ( $birthday_file, $atime );
+ 
++    ## cpanel-install-thread0.log is better to be checked before cpanel-install.log
+     if ( -f '/var/log/cpanel-install-thread0.log' ) {
+         $birthday_file = '/var/log/cpanel-install-thread0.log';
+     }
+@@ -178,8 +190,8 @@
+     }
+ 
+     if ( $birthday_file ) {
+-        ( undef, undef, undef, undef, undef, undef, undef, undef, $atime ) = stat $birthday_file;
+-        my $birthday = localtime $atime;
++        my $ctime = ( stat ( $birthday_file ) )[9];
++        my $birthday = localtime $ctime;
+         print_start( 'cPanel Birthday: ' );
+         print_normal( $birthday );
+     }
+@@ -209,8 +221,14 @@
+         $cpanel_tier = 'Unknown (could not open/read /etc/cpupdate.conf ?)';
+     }
+ 
++    my $ctime = ( stat ( '/usr/local/cpanel/version' ) )[10];
++
++    my $last_update = time() - $ctime;
++    $last_update = $last_update / 86400;
++    $last_update = sprintf '%.1f', $last_update;
++
+     print_start( 'cPanel Version: ' );
+-    print_normal( "${cpanel_version}-" . uc( $cpanel_tier) );
++    print_normal( "${cpanel_version}-" . uc( $cpanel_tier ) . " (Last updated $last_update days ago)" );
+ }
+ 
+ sub check_for_cpanel_update {
+@@ -245,7 +263,7 @@
+         if ( $local_tier_version !~ /Unknown/ ) {
+ 
+             ## compare the local tier version with that of the currently available version.
+-            local $SIG{'ALRM'} = sub { die(); };
++            local $SIG{'ALRM'} = sub { return(); };
+             alarm 5;
+             my $updatefile = get( 'http://httpupdate.cpanel.net/cpanelsync/TIERS' );
+             alarm 0;
+@@ -380,7 +398,21 @@
+                 }
+             }
+             # http://en.wikipedia.org/wiki/Sandy_Bridge#Server_platform
+-            if ( /^model name/ && /Xeon/ && /(?:46(\d{2}))|2687W|2690|2680|2670|2665|2660|2650|2650L|2667|2640|2630|2620|2630L|2643|2609|2603|2637|2470|2450|2450L|2440|2430|2420|2430L|2407|2403|1660|1650|1620|1290|1280|1275|1270|1260L|1245|1240|1235|1230|1225|1220|1220L/ && ! /E(31270|31230)/ ) {
++            if ( /^model name/ && /Xeon/ && m{    46(\d{2})
++                                                | 12(2|6)0L
++                                                | 24(3|5)0L
++                                                | 26(3|5)0L
++                                                | 12([2-4]|7)5
++                                                | 12([2-4]|[7-9])0
++                                                | 16(2|[5-6])0
++                                                | 240(3|7)
++                                                | 24([2-5]|7)0
++                                                | 260(3|9)
++                                                | 26([2-9])0
++                                                | 26(37|43)
++                                                | 266(5|7)
++                                                | 2687W
++                                            }xms && ! /E(\d{5})/ ) {
+                 $sandy_bridge = 1; 
+             }
+         }
+@@ -406,11 +438,11 @@
+     }
+ 
+     if ( $perl_version ) {
+-        print_start( 'Perl version: ' );
++        print_start( 'Perl Version: ' );
+         print_normal( $perl_version );
+     }
+     else {
+-        print_start( 'Perl version: ' );
++        print_start( 'Perl Version: ' );
+         print_warning( 'could not determine perl version (perl -v)' );
+     }
+ }
+@@ -421,6 +453,14 @@
+     print_normal( $uptime );
+ }
+ 
++sub check_for_cpanelsync_exclude {
++    my $cpanelsync_exclude = '/etc/cpanelsync.exclude';
++    if ( -f $cpanelsync_exclude and ! -z $cpanelsync_exclude ) {
++        print_start( 'cpanelsync exclude: ' );
++        print_warning( "$cpanelsync_exclude is not empty!" );
++    }
++}
++
+ sub check_network_mismatch {
+     my $mainip;
+ 
+@@ -429,12 +469,15 @@
+         close $mainip_fh;
+     }
+ 
+-    local $SIG{'ALRM'} = sub { die(); };
++    local $SIG{'ALRM'} = sub {
++        print_warning( 'Network Mismatch: check timed out' );
++    };
+     alarm 5;
+-    chomp( my $external_ip_address = get( 'http://cpanel.net/showip.cgi' ) );
++    my $external_ip_address = get( 'http://cpanel.net/showip.cgi' );
+     alarm 0;
+ 
+     if ( $mainip and $external_ip_address ) {
++        chomp $external_ip_address;
+         if ( $mainip ne $external_ip_address ) {
+             print_start( 'Network Mismatch: ' );
+             print_warning( "main IP address $mainip doesn't match external one $external_ip_address" );
+@@ -442,6 +485,21 @@
+     }
+ }
+ 
++sub check_interface_lo {
++    my $is_up = 0;
++    
++    my $ifconfig_lo = Cpanel::SafeRun::Errors::saferunnoerror( 'ifconfig', 'lo' );
++
++    if ( $ifconfig_lo =~ /UP LOOPBACK/ ) {
++        $is_up = 1;
++    }
++
++    if ( ! $is_up ) {
++        print_start( 'Loopback Interface: ' );
++        print_warning( 'lo is not up!' );
++    }
++}
++
+ sub check_for_lve_environment {
+ 
+ # pam_lve 0.2 prints this after su or sudo:
+@@ -461,7 +519,7 @@
+ # pam_lve 0.3 won't put wheel users in an LVE after su or sudo:
+ # http://cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php
+ 
+-    if ( -e '/usr/sbin/lveps' ) {
++    if ( $hostinfo{'kernel'} =~ /\.lve/ and -x '/usr/sbin/lveps' ) {
+         my $lve_check = `/usr/sbin/lveps -p | grep " $$ "`;
+         if ( $lve_check ) {
+             print "\n";
+@@ -505,7 +563,7 @@
+ sub print_apache_uptime {
+     my ( $apache_uptime, $apache_generations );
+ 
+-    local $SIG{'ALRM'} = sub { die(); };
++    local $SIG{'ALRM'} = sub {};
+     alarm 5;
+     my $apache_status = get( 'http://localhost/whm-server-status' );
+     alarm 0;
+@@ -535,8 +593,8 @@
+     my @dir_contents;
+ 
+     if ( -d $rawopts_dir ) {
+-        opendir ( my $dir_fh, $rawopts_dir );
+-        @dir_contents = grep { ! /^\./ && ! /^\.\./ } readdir $dir_fh;
++        opendir( my $dir_fh, $rawopts_dir );
++        @dir_contents = grep { ! /^\.(\.?)$/ } readdir $dir_fh;
+         closedir $dir_fh;
+     }
+  
+@@ -551,8 +609,8 @@
+     my @dir_contents;
+ 
+     if ( -d $rawenv_dir ) {
+-        opendir ( my $dir_fh, $rawenv_dir );
+-        @dir_contents = grep { ! /^\./ && ! /^\.\./ } readdir $dir_fh;
++        opendir( my $dir_fh, $rawenv_dir );
++        @dir_contents = grep { ! /^\.(\.?)$/ } readdir $dir_fh;
+         closedir $dir_fh;
+     }
+ 
+@@ -562,6 +620,59 @@
+     }
+ }
+ 
++sub check_for_local_apache_templates {
++    my $apache2_template_dir = '/var/cpanel/templates/apache2';
++    my @dir_contents;
++
++    if ( -d $apache2_template_dir ) {
++        opendir( my $dir_fh, $apache2_template_dir );
++        @dir_contents = readdir $dir_fh;
++        closedir $dir_fh;
++    }    
++
++    my $templates;
++    for my $template ( @dir_contents ) {
++        if ( $template =~ m{ \.local \z }xms ) {
++            $templates .= " $template";
++        }
++    }
++
++    if ( $templates ) {
++        print_start( 'Custom apache2 templates: ' );
++        print_warning( $templates );
++    }
++}
++
++sub check_for_custom_apache_includes {
++    my $include_dir = '/usr/local/apache/conf/includes';
++
++    return if ! $include_dir;
++
++    my @includes = qw(
++        post_virtualhost_1.conf
++        post_virtualhost_2.conf
++        post_virtualhost_global.conf
++        pre_main_1.conf
++        pre_main_2.conf
++        pre_main_global.conf
++        pre_virtualhost_1.conf
++        pre_virtualhost_2.conf
++        pre_virtualhost_global.conf
++    );
++
++    my $custom_includes;
++    for my $include ( @includes ) {
++        if ( ! -z "${include_dir}/${include}" ) {
++            $custom_includes .= " $include";
++        }
++    }
++
++    if ( $custom_includes ) {
++        print_start( 'Apache Includes: ' );
++        print_warning( $custom_includes );
++    }
++}
++
+ sub print_php_configuration {
+     my $phpconf = '/usr/local/apache/conf/php.conf.yaml';
+     return if ! -f $phpconf;
+@@ -683,7 +794,7 @@
+     }
+ }
+ 
+-sub check_perl {
++sub check_perl_sanity {
+     my $usr_bin_perl = '/usr/bin/perl';
+     my $usr_local_bin_perl = '/usr/local/bin/perl';
+ 
+@@ -701,12 +812,92 @@
+         print_warning( "$usr_bin_perl and $usr_local_bin_perl are both symlinks!" );
+     }
+ 
++    ## a symlink will test true for both -x AND -l
+     if ( -x $usr_bin_perl and ! -l $usr_bin_perl ) {
+         if ( -x $usr_local_bin_perl and ! -l $usr_local_bin_perl ) {
+             print_start( 'perl: ' );
+             print_warning( "$usr_bin_perl and $usr_local_bin_perl are both binaries!" );
+         }
+     }
++
++    if ( -x $usr_bin_perl and ! -l $usr_bin_perl ) {
++        my $mode = ( stat ( $usr_bin_perl ) )[2] & 07777;
++        $mode = sprintf "%lo", $mode;
++        if ( $mode != '755' ) {
++            print_start( 'Perl Permissions: ' );
++            print_warning( "$usr_bin_perl is $mode" );
++        }
++    }
++
++    if ( -x $usr_local_bin_perl and ! -l $usr_local_bin_perl ) {
++        my $mode = ( stat ( $usr_local_bin_perl ) )[2] & 07777;
++        $mode = sprintf "%lo", $mode;
++        if ( $mode != '755' ) {
++            print_start( 'Perl Permissions: ' );
++            print_warning( "$usr_local_bin_perl is $mode" );
++        }
++    }
++}
++
++sub check_for_non_default_permissions {
++    my %perms_and_resources = (
++        '/opt'                  => '755',
++        '/tmp'                  => '1777',
++        '/usr'                  => '755',
++        '/root/cpanel3-skel'    => '755',
++        '/usr/local/apache'     => '755',
++        '/var/cpanel/locale'    => '755',
++        '/usr/local/cpanel/3rdparty/bin/awstats.pl' => '755',
++        '/sbin/ifconfig'        => '755',
++        '/etc/passwd'           => '644',
++        '/etc/group'            => '644',
++        '/etc/hosts'            => '644',
++    );
++
++    for my $resource ( keys %perms_and_resources ) {
++        if ( -e $resource ) {
++            my $mode = ( stat ( $resource ) )[2] & 07777;
++            $mode = sprintf "%lo", $mode;
++            if ( $mode != $perms_and_resources{$resource} ) {
++                print_start( 'Non-default Permissions: ' );
++                print_warning( "$resource (mode: $mode | default: $perms_and_resources{$resource})" );
++            }
++        }
++    }
++
++    ## cPanel changes /etc/shadow from 0400 to 0600
++    if ( -e '/etc/shadow' ) {
++        my $mode = ( stat ( '/etc/shadow' ) )[2] & 07777;
++        $mode = sprintf "%lo", $mode;
++        if ( $mode != '600' and $mode != '400' ) {
++            print_start( 'Non-default Permissions: ' );
++            print_warning( "/etc/shadow (mode: $mode | default: 0400 or 0600)" );
++        }
++    }
++}
++
++sub check_var_cpanel_users_files_ownership {
++    my $var_cpanel_users = '/var/cpanel/users';
++
++    my @files;
++    if ( -d $var_cpanel_users ) {
++        opendir( my $dir_fh, $var_cpanel_users );
++        @files = grep { ! /^\.(\.?)$/ and ! /^(root|system|nobody)$/ } readdir $dir_fh;
++        closedir $dir_fh;
++    }
++
++    my $group_root_files;
++    for my $file ( @files ) {
++        my $gid = ( stat ( '/var/cpanel/users/' . $file ) )[5];
++        if ( $gid == 0 ) {
++            $group_root_files .= " $file";
++        }
++    }
++
++    if ( $group_root_files ) {
++        print_start( '/v/c/users file owned by group "root": ' );
++        print_warning( $group_root_files );
++    }
+ }
+ 
+ sub check_root_suspended {
+@@ -764,7 +955,7 @@
+ 
+     my @hooks;
+     if ( -d '/scripts' ) {
+-        opendir my $scripts_fh, '/scripts';
++        opendir( my $scripts_fh, '/scripts' );
+         @hooks = grep { /^(pre|post)/ } readdir $scripts_fh;
+         closedir $scripts_fh;
+     }
+@@ -814,18 +1005,6 @@
+     }
+ }
+ 
+-sub check_for_bad_rpms {
+-    my @rpm_list = Cpanel::SafeRun::Errors::saferunnoerror( 'rpm', '-qa' );
+-
+-    my @bad_rpms = grep { /^(php-|kde-|psa-|clamav|clamd)|(http|apache|pear)/ } @rpm_list;
+-    if ( @bad_rpms ) {
+-        @bad_rpms = sort @bad_rpms;
+-        for my $bad_rpm ( @bad_rpms ) {
+-            print_start( 'Bad rpm: ' );
+-            print_warning( $bad_rpm );
+-        }
+-    }
+-}
+ 
+ sub check_for_varnish {
+     my $varnish;
+@@ -1012,3 +1191,53 @@
+         print_warning( 'Port 10000 is listening, webmin may be running' );
+     }
+ }
++
++sub check_for_gdm {
++    my $gdm = 0;
++
++    for my $line ( @process_list ) {
++        if ( $line =~ /gdm/ ) {
++            $gdm = 1;
++            last;
++        }
++    }
++
++    if ( $gdm == 1 ) {
++        print_start( 'gdm Process: ' );
++        print_warning( 'is running' );
++    }   
++}
++
++sub check_for_redhat_firewall {
++    my $iptables = Cpanel::SafeRun::Errors::saferunnoerror( 'iptables', '-L', 'RH-Firewall-1-INPUT' );
++
++    if ( $iptables ) {
++        print_start( 'Default Redhat Firewall Check: ' );
++        print_warning( 'RH-Firewall-1-INPUT table exists. /scripts/configure_rh_firewall_for_cpanel to open ports.' );
++    }
++}
++
++sub check_for_additional_rpms {
++    my $timeout = 15;
++
++    print_info( "<< RPM check (running \"rpm -qa\"). This will timeout after $timeout seconds." );
++
++    local $SIG{'ALRM'} = sub {
++        print_warning( 'Additional RPM: check timed out' );
++    };
++    alarm $timeout;
++    my @rpm_list = Cpanel::SafeRun::Errors::saferunnoerror( 'rpm', '-qa' );
++    alarm 0;
++
++    return if ! @rpm_list;
++
++    my @additional_rpms = grep { /^(php-|kde-|psa-|clamav|clamd)|(http|apache|pear|sendmail)/ } @rpm_list;
++    if ( @additional_rpms ) {
++        @additional_rpms = sort @additional_rpms;
++        for my $additional_rpm ( @additional_rpms ) {
++            next if ( $additional_rpm =~ /sendmail-(cf|doc)-/ );
++            print_start( 'Additional RPM: ' );
++            print_warning( $additional_rpm );
++        }
++    }
++}

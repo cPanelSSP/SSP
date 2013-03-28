@@ -1,0 +1,1 @@
+[NEW] Print a warning if there are any customizations made to /etc/exim.conf.local .

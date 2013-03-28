@@ -1,0 +1,62 @@
+--- ssp-3.12	2012-08-22 20:32:46.000000000 +0400
++++ ssp-3.13	2012-08-23 18:16:28.000000000 +0400
+@@ -20,7 +20,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.12';
++my $version = '3.13';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ my $os                  = Cpanel::OSSys::getos();
+@@ -113,6 +113,7 @@
+ check_for_proc_mdstat_recovery();
+ check_usr_local_cpanel_path_for_symlinks();
+ check_for_system_mem_below_512M();
++check_for_options_rotate_redhat_centos_63();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -1965,6 +1966,42 @@
+     }
+ }
+ 
++
++## This is already fixed: http://rhn.redhat.com/errata/RHBA-2012-1158.html
++sub check_for_options_rotate_redhat_centos_63 {
++    my $sysinfo_config = '/var/cpanel/sysinfo.config';
++    my $os_release;
++    my $resolv_conf = '/etc/resolv.conf';
++    my $options_rotate = 0;
++
++    if ( open my $sysinfo_config_fh, '<', $sysinfo_config ) {
++        while ( my $line = <$sysinfo_config_fh> ) {
++            if ( $line =~ m{ \A release=(\d\.\d) }xms ) {
++                $os_release = $1;
++                last;
++            }
++        }
++        close $sysinfo_config_fh;
++    }
++
++    if ( $os_release and $os_release eq '6.3' ) {
++        if ( open my $resolv_conf_fh, '<', $resolv_conf ) {
++            while ( my $line = <$resolv_conf_fh> ) {
++                if ( $line =~ m{ options \s+ rotate }xms ) {
++                    $options_rotate = 1;
++                    last;
++                }
++            }
++            close $resolv_conf_fh;
++        }
++    }
++
++    if ( $options_rotate == 1 ) {
++        print_warn( 'RH/CentOS 6.3 resolv.conf: ' );
++        print_warning( 'contains "options rotate", can break lookups. See case 60347. Already fixed upstream.' );
++    }
++}
++
+ ##############################
+ #  END [WARN] CHECKS
+ ##############################

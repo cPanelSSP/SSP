@@ -1,0 +1,3 @@
+added check_for_dnsonly() which will inform you that you are
+on a DNSONLY box, and doesn't run unnecessary checks for Apache,
+etc.

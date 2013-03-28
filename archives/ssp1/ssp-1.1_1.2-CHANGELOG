@@ -1,0 +1,26 @@
+[bugfix] Replace the previous cPanel update check routines with newer logic.
+This was necessary since the check parses httpupdate.cpanel.net, which had
+changed.
+
+[bugfix] If the OS is FreeBSD, and if the cPanel version is 11.30, do not print
+any messages about an update being available (11.30 is the final version for
+FreeBSD).
+
+[bugfix] If FreeBSD, print the kernel instead of "GENERIC standard".
+
+[bugfix] Replace the ASSP detection routine with a check of the process name
+for port 25's listening processes. This check is currently Linux only.
+
+[bugfix] use Sys::Hostname to obtain the hostname instead of
+/proc/sys/kernel/hostname which doesn't exist on FreeBSD.
+
+[bugfix] The FQDN detection has been fixed.
+
+
+[new] If on CloudLinux, and if in a jailed LVE, print a message informing the
+SSP user to not restart any services. Note that pam_lve 0.2 will warn you when
+you su or sudo to root anyway, and pam_lve 0.3 won't place you in an lve when
+you su or sudo to root.
+
+[new] The OS will now be printed on its own line.
+

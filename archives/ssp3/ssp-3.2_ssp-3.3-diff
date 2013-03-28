@@ -1,0 +1,47 @@
+--- ssp-3.2	2012-07-12 21:21:36.000000000 +0400
++++ ssp-3.3	2012-07-13 08:00:56.000000000 +0400
+@@ -12,7 +12,7 @@
+ use Sys::Hostname;
+ use File::Find;
+ 
+-my $version = '3.2';
++my $version = '3.3';
+ 
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+@@ -85,6 +85,7 @@
+ check_for_gdm();
+ check_for_redhat_firewall();
+ check_for_apache_update_no_restart();
++check_for_easyapache_hooks();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -1352,6 +1353,27 @@
+     }
+ }
+ 
++sub check_for_easyapache_hooks {
++    my $hooks;
++
++    my @hooks = qw( before_apache_make
++                    after_apache_make_install
++                    before_httpd_restart_tests
++                    after_httpd_restart_tests
++                );
++    
++    for my $hook ( @hooks ) {
++        if ( -f '/scripts/' . $hook ) {
++            $hooks .= " $hook";
++        }
++    }
++
++    if ( $hooks ) {
++        print_warn( 'EA hooks: ' );
++        print_warning( $hooks );
++    }
++}
++
+ ##############################
+ #  END WARN
+ ##############################

@@ -1,0 +1,2185 @@
+#!/usr/bin/perl
+
+# SSP - System Status Probe
+# Find and print useful troubleshooting info on cPanel servers
+
+# Most of the testing has been done on Linux running full cPanel.
+# DNSONLY and FBSD... not as much.
+
+use strict;
+use warnings;
+use lib '/usr/local/cpanel';
+use Cpanel::SafeRun::Errors ();
+use Cpanel::Ips::Fetch      ();
+use Cpanel::Sys::OS         ();
+use Cpanel::OSSys           ();
+use Term::ANSIColor qw(:constants);
+use LWP::Simple;
+use Sys::Hostname;
+use File::Find;
+use IO::Socket::INET;
+
+$| = 1;
+my $version = '3.12';
+$Term::ANSIColor::AUTORESET = 1;
+
+my $os                  = Cpanel::OSSys::getos();
+my @local_ipaddrs_list  = Cpanel::Ips::Fetch::fetch_ips_array();
+chomp( my %hostinfo     = get_hostinfo() );
+my @process_list        = get_process_list();
+my $apache_bin          = '/usr/local/apache/bin/httpd';
+my @custom_opt_mods;
+my @usr_local_cpanel_hooks;
+my @easyapache_templates;
+my @rpm_list;
+
+my %cpuinfo;
+if ( $os eq 'freebsd' ) {
+    chomp( %cpuinfo = get_cpuinfo_freebsd() );
+}
+else {
+    chomp( %cpuinfo = get_cpuinfo() );
+}
+
+print "\n";
+
+## [INFO]
+check_for_dnsonly();
+print_version();
+print_hostname();
+print_os();
+print_kernel_and_cpu();
+print_cpanel_birthday();
+print_cpanel_version();
+check_for_cpanel_update();
+print_perl_version();
+print_uptime();
+check_for_clustering();
+print_apache_version();
+print_apache_uptime();
+print_php_configuration();
+check_sysinfo();
+check_for_remote_mysql();
+print_if_using_mydns_or_nsd();
+
+## [WARN]
+check_selinux_status();
+check_runlevel();
+check_for_missing_root_cron();
+check_if_upcp_is_running();
+check_valid_upcp();
+check_for_sandy_bridge();
+check_interface_lo();
+check_cpanelconfig_filetype();
+check_for_cpanelsync_exclude();
+check_for_lve_environment();
+check_for_rawopts();
+check_for_rawenv();
+check_for_custom_opt_mods();
+check_for_local_apache_templates();
+check_for_local_makecpphp_template();
+check_for_custom_apache_includes();
+check_for_tomcatoptions();
+check_for_sneaky_htaccess();
+check_perl_sanity();
+check_for_non_default_permissions();
+check_awstats_permissions();
+check_var_cpanel_users_files_ownership();
+check_root_suspended();
+check_limitsconf();
+check_disk_space();
+check_disk_inodes();
+check_for_hooks();
+check_for_huge_apache_logs();
+check_easy_skip_cpanelsync();
+check_pkgacct_override();
+check_for_gdm();
+check_for_redhat_firewall();
+check_easyapache();
+check_for_easyapache_hooks();
+check_for_home_noexec();
+check_for_nat();
+check_for_etc_hosts_no_loopback();
+check_for_portreserve_entries();
+check_for_oracle_linux();
+check_for_usr_local_cpanel_hooks();
+check_for_sql_safe_mode();
+check_mysql_non_default_datadir();
+check_for_domain_forwarding();
+check_for_empty_apache_templates();
+check_for_empty_postgres_config();
+check_for_empty_easyapache_profiles();
+check_for_missing_timezone_from_phpini();
+check_for_proc_mdstat_recovery();
+check_usr_local_cpanel_path_for_symlinks();
+check_for_system_mem_below_512M();
+
+# [3RDP]
+check_for_assp();
+check_for_varnish();
+check_for_litespeed();
+check_for_nginx();
+check_for_mailscanner();
+check_for_apf();
+check_for_csf();
+check_for_prm();
+check_for_les();
+check_for_1h();
+check_for_webmin();
+
+# This is run closer to the end since it has the potential to take the longest
+print "\n";
+build_rpm_list();
+
+# These require build_rpm_list() to have been run, so that @rpm_list is populated
+check_for_additional_rpms();
+check_mysql_rpm_mismatch();
+check_php_libmysqlclient_mismatch();
+
+sub check_for_dnsonly {
+    my $dnsonly;
+
+    if ( -e '/var/cpanel/dnsonly' ) {
+        $dnsonly = 1;
+    }
+
+    if ( $dnsonly ) {
+        print_start( 'DNSONLY: ' );
+        print_warning( '/var/cpanel/dnsonly detected, assuming DNSONLY' );
+        print_version();
+        print_hostname();
+        print_os();
+        check_selinux_status();
+        check_runlevel();
+        print_cpanel_birthday();
+        print_cpanel_version();
+        check_for_cpanel_update();
+        check_if_upcp_is_running();
+        print_kernel_and_cpu();
+        check_for_sandy_bridge();
+        print_perl_version();
+        print_uptime();
+        check_interface_lo();
+        check_for_lve_environment();
+        check_sysinfo();
+        check_perl_sanity();
+        check_limitsconf();
+        check_disk_space();
+        check_disk_inodes();
+        check_for_apf();
+        check_for_csf();
+        check_for_prm();
+        check_for_les();
+        check_for_1h();
+        
+        exit;
+    }
+}
+
+sub print_version {
+    print BOLD YELLOW ON_BLACK "\tSSP $version (use ssp.cptechs.info/ssp.previous for previous version)\n\n";
+}
+
+sub get_process_list {
+
+    ## used for checking for nginx, litespeed, mailscanner, etc. 
+    ## better (?) would be to run lsof and check process names on listening ports.
+
+    my @process_list;
+    my $process_list = Cpanel::SafeRun::Errors::saferunnoerror( 'ps', 'axwwwf', '-o', 'user,cmd' );
+    if ( $process_list ) { 
+        @process_list = split /\n/, $process_list;
+    }
+
+    return @process_list;
+}
+
+sub get_hostinfo {
+    my %hostinfo = (
+        'kernel'        => Cpanel::SafeRun::Errors::saferunnoerror('uname', '-r' ),
+        'hardware'      => Cpanel::SafeRun::Errors::saferunnoerror('uname', '-i' ),
+        'environment'   => get_environment(),
+    );   
+
+    return %hostinfo;
+}
+
+sub get_environment {
+    if ( open my $envtype_fh, '<', '/var/cpanel/envtype' ) {
+        my $envtype = readline( $envtype_fh );
+        close $envtype_fh;
+        return $envtype;
+    }    
+    else {
+        return 'Unknown (could not open/read /var/cpanel/envtype ?)';
+    }    
+}
+
+sub get_cpuinfo {
+    my %cpuinfo;
+    open( my $cpuinfo_fh, '<', '/proc/cpuinfo' );
+
+    for my $line ( readline $cpuinfo_fh ) {
+        if ( $line =~ /^model name/m ) {
+            $line =~ s/^model name\s+:\s+//;
+            $line =~ s/\(R\)//g;
+            $line =~ s/\(tm\)//g;
+            $line =~ s/\s{2,}/ /;
+            $line =~ s/ \@/\@/;
+            $cpuinfo{'model'} = $line;
+            $cpuinfo{'numcores'}++;
+        }
+        if ( $line =~ /^cpu MHz/m ) {
+            $line =~ s/^cpu MHz\s+:\s+//;
+            $cpuinfo{'mhz'} = $line;
+        }
+    }    
+    close $cpuinfo_fh;
+    return %cpuinfo;
+}
+
+sub get_cpuinfo_freebsd {
+    my %cpuinfo;
+    my $numcores = Cpanel::SafeRun::Errors::saferunnoerror( 'sysctl', 'hw.ncpu' );
+    my $model = Cpanel::SafeRun::Errors::saferunnoerror( 'sysctl', 'hw.model' );
+    $numcores =~ s/^hw.ncpu://g;
+    $model =~ s/^hw.model://g;
+    $model =~ s/\s+/ /g;
+    $cpuinfo{'numcores'} = $numcores;
+    $cpuinfo{'model'} = $model;
+
+    return %cpuinfo;
+}
+
+sub print_info {
+    my $text = shift;
+    print BOLD YELLOW ON_BLACK "[INFO] * $text";
+}
+sub print_warn {
+    my $text = shift;
+    print BOLD RED ON_BLACK "[WARN] * $text";
+}
+sub print_3rdp {
+    my $text = shift;
+    print BOLD GREEN ON_BLACK "[3RDP] * $text";
+}
+sub print_3rdp2 {
+    my $text = shift;
+    print BOLD GREEN ON_BLACK "$text\n";
+}
+
+## precedes informational items (e.g., "Hostname:")
+sub print_start {
+    my $text = shift;
+    print BOLD YELLOW ON_BLACK $text;
+}
+## for informational items (e.g., the server's hostname)
+sub print_normal {
+    my $text = shift;
+    print BOLD CYAN ON_BLACK "$text\n";
+}
+## for important things (e.g., "Hostname is not a FQDN")
+sub print_warning {
+    my $text = shift;
+    print BOLD RED ON_BLACK "$text\n";
+}
+## for other imporant things (e.g., "You are in an LVE, do not restart services")
+sub print_warning_underline {
+    my $text = shift;
+    print BOLD UNDERLINE "$text\n";
+}
+sub print_info2 {
+    my $text = shift;
+    print BOLD GREEN ON_BLACK "$text\n";
+}
+
+##############################
+#  BEGIN [INFO] CHECKS
+##############################
+
+sub print_hostname {
+    my $hostname = hostname();
+
+    print_info( 'Hostname: ' );
+
+    if ( $hostname !~ /([\w-]+)\.([\w-]+)\.(\w+)/ ) { 
+        print_warning( "$hostname is not a FQDN ( en.wikipedia.org/wiki/Fully_qualified_domain_name )" );
+    }   
+    else {
+        print_normal( $hostname );
+    }   
+}
+
+sub print_os {
+    my $release_info;
+
+    print_info( 'OS: ' );
+
+    if ( -e '/etc/redhat-release' ) { 
+        if ( open my $rr_fh, '<', '/etc/redhat-release' ) { 
+            while ( <$rr_fh> ) { 
+                chomp( $release_info = $_ );
+            }
+            close $rr_fh;
+        }
+        print_normal( $release_info . " ($hostinfo{'environment'})" );
+    }    
+    elsif ( $os eq 'freebsd' ) { 
+        print_normal( 'FreeBSD' );
+    }
+    else {
+        print_warning( "Unknown (no /etc/redhat-release, and not FreeBSD)" );
+    }
+}
+
+sub print_kernel_and_cpu {
+    print_info( 'Kernel/CPU: ');
+    print_normal( "$hostinfo{'kernel'} $hostinfo{'hardware'} $hostinfo{'environment'} $cpuinfo{'model'} w/ $cpuinfo{'numcores'} core(s)" );
+}
+
+sub print_cpanel_birthday {
+    my ( $birthday_file, $atime );
+
+    ## cpanel-install-thread0.log is better to be checked before cpanel-install.log
+    if ( -f '/var/log/cpanel-install-thread0.log' ) {
+        $birthday_file = '/var/log/cpanel-install-thread0.log';
+    }    
+    elsif ( -f '/var/log/cpanel-install.log' ) {
+        $birthday_file = '/var/log/cpanel-install.log';
+    }    
+
+    if ( $birthday_file ) {
+        my $ctime = ( stat( $birthday_file ))[9];
+        my $birthday = localtime $ctime;
+        print_info( 'cPanel Birthday: ' );
+        print_normal( $birthday );
+    }    
+}
+
+sub print_cpanel_version {
+    my ( $cpanel_version, $cpanel_tier );
+
+    if ( open my $version_fh, '<', '/usr/local/cpanel/version' ) {
+        while ( <$version_fh> ) {
+            chomp( $cpanel_version = $_ );
+        }
+        close $version_fh;
+    }
+    else {
+        $cpanel_version = 'Unknown (could not open/read /u/l/c/version ?)';
+    }
+
+    if ( open my $cpupdate_fh, '<', '/etc/cpupdate.conf' ) {
+        while ( <$cpupdate_fh> ) {
+            if ( m{ \A CPANEL=(.*) }xmsi ) {
+                chomp( $cpanel_tier = $1 );
+            }
+        }
+    }
+    else {
+        $cpanel_tier = 'Unknown (could not open/read /etc/cpupdate.conf ?)';
+    }
+
+    my $ctime = ( stat( '/usr/local/cpanel/version' ))[10];
+    my $last_update = time() - $ctime;
+    $last_update = $last_update / 86400;
+    $last_update = sprintf '%.1f', $last_update;
+
+    print_info( 'cPanel Version: ' );
+    print_normal( "${cpanel_version}-" . uc( $cpanel_tier ) . " (Last updated $last_update days ago)" );
+}
+
+sub check_for_cpanel_update {
+
+    my ( $local_tier_name, $local_tier_version, $remote_tier_version );
+
+    ## get local tier name 
+    if ( open my $cpupdateconf_fh, '<', '/etc/cpupdate.conf' ) {
+        while ( <$cpupdateconf_fh> ) {
+            if ( m{ \A CPANEL=([\w\d\.]+) }xms ) {
+                chomp( $local_tier_name =  lc( $1 ) );
+            }
+        }
+        close $cpupdateconf_fh;
+    }    
+    else {
+        $local_tier_name = "Unknown ( can't open/read /etc/cpupdate.conf ?)";
+    }    
+
+    ## get local tier version
+    if ( open my $cpanel_version_fh, '<', '/usr/local/cpanel/version' ) {
+        while ( <$cpanel_version_fh> ) {
+            chomp( $local_tier_version = $_ );
+        }
+        close $cpanel_version_fh;
+    }    
+    else {
+        $local_tier_version = "Unknown (could not open/read /u/l/c/version ?)";
+    }    
+
+    if ( $local_tier_name !~ /Unknown/ ) {
+        if ( $local_tier_version !~ /Unknown/ ) {
+
+            ## compare the local tier version with that of the currently available version.
+            local $SIG{'ALRM'} = sub { return(); };
+            alarm 5;
+            my $updatefile = get( 'http://httpupdate.cpanel.net/cpanelsync/TIERS' );
+            alarm 0;
+
+            if ( ! $updatefile ) {
+                print_info( 'cPanel update check: ' );
+                print_warning( 'Request timed out for http://httpupdate.cpanel.net/cpanelsync/TIERS' );
+            }
+            return if ! $updatefile;
+
+            if ( $updatefile =~ m{ $local_tier_name : (\d+\.\d+\.\d+\.\d+) }xms ) {
+                $remote_tier_version = $1;
+            }
+
+            my $local_tier_version_converted = $local_tier_version;
+            $local_tier_version_converted =~ s/\.//g;
+            my $remote_tier_version_converted = $remote_tier_version;
+            $remote_tier_version_converted =~ s/\.//g;
+
+            ## FreeBSD won't ever go past 11.30
+            ## http://www.cpanel.net/products/cpanelwhm/system-requirements.html
+            return if ( ( $os eq 'freebsd' ) && substr( $local_tier_version_converted, 0, 4 ) == '1130' );
+
+            if ( $local_tier_version_converted < $remote_tier_version_converted ) {
+                print_info( 'cPanel update check: ' );
+                print_warning( " UPDATE AVAILABLE: $local_tier_version -> $remote_tier_version" );
+            }
+        }
+    }
+}
+
+sub print_perl_version {
+    my $perl_v = Cpanel::SafeRun::Errors::saferunnoerror( 'perl', '-v' );
+    my @perl_v = split /\n/, $perl_v;
+
+    my $perl_version;
+    for my $line ( @perl_v ) {
+        if ( $line =~ m{ \A This \s is \s perl, \s (\S+) \s }xms ) {
+            $perl_version = $1;
+            last;
+        }
+    }    
+
+    if ( $perl_version ) {
+        print_info( 'Perl Version: ' );
+        print_normal( $perl_version );
+    }    
+    else {
+        print_info( 'Perl Version: ' );
+        print_warning( 'could not determine perl version (perl -v)' );
+    }    
+}
+
+sub print_uptime {
+    chomp( my $uptime = Cpanel::SafeRun::Errors::saferunnoerror( 'uptime' ) ); 
+    print_info( 'Uptime: ');
+    print_normal( $uptime );
+}
+
+sub check_for_clustering {
+    if ( -e '/var/cpanel/useclusteringdns' ) {
+        print_info( 'DNS Clustering: ' );
+        print_normal( 'is enabled' );
+    }
+}
+
+sub print_apache_version {
+
+    my ( $apache_version, $apache_built, $apache_ea_version );
+
+    if ( -x $apache_bin ) {
+        my $apache_bin_output = Cpanel::SafeRun::Errors::saferunnoerror( $apache_bin, '-v' );
+        my @apache_bin_output = split /\n/, $apache_bin_output;
+        for my $line ( @apache_bin_output ) {
+            if ( $line =~ m{ \A Server \s version: \s (.*) \z }xms ) {
+                $apache_version = $1;
+            }
+            if ( $line =~ m{ \A Server \s built: \s (.*) \z }xms ) {
+                $apache_built = $1;
+            }
+            if ( $line =~ m{ \A Cpanel::Easy::Apache \s (.*) \z }xms ) {
+                $apache_ea_version = $1;
+            }
+        }
+
+        if ( ! $apache_version or ! $apache_built or ! $apache_ea_version ) {
+            print_info( 'Apache Info: ' );
+            print_warning( 'could not determine Apache info!' );
+        }
+        else {
+            print_info( 'Apache Version: ' );
+            print_normal( $apache_version );
+            print_info( 'Apache Built: ' );
+            print_normal( "$apache_built w/ $apache_ea_version" );
+        }
+    }    
+    else {
+        print_info( 'Apache Info: ' );
+        print_warning( "$apache_bin not executable?" );
+    }    
+}
+
+sub print_apache_uptime {
+    my ( $apache_uptime, $apache_generations );
+
+    local $SIG{'ALRM'} = sub {};
+    alarm 5;
+    my $apache_status = get( 'http://localhost/whm-server-status' );
+    alarm 0;
+
+    if ( $apache_status ) {
+        my @apache_status = split /\n/, $apache_status;
+
+        for my $line ( @apache_status ) {
+            if ( $line =~ m{ Server \s uptime: \s (.*) </dt> }xms ) {
+                $apache_uptime = $1;
+            }
+            if ( $line =~ m{ Parent \s Server \s Generation: (.*) </dt> }xms ) {
+                $apache_generations = $1;
+            }
+        }
+        if ( $apache_uptime and $apache_generations ) {
+            print_info( 'Apache uptime: ' );
+            print_normal( "$apache_uptime w/ $apache_generations generation(s)" );
+        }
+    }    
+    else {
+        print_info( 'Apache uptime: ' );
+        print_warning( 'Apache is not up (failed: http://localhost/whm-server-status)' );
+    }    
+}
+
+sub print_php_configuration {
+    my $phpconf = '/usr/local/apache/conf/php.conf.yaml';
+    return if ! -f $phpconf;
+
+    my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexec );
+
+    open my $phpconf_fh, '<', $phpconf;
+    while ( <$phpconf_fh> ) {
+        if ( /^phpversion: (\d)/ ) {
+            $phpversion = $1;
+        }
+        if ( /^php4: (.*)/ ) {
+            $php4handler = $1;
+        }
+        if ( /^php5: (.*)/ ) {
+            $php5handler = $1;
+        }
+        if ( /^suexec: (.*)/ ) {
+            $suexec = $1;
+        }
+    }    
+    close $phpconf_fh;
+
+    if ( $suexec eq 1 ) {
+        $suexec = '/w suexec';
+    }    
+    else {
+        $suexec = 'without suexec';
+    }    
+
+    if ( $phpversion == 5 ) {
+        if ( -x '/usr/bin/php' ) {
+            my $php_v = Cpanel::SafeRun::Errors::saferunnoerror( '/usr/bin/php', '-v' );
+            my @php_v = split /\n/, $php_v;
+            if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
+                $php5version = $1;
+            }
+            else {
+                $php5version = '(version unknown)';
+            }
+
+            print_info( 'PHP Default: ' );
+            print_normal( "PHP $php5version $php5handler $suexec" );
+        }
+
+        if ( $php4handler ne 'none' ) {
+            my $php_v = Cpanel::SafeRun::Errors::saferunnoerror( '/usr/local/php4/bin/php', '-v' );
+            my @php_v = split /\n/, $php_v;
+            if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
+                $php4version = $1;
+            }
+            else {
+                $php4version = '(version unknown)';
+            }
+
+            print_info( 'PHP Secondary: ' );
+            print_normal( "PHP $php4version $php4handler $suexec" );
+        }
+    }
+
+    if ( $phpversion == 4 ) {
+        if ( -x '/usr/local/php4/bin/php' ) {
+            my $php_v = Cpanel::SafeRun::Errors::saferunnoerror( '/usr/local/php4/bin/php', '-v' );
+            my @php_v = split /\n/, $php_v;
+            if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
+                $php4version = $1;
+            }
+            else {
+                $php4version = '(version unknown)';
+            }
+
+            print_info( 'PHP Default: ' );
+            print_normal( "PHP $php4version $php4handler $suexec" );
+        }
+
+        if ( $php5handler ne 'none' ) {
+            my $php_v = Cpanel::SafeRun::Errors::saferunnoerror( '/usr/bin/php', '-v' );
+            my @php_v = split /\n/, $php_v;
+            if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
+                $php5version = $1;
+            }
+            else {
+                $php5version = '(version unknown)';
+            }
+
+            print_info( 'PHP Secondary: ' );
+            print_normal( "PHP $php5version $php5handler $suexec" );
+        }
+    }
+}
+
+sub check_sysinfo {
+    return if ! -x '/scripts/gensysinfo';
+
+    my $sysinfo_config = '/var/cpanel/sysinfo.config';
+
+    my ( $release, $ises ) = Cpanel::Sys::OS::getreleaseversion();
+    chomp( my $arch = Cpanel::SafeRun::Errors::saferunnoerror( 'uname', '-i' ) );
+
+    my $rebuild = 0;
+
+    if ( ! -e $sysinfo_config ) {
+        print_info( 'sysinfo: ' );
+        print_warning( 'does not exist, running /scripts/gensysinfo to fix' );
+        Cpanel::SafeRun::Errors::saferunnoerror( '/scripts/gensysinfo' );
+    }
+    else {
+        open my $sysinfo_fh, '<', $sysinfo_config;
+        while ( <$sysinfo_fh> ) {
+            chomp;
+            if ( m{ \A rpm_arch=(.*) }xms ) {
+                if ( $os eq 'freebsd' ) {
+                    $rebuild = 0;
+                }
+                elsif ( $arch ne $1 ) {
+                    $rebuild = 1;
+                }
+            }
+            if ( m{ \A release=(.*) }xms ) {
+                if ( $release ne $1 ) {
+                    $rebuild = 1;
+                }
+            }
+            if ( m{ \A ises=(.*) }xms ) {
+                if ( $ises ne $1 ) {
+                    $rebuild = 1;
+                }
+            }
+        }
+        close $sysinfo_fh;
+    }
+
+    if ( $rebuild == 1 ) {
+        Cpanel::SafeRun::Errors::saferunnoerror( 'mv', $sysinfo_config, "${sysinfo_config}.ssp.$^T" );
+        Cpanel::SafeRun::Errors::saferunnoerror( '/scripts/gensysinfo' );
+        print_info( 'sysinfo: ' );
+        print_warning( '/var/cpanel/sysinfo.config contained errors and was rebuilt' );
+    }
+}
+
+sub check_for_remote_mysql {
+    my $mysql_host;
+    my $mysql_is_local;
+
+    ## obtain mysql host, if exists
+    my $my_cnf = '/root/.my.cnf';
+    if ( open my $my_cnf_fh, '<', $my_cnf ) {
+        while ( <$my_cnf_fh> ) {
+            chomp( my $line = $_ );
+            if ( $line =~ m{ \A host \s* = \s* (?:"?) ([^"]+) }xms ) {
+                $mysql_host = $1;
+            }
+        }
+        close $my_cnf;
+    }
+
+    if ( $mysql_host ) {
+        if ( $mysql_host =~ m{ ( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3} )  }xms ) {
+            return if ( $mysql_host eq '127.0.0.1' );
+            for my $ipaddr ( @local_ipaddrs_list ) {
+                if ( $ipaddr eq $mysql_host ) {
+                    $mysql_is_local = 1;
+                    last;
+                }
+            }
+        }
+        elsif ( $mysql_host eq 'localhost' or $mysql_host eq hostname() ) {
+            $mysql_is_local = 1;
+        }
+        if ( !$mysql_is_local ) {
+            print_info( 'Remote MySQL Host: ' );
+            print_warning( $mysql_host );
+        }
+    }
+}
+
+sub print_if_using_mydns_or_nsd {
+    if ( -e '/var/cpanel/usensd' ) {
+        print_info( 'DNS Service: ' );
+        print_normal( 'NSD ' );
+    }
+    elsif ( -e '/var/cpanel/usemydns' ) {
+        print_info( 'DNS Service: ' );
+        print_normal( 'MyDNS ' );
+    }
+}
+
+##############################
+#  END [INFO] CHECKS
+##############################
+
+##############################
+#  BEGIN [WARN] CHECKS
+##############################
+
+sub check_selinux_status {
+    my @selinux_status = Cpanel::SafeRun::Errors::saferunnoerror( 'sestatus' );
+
+    return if ! @selinux_status;
+
+    for my $line ( @selinux_status ) {
+        if ( $line =~ m{ \A Current \s mode: \s+ enforcing }xms ) {
+            print_warn( 'SELinux: ' );
+            print_warning( 'enabled and enforcing!' );
+        }
+    }    
+}
+
+sub check_runlevel {
+    if ( $os eq 'linux' ) {
+        my $runlevel;
+        my $who_r = Cpanel::SafeRun::Errors::saferunnoerror( 'who', '-r' );
+
+        # CentOS 5.7, 5.8:
+        #         run-level 3  2012-01-25 10:38                   last=S
+        if ( $who_r =~ m{ \A \s+ run-level \s (\d) }xms ) {
+            $runlevel = $1;
+
+            if ( $runlevel != '3' ) {
+                print_warn( 'Runlevel: ' );
+                print_warning(  "runlevel is not 3 (current runlevel: $runlevel)" );
+            }
+        }
+    }    
+}
+
+sub check_for_missing_root_cron {
+    return if ( $os eq 'freebsd' );
+    return if ( $< != 0 );
+    
+    if ( ! -f '/var/spool/cron/root' ) {
+        print_warn( 'Missing cron: ' );
+        print_warning( 'root\'s cron file is missing!' );
+    }
+}
+
+sub check_if_upcp_is_running {
+    my $upcp_running = 0;
+    
+    for my $line ( @process_list ) {
+        if ( $line =~ m{ \A root (?:.*) upcp }xms ) {
+            $upcp_running = 1;
+            last;
+        }
+    }
+
+    if ( $upcp_running == 1 ) {
+        print_warn( 'upcp check: ' );
+        print_warning( 'upcp is currently running' );
+    }
+}
+
+sub check_valid_upcp {
+    my $updatenow_static = '/scripts/updatenow.static';
+    my $updatenow_valid = 0;
+
+    if ( ! -f $updatenow_static ) {
+        print_warn( 'Valid updatenow.static: ' );
+        print_warning( "$updatenow_static does not exist as a file!" );
+    }
+    else {
+        open my $updatenow_fh, '<', $updatenow_static;
+        while ( <$updatenow_fh> ) {
+            if ( /our \$VERSION_BUILD/ ) {
+                $updatenow_valid = 1;
+                last;
+            }
+        }
+        close $updatenow_fh;
+    }
+    if ( ! $updatenow_valid ) {
+        print_warn( 'Valid updatenow.static: ' );
+        print_warning( "No VERSION_BUILD info found in $updatenow_static, could be broken!" );
+    }
+}
+
+sub check_for_sandy_bridge {
+    return if ! -e '/proc/cpuinfo';
+
+    my $sandy_bridge = 0; 
+
+    my $release_version = Cpanel::Sys::OS::getreleaseversion();
+    $release_version =~ s/\.//g;
+
+    # CentOS/RHEL 5 is not affected
+    return if ( $release_version < 60 );
+
+    # QEMU + CentOS 6.3 could be affected if using Sandy Bridge.
+    # No way to determine if using Sandy Bridge, however.
+    if ( $release_version == 63 and $cpuinfo{'model'} =~ m{ QEMU }ixms ) {
+        print_warn( 'QEMU + CentOS 6.3: ' );
+        print_warning( 'if server is using Sandy Bridge CPU, could be affected by the AVX issue' );
+        return;
+    }
+
+    # If we make it here, only check CentOS/RHEL 6.0 - 6.2
+    if ( $release_version !~ m{ \A ( 6[0-2] ) \z }xms ) {
+        return;
+    }
+
+    if ( open my $cpuinfo_fh, '<', '/proc/cpuinfo' ) {
+        while ( <$cpuinfo_fh> ) {
+            chomp;
+
+            # http://en.wikipedia.org/wiki/Sandy_Bridge#Server_platform
+            if ( /^model name/ && /Xeon/ && m{    46(\d{2})
+                                                | 12(2|6)0L
+                                                | 24(3|5)0L
+                                                | 26(3|5)0L
+                                                | 12([2-4]|7)5
+                                                | 12([2-4]|[7-9])0
+                                                | 16(2|[5-6])0
+                                                | 240(3|7)
+                                                | 24([2-5]|7)0
+                                                | 260(3|9)
+                                                | 26([2-9])0
+                                                | 26(37|43)
+                                                | 266(5|7)
+                                                | 2687W
+                                            }xms && ! /E(\d{5})/ ) {
+                $sandy_bridge = 1; 
+            }
+        }
+        close $cpuinfo_fh;
+    }    
+
+    if ( $sandy_bridge == 1 ) {
+        print_warn( 'AVX / Sandy Bridge: ' );
+        print_warning( 'detected! compile ssp.cptechs.info/glibc_avx.tar.gz and run ./exe (check for "Illegal instruction")' );
+    }
+}
+
+
+sub check_interface_lo {
+    my $is_up = 0;
+   
+    if ( $os eq 'freebsd' ) {
+        my $iconfig_lo = Cpanel::SafeRun::Errors::saferunnoerror( 'ifconfig', 'lo0' );
+        if ( $iconfig_lo =~ /UP,/ ) {
+            $is_up = 1;
+        }
+    }
+    else { 
+        my $ifconfig_lo = Cpanel::SafeRun::Errors::saferunnoerror( 'ifconfig', 'lo' );
+
+        if ( $ifconfig_lo =~ /UP LOOPBACK/ ) {
+            $is_up = 1;
+        }
+    }
+
+    if ( ! $is_up ) {
+        print_warn( 'Loopback Interface: ' );
+        print_warning( 'loopback interface is not up!' );
+    }
+    else {
+        check_loopback_connection();
+    }
+}
+
+sub check_loopback_connection {
+    my @ports = qw( 25 80 143 );
+    my $connected = 0;
+
+    for my $port ( @ports ) {
+        my $sock = IO::Socket::INET->new(
+            PeerAddr    => '127.0.0.1',
+            PeerPort    => $port,
+            Proto       => 'tcp',
+            Timeout     => '1',
+        );
+    
+        if ( $sock ) {
+            $connected = 1;
+            close $sock;
+        }
+
+        last if $connected == 1;
+    }
+
+    if ( !$connected ) {
+        print_warn( 'Loopback connectivity: ' );
+        print_warning( 'could not connect to 127.0.0.1 on ports 25, 80, or 143' );
+    }
+}
+
+sub check_cpanelconfig_filetype {
+    chomp( my $file = Cpanel::SafeRun::Errors::saferunnoerror( 'file', '/var/cpanel/cpanel.config' ) ); 
+    if ( $file !~ m{ \A /var/cpanel/cpanel.config: \s ASCII \s text \z }xms ) {
+        print_warn( '/var/cpanel/cpanel.config: ' );
+        print_warning( "filetype is something other than 'ASCII text'! ($file)" );
+    }    
+}
+
+sub check_for_cpanelsync_exclude {
+    my $cpanelsync_exclude = '/etc/cpanelsync.exclude';
+    if ( -f $cpanelsync_exclude and ! -z $cpanelsync_exclude ) {
+        print_warn( 'cpanelsync exclude: ' );
+        print_warning( "$cpanelsync_exclude is not empty!" );
+    }    
+}
+
+sub check_for_lve_environment {
+
+# pam_lve 0.2 prints this after su or sudo:
+#
+# # /bin/su -
+# Password: 
+# ***************************************************************************
+# *                                                                         *
+# *             !!!!  WARNING: YOU ARE INSIDE LVE !!!!                      *
+# *IF YOU RESTART ANY SERVICES STABILITY OF YOUR SYSTEM WILL BE COMPROMIZED *
+# *        CHANGE UID OF THE USER YOU ARE USING TO SU/SUDO                  *
+# *                             MORE INFO:                                  *
+# *http://www.cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php*
+# *                                                                         *
+# ***************************************************************************
+
+# pam_lve 0.3 won't put wheel users in an LVE after su or sudo:
+# http://cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php
+
+    if ( $hostinfo{'kernel'} =~ /\.lve/ and -x '/usr/sbin/lveps' ) {
+        my $lve_check = `/usr/sbin/lveps -p | grep " $$ "`;
+        if ( $lve_check ) {
+            print "\n";
+            print_warning_underline( ' !! YOU ARE IN AN LVE - DO *NOT* RESTART ANY SERVICES !!' );
+            print_warning_underline( ' !! YOU ARE IN AN LVE - DO *NOT* RESTART ANY SERVICES !!' );
+            print_warning_underline( ' !! YOU ARE IN AN LVE - DO *NOT* RESTART ANY SERVICES !!' );
+            print "\n";
+        }
+    }    
+}
+
+sub check_for_rawopts {
+    my $rawopts_dir = '/var/cpanel/easy/apache/rawopts';
+    my @dir_contents;
+
+    if ( -d $rawopts_dir ) {
+        opendir( my $dir_fh, $rawopts_dir );
+        @dir_contents = grep { ! /^\.(\.?)$/ } readdir $dir_fh;
+        closedir $dir_fh;
+    }
+ 
+    if ( @dir_contents ) {
+        print_warn( 'Rawopts Detected: ' );
+        print_warning( 'check /var/cpanel/easy/apache/rawopts !' );
+    }       
+}
+
+sub check_for_rawenv {
+    my $rawenv_dir = '/var/cpanel/easy/apache/rawenv';
+    my @dir_contents;
+
+    if ( -d $rawenv_dir ) {
+        opendir( my $dir_fh, $rawenv_dir );
+        @dir_contents = grep { ! /^\.(\.?)$/ } readdir $dir_fh;
+        closedir $dir_fh;
+    }
+
+    if ( @dir_contents ) {
+        print_warn( 'Rawenv detected: ' );
+        print_warning( 'check /var/cpanel/easy/apache/rawenv !' );
+    }
+}
+
+sub check_for_custom_opt_mods {
+    my $custom_opt_mods;
+    my $dir = '/var/cpanel/easy/apache/custom_opt_mods';
+    find( \&find_custom_opt_mods, $dir );
+
+    if ( @custom_opt_mods ) {
+        for my $custom_opt_mod ( @custom_opt_mods ) {
+            $custom_opt_mods .= "$custom_opt_mod ";
+        }
+
+        print_warn( "$dir: " );
+        print_warning( $custom_opt_mods );
+    }
+}
+
+sub find_custom_opt_mods {
+    # ignore these, Attracta:
+    #  /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm
+    #  /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm.tar.gz
+
+    my $file = $File::Find::name;
+    if ( -f $file and $file !~ m{ /ModFastInclude\.pm(.*) }xms ) {
+        $file =~ s#/var/cpanel/easy/apache/custom_opt_mods/##;
+        push @custom_opt_mods, $file;
+    }
+}
+
+sub check_for_local_apache_templates {
+    my $apache2_template_dir = '/var/cpanel/templates/apache2';
+    my @dir_contents;
+
+    if ( -d $apache2_template_dir ) {
+        opendir( my $dir_fh, $apache2_template_dir );
+        @dir_contents = readdir $dir_fh;
+        closedir $dir_fh;
+    }    
+
+    my $templates;
+    for my $template ( @dir_contents ) {
+        if ( $template =~ m{ \.local \z }xms ) {
+            $templates .= " $template";
+        }
+    }
+
+    if ( $templates ) {
+        print_warn( 'Custom apache2 templates: ' );
+        print_warning( $templates );
+    }
+}
+
+sub check_for_local_makecpphp_template {
+    my $makecpphp_local_profile = '/var/cpanel/easy/apache/profile/makecpphp.profile.yaml.local';
+
+    if ( -e $makecpphp_local_profile ) {
+        print_warn( 'makecpphp Local Profile: ' );
+        print_warning( "exists at $makecpphp_local_profile !" );
+    }
+}
+
+sub check_for_custom_apache_includes {
+    my $include_dir = '/usr/local/apache/conf/includes';
+
+    return if ! $include_dir;
+
+    my @includes = qw(
+        post_virtualhost_1.conf
+        post_virtualhost_2.conf
+        post_virtualhost_global.conf
+        pre_main_1.conf
+        pre_main_2.conf
+        pre_main_global.conf
+        pre_virtualhost_1.conf
+        pre_virtualhost_2.conf
+        pre_virtualhost_global.conf
+    );
+
+    my $custom_includes;
+    for my $include ( @includes ) {
+        if ( ! -z "${include_dir}/${include}" ) {
+            $custom_includes .= " $include";
+        }
+    }
+
+    if ( $custom_includes ) {
+        print_warn( 'Apache Includes: ' );
+        print_warning( $custom_includes );
+    }
+}
+
+sub check_for_tomcatoptions {
+    my $tomcat_options = '/var/cpanel/tomcat.options';
+    if ( -f $tomcat_options and ! -z $tomcat_options ) {
+        print_warn( 'Tomcat options: ' );
+        print_warning( "$tomcat_options exists" );
+    }
+}
+
+sub check_for_sneaky_htaccess {
+    ## this is lazy checking. ideally we'd check HOMEMATCH from wwwacct.conf and go from there.
+    ## but then, nothing guarantees the current HOMEMATCH has always been the same, either.
+    my @dirs = qw( / /home/ /home2/ /home3/ /home4/ /home5/ /home6/ /home7/ /home8/ /home9/ );
+    my $htaccess;
+
+    for my $dir ( @dirs ) {
+        if ( -f $dir . '.htaccess' and ! -z $dir . '.htaccess' ) {
+            $htaccess .= $dir . '.htaccess ';
+        }
+    }
+
+    if ( $htaccess ) {
+        print_warn( 'Sneaky .htaccess file(s) found: ' );
+        print_warning( $htaccess );
+    }
+}
+
+sub check_perl_sanity {
+    my $usr_bin_perl = '/usr/bin/perl';
+    my $usr_local_bin_perl = '/usr/local/bin/perl';
+
+    if ( ! $usr_bin_perl ) {
+        print_warn( 'perl: ' );
+        print_warning( "$usr_bin_perl does not exist!" );
+    }
+    if ( ! $usr_local_bin_perl ) {
+        print_warn( 'perl: ' );
+        print_warning( "$usr_local_bin_perl does not exist!" );
+    }
+
+    if ( -l $usr_bin_perl and -l $usr_local_bin_perl ) {
+        my $usr_bin_perl_link = readlink $usr_bin_perl;
+        my $usr_local_bin_perl_link = readlink $usr_local_bin_perl;
+        if ( -l $usr_bin_perl_link and -l $usr_local_bin_perl_link ) {
+            print_warn( 'perl: ' );
+            print_warning( "$usr_bin_perl and $usr_local_bin_perl are both symlinks!" );
+        }
+    }
+
+    ## a symlink will test true for both -x AND -l
+    if ( -x $usr_bin_perl and ! -l $usr_bin_perl ) {
+        if ( -x $usr_local_bin_perl and ! -l $usr_local_bin_perl ) {
+            print_warn( 'perl: ' );
+            print_warning( "$usr_bin_perl and $usr_local_bin_perl are both binaries!" );
+        }
+    }
+
+    if ( -x $usr_bin_perl and ! -l $usr_bin_perl ) {
+        my $mode = ( stat( $usr_bin_perl ))[2] & 07777;
+        $mode = sprintf "%lo", $mode;
+        if ( $mode != '755' ) {
+            print_warn( 'Perl Permissions: ' );
+            print_warning( "$usr_bin_perl is $mode" );
+        }
+    }
+
+    if ( -x $usr_local_bin_perl and ! -l $usr_local_bin_perl ) {
+        my $mode = ( stat( $usr_local_bin_perl ))[2] & 07777;
+        $mode = sprintf "%lo", $mode;
+        if ( $mode != '755' ) {
+            print_warn( 'Perl Permissions: ' );
+            print_warning( "$usr_local_bin_perl is $mode" );
+        }
+    }
+}
+
+sub check_for_non_default_permissions {
+    my %resources_and_perms = (
+        '/'                     => '755',
+        '/bin'                  => '755',
+        '/sbin'                 => '755',
+        '/usr/bin'              => '755',
+        '/usr/sbin'             => '755',
+        '/usr/local/bin'        => '755',
+        '/usr/local/sbin'       => '755',
+        '/opt'                  => '755',
+        '/tmp'                  => '1777',
+        '/usr'                  => '755',
+        '/var'                  => '755',
+        '/root/cpanel3-skel'    => '755',
+        '/usr/local/apache'     => '755',
+        '/var/cpanel/locale'    => '755',
+        '/etc/passwd'           => '644',
+        '/etc/group'            => '644',
+        '/etc/hosts'            => '644',
+        '/etc/stats.conf'       => '644',
+        '/etc/nsswitch.conf'    => '644',
+    );
+
+    for my $resource ( keys %resources_and_perms ) {
+        if ( -e $resource ) {
+            my $mode = ( stat( $resource ))[2] & 07777;
+            $mode = sprintf "%lo", $mode;
+            if ( $mode != $resources_and_perms{$resource} ) {
+                next if ( $resource =~ '^(/(s?)bin|/usr/bin|/)$' and $mode == '555' ); # CentOS 6.2
+                next if ( $resource =~ '^/(var|sbin|usr/local/sbin|usr)?$' and $mode == '711' );
+                print_warn( 'Non-default Permissions: ' );
+                print_warning( "$resource (mode: $mode | default: $resources_and_perms{$resource})" );
+            }
+        }
+    }
+
+    ## cPanel changes /etc/shadow from 0400 to 0600 (and possibly 0200?)
+    if ( -e '/etc/shadow' ) {
+        my $mode = ( stat( '/etc/shadow' ))[2] & 07777;
+        $mode = sprintf "%lo", $mode;
+        if ( $mode != '600' and $mode != '400' and $mode != '200' ) {
+            print_warn( 'Non-default Permissions: ' );
+            print_warning( "/etc/shadow (mode: $mode | default: 0400 or 0600)" );
+        }
+    }
+
+    if ( -e '/sbin/ifconfig' ) {
+        my $mode = ( stat( '/sbin/ifconfig' ))[2] & 07777;
+        $mode = sprintf "%lo", $mode;
+
+        if ( $os eq 'freebsd' ) {
+            if ( $mode ne '555' ) {
+              print_warn( 'Non-default Permissions: ' );
+              print_warning( "/sbin/ifconfig (mode: $mode | default: 555)" );
+            }
+        }
+        else {
+            if ( $mode ne '755' ) {
+                print_warn( 'Non-default Permissions: ' );
+                print_warning( "/sbin/ifconfig (mode: $mode | default: 755)" );
+            }
+        }
+    }
+}
+
+sub check_awstats_permissions {
+    my $cpanel_config = '/var/cpanel/cpanel.config';
+    my $awstats = '/usr/local/cpanel/3rdparty/bin/awstats.pl';
+    my $skipawstats;
+
+    if ( open my $cpanel_config_fh, '<', $cpanel_config ) {
+        while ( <$cpanel_config_fh> ) {
+            if ( /^skipawstats=(\d)/ ) {
+                $skipawstats = $1;
+            }
+        }
+    }
+
+    if ( $skipawstats == 0 ) {
+        if ( -e $awstats ) {
+            my $mode = ( stat( $awstats ))[2] & 07777;
+            $mode = sprintf "%lo", $mode;
+            if ( $mode != '755' ) {
+                print_warn( 'Awstats: ' );
+                print_warning( " enabled, but $awstats isn't 755 !" );
+            }
+        }
+    }
+}   
+
+sub check_var_cpanel_users_files_ownership {
+    my $var_cpanel_users = '/var/cpanel/users';
+
+    my @files;
+    if ( -d $var_cpanel_users ) {
+        opendir( my $dir_fh, $var_cpanel_users );
+        @files = grep { ! /^\.(\.?)$/ and ! /^(root|system|nobody)$/ } readdir $dir_fh;
+        closedir $dir_fh;
+    }
+
+    my $group_root_files;
+    for my $file ( @files ) {
+        next if ( $file !~ /^[a-z0-9]+$/ );
+        my $gid = ( stat( '/var/cpanel/users/' . $file ))[5];
+        if ( $gid == 0 ) {
+            $group_root_files .= " $file";
+        }
+    }
+
+    if ( $group_root_files ) {
+        print_warn( '/v/c/users file(s) owned by group "root": ' );
+        print_warning( $group_root_files );
+    }
+}
+
+sub check_root_suspended {
+    if ( -e '/var/cpanel/suspended/root' ) {
+        print_warn( 'root suspended: ' );
+        print_warning( 'the root account is suspended! Unsuspend it to avoid problems.' );
+    }
+}
+
+sub check_limitsconf {
+    my @limitsconf;
+
+    if ( open my $limitsconf_fh, '<', '/etc/security/limits.conf' ) {
+        while ( <$limitsconf_fh> ) {
+            push @limitsconf, $_;
+        }
+        close $limitsconf_fh;
+    }
+
+    @limitsconf = grep { ! /^(\s+|#)/ } @limitsconf;
+
+    if ( @limitsconf ) {
+        print_warn( 'limits.conf: ' );
+        print_warning( 'custom limits defined in /etc/security/limits.conf!' );
+    }
+}
+
+sub check_disk_space {
+    my @df = Cpanel::SafeRun::Errors::saferunnoerror( 'df' );
+    for my $line ( @df ) {
+        if ( $line =~ m{ (9[8-9]|100)% \s+ (.*) }xms ) {
+            my ( $usage, $partition ) = ( $1, $2 );
+            unless ( $line =~ m{ /virtfs | /(dev|proc) \z }xms ) {
+                print_warn( 'Disk space: ' );
+                print_warning( "${usage}% usage on $partition" );
+            }
+        }
+    }
+}
+
+sub check_disk_inodes {
+    my @df_i = Cpanel::SafeRun::Errors::saferunnoerror( 'df', '-i' );
+    for my $line ( @df_i ) {
+        if ( $line =~ m{ (9[8-9]|100)% \s+ (.*) }xms ) {
+            my ( $usage, $partition ) = ( $1, $2 );
+            unless ( $line =~ m{ /virtfs | /(dev|proc) \z }xms ) {
+                print_warn( 'Disk inodes: ' );
+                print_warning( "${usage}% inode usage on $partition" );
+            }
+        }
+    }
+}
+
+sub check_for_hooks {
+    if ( -f '/usr/local/cpanel/Cpanel/CustomEventHandler.pm' ) {
+        print_warn( 'Hooks: ' );
+        print_warning( '/usr/local/cpanel/Cpanel/CustomEventHandler.pm exists!' );
+    }
+
+    my @hooks;
+    if ( -d '/scripts' ) {
+        opendir( my $scripts_fh, '/scripts' );
+        @hooks = grep { /^(pre|post)/ } readdir $scripts_fh;
+        closedir $scripts_fh;
+    }
+
+    # these exist by default
+    @hooks = grep { ! /postsuexecinstall/ && ! /post_sync_cleanup/ } @hooks;
+
+    my $hooks_output;
+    if ( @hooks ) {
+        print_warn( 'Hooks: ' );
+        for my $hook ( @hooks ) {
+            $hook = '/scripts/' . $hook;
+            $hooks_output .= " $hook ";
+        }
+        print_warning( $hooks_output );
+    }
+}
+
+sub check_for_huge_apache_logs {
+    my @logs = qw( access_log error_log suphp_log suexec_log mod_jk.log modsec_audit.log modsec_debug.log );
+    for my $log ( @logs ) {
+        $log = '/usr/local/apache/logs/' . $log;
+        if ( -e $log ) {
+            my $size = ( stat( $log ) )[7];
+            if ( $size > 2_100_000_000 ) {
+                print_warn( 'M-M-M-MONSTER LOG!: ' );
+                print_warning( "$log ($size bytes)" );
+            }
+        }
+    }    
+}
+
+sub check_easy_skip_cpanelsync {
+    if ( -e '/var/cpanel/easy_skip_cpanelsync' ) {
+        print_warn( 'Touchfile: ' );
+        print_warning( '/var/cpanel/easy_skip_cpanelsync exists! ');
+    }
+}
+
+sub check_pkgacct_override {
+    if ( -d '/var/cpanel/lib/Whostmgr' ) {
+        print_warn( 'pkgacct override: ' );
+        print_warning(' /var/cpanel/lib/Whostmgr exists, override may exist' );
+    }    
+}
+
+sub check_for_gdm {
+    my $gdm = 0; 
+
+    for my $line ( @process_list ) {
+        if ( $line =~ m{ \A root (?:.*) gdm }xms ) {
+            $gdm = 1; 
+            last;
+        }
+    }    
+
+    if ( $gdm == 1 ) {
+        print_warn( 'gdm Process: ' );
+        print_warning( 'is running' );
+    }    
+}
+
+sub check_for_redhat_firewall {
+    my $iptables = Cpanel::SafeRun::Errors::saferunnoerror( 'iptables', '-L', 'RH-Firewall-1-INPUT' );
+
+    if ( $iptables ) {
+        print_warn( 'Default Redhat Firewall Check: ' );
+        print_warning( 'RH-Firewall-1-INPUT table exists. /scripts/configure_rh_firewall_for_cpanel to open ports.' );
+    }    
+}
+
+sub check_easyapache {
+    my $ea_is_running_file = '/usr/local/apache/AN_EASYAPACHE_BUILD_IS_CURRENTLY_RUNNING';
+    my $ea_in_process_list = 0; 
+    my $apache_update_no_restart = '/var/cpanel/mgmt_queue/apache_update_no_restart';
+    my $ea_is_running = 0;
+
+    if ( -e $ea_is_running_file ) {
+        for my $process ( @process_list ) {
+            if ( $process =~ m{ \A root (?:.*) easyapache }xms ) {
+                $ea_in_process_list = 1; 
+                last;
+            }
+            else {
+                $ea_in_process_list = 0;
+            }
+        }
+        if ( $ea_in_process_list == 0 ) {
+            print_warn( 'EasyApache: ' );
+            print_warning( "$ea_is_running_file exists, but 'easyapache' not found in process list" );
+        }
+        else {
+            $ea_is_running = 1;
+            print_warn( 'EasyApache: ' );
+            print_warning( 'is running' );
+        }
+    }    
+
+    if ( -e $apache_update_no_restart and $ea_is_running == 0 ) {
+        print_warn( 'EasyApache: ' );
+        print_warning( "$apache_update_no_restart exists! This will prevent EA from completing successfully." );
+    }
+}
+
+sub check_for_easyapache_hooks {
+    my $hooks;
+
+    my @hooks = qw( before_apache_make
+                    after_apache_make_install
+                    before_httpd_restart_tests
+                    after_httpd_restart_tests
+                );
+    
+    for my $hook ( @hooks ) {
+        if ( -f '/scripts/' . $hook ) {
+            $hooks .= " $hook";
+        }
+    }
+
+    if ( $hooks ) {
+        print_warn( 'EA hooks: ' );
+        print_warning( $hooks );
+    }
+}
+
+sub check_for_home_noexec {
+    my @mount = Cpanel::SafeRun::Errors::saferunnoerror( 'mount' );
+    for my $mount ( @mount ) {
+        if ( $mount =~ m{ \s on \s (/home([^\s]?)) \s (:?.*) noexec }xms ) {
+            my $noexec_partition = $1;
+            print_warn( 'mounted noexec: ');
+            print_warning( $noexec_partition );
+        }
+    }
+}
+
+## compare external IP addr with local IP addrs, OR
+## check if only internal IP addrs are bound to server (this is not as reliable,
+## as NAT can still be used with external IP addrs of course)
+sub check_for_nat {
+    my @external_ipaddrs;
+    my $external_ip_address;
+    my $count = 0;
+
+    for ( 1 .. 3 ) {
+        local $SIG{'ALRM'} = sub {
+            $count++;
+            print_warn( 'NAT check timed out: ' );
+            print_warning( "attempt $count of 3" );
+        };
+        alarm 3;
+        $external_ip_address = get( 'http://cpanel.net/showip.cgi' );
+        if ( $external_ip_address ) {
+            chomp $external_ip_address;
+        }
+        alarm 0;
+
+        if ( $external_ip_address ) {
+            last;
+        }
+    }
+
+    if ( $external_ip_address ) {
+        if ( ! grep { /$external_ip_address/ } @local_ipaddrs_list ) {
+            print_warn( 'NAT: ' );
+            print_warning( "external IP address $external_ip_address is not bound to server" );
+        }
+    }
+    else {
+        for my $ipaddr ( @local_ipaddrs_list ) {
+            if ( $ipaddr !~ m{ \A ( ?: 127\. | 192\.168\. | 10\. | 172\.(1[6-9]|2[0-9]|3[0-1]) ) }xms ) {
+                push @external_ipaddrs, $ipaddr;
+            }
+        }
+        if ( !@external_ipaddrs ) {
+            print_warn( 'NAT: ' );
+            print_warning( 'no external IP addresses detected' );
+        }
+    }
+}
+
+sub check_for_etc_hosts_no_loopback {
+    my $hosts = '/etc/hosts';
+    my $localhost;
+
+    if ( ! -f $hosts ) {
+        print_warn( '/etc/hosts: ' );
+        print_warning( 'missing!' );
+    }
+    else {
+        if ( open my $hosts_fh, '<', $hosts ) {
+            while ( my $line = <$hosts_fh> ) {
+                chomp $line;
+                if ( ( $line =~ m{  127\.0\.0\.1 (.*) localhost }xms ) and ( $line !~ /^\#/ ) ) {
+                    $localhost = 1;
+                }
+            }
+        close $hosts_fh;
+        }
+    }
+
+    if ( !$localhost ) {
+        print_warn( '/etc/hosts: ' );
+        print_warning( 'no entry for localhost, or commented out' );
+    }
+}
+
+sub check_for_portreserve_entries {
+    my $portreserve_dir = '/etc/portreserve';
+    my @dir_entries;
+    my $portreserve;
+
+    if ( -d $portreserve_dir ) {
+        opendir( my $portreserve_fh, $portreserve_dir );
+        @dir_entries = grep { ! /^\.(\.?)$/ } readdir $portreserve_fh;
+        closedir $portreserve_fh;
+    }
+
+    if ( @dir_entries ) {
+        for my $entry ( @dir_entries ) {
+            if ( -f "$portreserve_dir/$entry" ) {
+                $portreserve .= "$entry ";
+            }
+        }
+    }
+
+    if ( $portreserve ) {
+        print_warn( "$portreserve_dir: " );
+        print_warning( $portreserve );
+    }
+}
+
+sub check_for_oracle_linux {
+    my $centos_5_oracle_release_file = '/etc/enterprise-release';
+    my $centos_6_oracle_release_file = '/etc/oracle-release';
+
+    if ( -f $centos_5_oracle_release_file ) {
+        print_warn( 'Oracle Linux: ' );
+        print_warning( "$centos_5_oracle_release_file detected!" );
+    }
+    elsif ( -f $centos_6_oracle_release_file ) {
+        print_warn( 'Oracle Linux: ' );
+        print_warning( "$centos_6_oracle_release_file detected!" );
+    }
+}
+
+sub check_for_usr_local_cpanel_hooks {
+    my $hooks;
+    my $dir = '/usr/local/cpanel/hooks';
+    find( \&find_usr_local_cpanel_hooks, $dir );
+
+    if ( @usr_local_cpanel_hooks ) {
+        for my $hook ( @usr_local_cpanel_hooks ) {
+            $hooks .= "$hook ";
+        }
+
+        print_warn( "$dir: " );
+        print_warning( $hooks );
+    }
+}
+
+sub find_usr_local_cpanel_hooks {
+    my $file = $File::Find::name;
+    if ( -f $file and $file !~ m{ ( README | \.example ) \z }xms ) {
+        $file =~ s#/usr/local/cpanel/hooks/##;
+        push @usr_local_cpanel_hooks, $file;
+    }
+}
+
+sub check_for_sql_safe_mode {
+    my @phpinis = qw( /usr/local/lib/php.ini /usr/local/php4/lib/php.ini );
+
+    for my $phpini ( @phpinis ) {
+        if ( open my $file_fh, '<', $phpini ) {
+            while ( <$file_fh> ) {
+                chomp( my $line = $_ );
+                if ( $line =~ m{ \A sql\.safe_mode \s* = \s* on }ixms ) {
+                    print_warn( "$phpini: " );
+                    print_warning( 'sql.safe_mode is enabled!' );
+                }
+            }
+        }
+    }
+}
+
+sub check_mysql_non_default_datadir {
+    my $my_cnf = '/etc/my.cnf';
+    if ( open my $my_cnf_fh, '<', $my_cnf ) {
+        while ( <$my_cnf_fh> ) {
+            chomp ( my $line = $_ );
+            if ( $line =~ m{ \A datadir \s* = \s* (?:"?) ([^"]+) }xms ) {
+                my $datadir = $1;
+                if ( $datadir !~ m{ /var/lib/mysql(/?) \z }xms ) {
+                    print_warn( 'Non default MySQL datadir: ' );
+                    print_warning( $datadir );
+                }
+                last;
+            }
+        }
+    }
+}
+
+sub check_for_domain_forwarding {
+    my $domainfwdip = '/var/cpanel/domainfwdip';
+
+    if ( -f $domainfwdip and ! -z $domainfwdip ) {
+        print_warn( 'Domain Forwarding: ' );
+        print_warning( "cat $domainfwdip to see what is being forwarded!" );
+    }
+}
+
+sub check_for_empty_apache_templates {
+    my $apache2_template_dir = '/var/cpanel/templates/apache2';
+    my @dir_contents;
+    my $empty_templates;
+
+    if ( -d $apache2_template_dir ) {
+        opendir( my $dir_fh, $apache2_template_dir );
+        @dir_contents = grep { ! /^\.(\.?)$/ } readdir $dir_fh;
+        closedir $dir_fh;
+    }    
+
+    if ( ! @dir_contents ) {
+        print_warn( 'Apache templates: ' );
+        print_warning( "none found in $apache2_template_dir !" );
+    }
+    else {
+        for my $template ( @dir_contents ) {
+            if ( -z "$apache2_template_dir/$template" ) {
+                $empty_templates .= "$template ";
+            }
+        }
+    }
+
+    if ( $empty_templates ) {
+        print_warn( "Empty Apache templates in $apache2_template_dir (this can affect the ability to remove domains): ");
+        print_warning( "$empty_templates" );
+    }
+}
+
+sub check_for_empty_postgres_config {
+    my $postgres_config = '/var/lib/pgsql/data/pg_hba.conf';
+    if ( -f $postgres_config and -z $postgres_config ) {
+        print_warn( 'Postgres config: ' );
+        print_warning( "$postgres_config is empty" );
+    }
+}
+
+sub check_for_empty_easyapache_profiles {
+    my $templates;
+    my $dir = '/var/cpanel/easy/apache/profile';
+    find( \&find_easyapache_templates, $dir );
+
+    if ( @easyapache_templates ) {
+        for my $template ( @easyapache_templates ) {
+            $templates .= "$template ";
+        }
+
+        print_warn( "Empty template(s) in $dir: " );
+        print_warning( $templates );
+    }    
+}
+
+sub find_easyapache_templates {
+    my $file = $File::Find::name;
+    if ( -f $file and -z $file ) {
+        $file =~ s#/var/cpanel/easy/apache/profile/##g;
+        push @easyapache_templates, $file;
+    }    
+}
+
+sub check_for_missing_timezone_from_phpini {
+    my $phpini = '/usr/local/lib/php.ini';
+
+    return if ! -f $phpini;
+
+    my $timezone;
+
+    if ( open my $phpini_fh, '<', $phpini ) {
+        while ( <$phpini_fh> ) {
+            my $line = $_;
+            chomp $line;
+            if ( $line =~ m{ \A date\.timezone (?:\s+)? = (?:\s+)? (?:")? ([^/"]+) / ([^/"]+) (?:")? (?:\s+)? \z }xms ) {
+                $timezone = $1 . '/' . $2;
+                last;
+            }
+        }
+    }
+
+    if ( $timezone ) {
+        my ( $tz1, $tz2 ) = split /\//, $timezone;
+        my $path = '/usr/share/zoneinfo/' . $tz1 . '/' . $tz2;
+
+        if ( ! -f $path ) {
+            print_warn( "date.timezone from $phpini: ");
+            print_warning( "$path not found!" );
+        }
+    }
+}
+
+sub check_for_proc_mdstat_recovery {
+    my $mdstat = '/proc/mdstat';
+
+    my $recovery = 0;
+
+    if ( open my $mdstat_fh, '<', $mdstat ) {
+        while ( <$mdstat_fh> ) {
+            if ( /recovery/ ) {
+                $recovery = 1;
+                last;
+            }
+        }
+    }
+
+    if ( $recovery == 1 ) {
+        print_warn( 'Software RAID recovery: ' );
+        print_warning( "cat $mdstat to check the status" );
+    }
+}
+
+sub check_usr_local_cpanel_path_for_symlinks {
+    my @dirs = qw(  /usr
+                    /usr/local
+                    /usr/local/cpanel
+               );
+
+    for my $dir ( @dirs ) {
+        if ( -l $dir ) {
+            print_warn( 'Directory is a symlink: ');
+            print_warning( "$dir (this can cause Internal Server Errors for redirects like /cpanel, etc)" );
+        }
+    }
+}
+
+sub check_for_additional_rpms {
+    return if ! @rpm_list;
+
+    my @additional_rpms = grep { /^(php-|kde-|psa-|clamav|clamd|rrdtool-)|(http|apache|pear|sendmail)/ } @rpm_list;
+    if ( @additional_rpms ) {
+        @additional_rpms = sort @additional_rpms;
+        for my $additional_rpm ( @additional_rpms ) {
+            next if ( $additional_rpm =~ /sendmail-(cf|doc|devel)-|httpd-tools/ );
+            print_start( 'Additional RPM: ' );
+            print_warning( $additional_rpm );
+        }
+    }    
+}
+
+sub check_mysql_rpm_mismatch {
+    return if ! @rpm_list;
+
+    ## MySQL version mismatch check
+    my @mysql_rpm_versions;
+
+    for my $rpm ( @rpm_list ) {
+        if ( $rpm =~ m{ \A MySQL-server-(.*) \z }xms ) {
+            push @mysql_rpm_versions, $1;
+        }
+        elsif ( $rpm =~ m{ \A MySQL-shared-(.*) \z }xms ) {
+            push @mysql_rpm_versions, $1;
+        }
+        elsif ( $rpm =~ m{ \A MySQL-devel-(.*) \z }xms ) {
+            push @mysql_rpm_versions, $1;
+        }
+        elsif ( $rpm =~ m{ \A MySQL-client-(.*) \z }xms ) {
+            push @mysql_rpm_versions, $1;
+        }
+        elsif ( $rpm =~ m{ \A MySQL-test-(.*) \z }xms ) {
+            push @mysql_rpm_versions, $1;
+        }
+        elsif ( $rpm =~ m{ \A MySQL-embedded-(.*) \z }xms ) {
+            push @mysql_rpm_versions, $1;
+        }
+    }    
+
+    my $first_rpm = pop @mysql_rpm_versions;
+    for ( 1 .. scalar @mysql_rpm_versions ) {
+        my $next_rpm = pop @mysql_rpm_versions;
+        if ( $first_rpm ne $next_rpm ) {
+            print_warn( 'MySQL RPMs: ' );
+            print_warning( 'version mismatch!' );
+            last;
+        }
+    }    
+}
+
+sub check_php_libmysqlclient_mismatch {
+    return if ! @rpm_list;
+
+    my ( @php4_ldd, @php5_ldd );
+    my ( $php4_libmysqlclient_version, $php5_libmysqlclient_version );
+
+    my $php4_binary = '/usr/local/php4/bin/php';
+    my $php5_binary = '/usr/bin/php';
+
+    my $php4_mismatch = 0;
+    my $php5_mismatch = 0;
+    
+    my $mysql_shared_rpm_version_orig;
+    my $mysql_shared_rpm_version;
+
+    ## Get the MySQL-shared rpm major and minor version.
+    for my $rpm ( @rpm_list ) {
+        if ( $rpm =~ /MySQL-shared-(\d)\.(\d)/ ) {
+            $mysql_shared_rpm_version_orig = $rpm;
+            $mysql_shared_rpm_version = $1 . $2;
+            last;
+        }
+    }
+
+    return if ! $mysql_shared_rpm_version;
+
+    ## Run ldd against whichever major php version is active
+    if ( open my $phpconfyaml_fh, '<', '/usr/local/apache/conf/php.conf.yaml' ) {
+        while ( my $line = <$phpconfyaml_fh> ) {
+            if ( $line =~ m{ \A php4: \s (.*) }xms ) {
+                if ( $1 ne 'none' ) {
+                    @php4_ldd = Cpanel::SafeRun::Errors::saferunnoerror( 'ldd', $php4_binary );
+                }
+            }
+            elsif ( $line =~ m{ \A php5: \s (.*) }xms ) {
+                if ( $1 ne 'none' ) {
+                    @php5_ldd = Cpanel::SafeRun::Errors::saferunnoerror( 'ldd', $php5_binary );
+                }
+            }
+        }
+        close $phpconfyaml_fh;
+    }
+
+    ## Get the linked libmysqlclient version
+    if ( @php4_ldd ) {
+        for my $libs ( @php4_ldd ) {
+            if ( $libs =~ m{ \A \s+ libmysqlclient\.so\.(\d+) \s => \s (?:\S+) \s (?:\S+) \z }xms ) {
+                $php4_libmysqlclient_version = $1;
+                last;
+            }
+        }
+    }
+
+    if ( @php5_ldd ) {
+        for my $libs ( @php5_ldd ) {
+            if ( $libs =~ m{ \A \s+ libmysqlclient\.so\.(\d+) \s => \s (?:\S+) \s (?:\S+) \z }xms ) {
+                $php5_libmysqlclient_version = $1;
+                last;
+            }
+        }
+    }
+
+    ## Compare the linked libmysqlclient lib with the MySQL-shared rpm version
+    ##
+    ## libmysqlclient.so.18 = MySQL-shared 5.5
+    ## libmysqlclient.so.16 = MySQL-shared 5.1
+    ## libmysqlclient.so.15 = MySQL-shared 5.0
+
+    if ( $php4_libmysqlclient_version ) {
+        if ( $php4_libmysqlclient_version == 18 and $mysql_shared_rpm_version != 55 ) {
+            $php4_mismatch = 1;
+        }
+        elsif ( $php4_libmysqlclient_version == 16 and $mysql_shared_rpm_version != 51 ) {
+            $php4_mismatch = 1;
+        }
+        elsif ( $php4_libmysqlclient_version == 15 and $mysql_shared_rpm_version != 50 ) {
+            $php4_mismatch = 1;
+        }
+
+        if ( $php4_mismatch == 1 ) {
+            print_warn( 'PHP/libmysqlclient mismatch: ' );
+            print_warning( "$php4_binary linked against libmysqlclient.so.$php4_libmysqlclient_version, but MySQL-shared rpm is $mysql_shared_rpm_version_orig" );
+        }
+    }
+
+    if ( $php5_libmysqlclient_version ) {
+        if ( $php5_libmysqlclient_version == 18 and $mysql_shared_rpm_version != 55 ) {
+            $php5_mismatch = 1;
+        }
+        elsif ( $php5_libmysqlclient_version == 16 and $mysql_shared_rpm_version != 51 ) {
+            $php5_mismatch = 1;
+        }
+        elsif ( $php5_libmysqlclient_version == 15 and $mysql_shared_rpm_version != 50 ) {
+            $php5_mismatch = 1;
+        }
+
+        if ( $php5_mismatch == 1 ) {
+            print_warn( 'PHP/libmysqlclient mismatch: ' );
+            print_warning( "$php5_binary linked against libmysqlclient.so.$php5_libmysqlclient_version, but MySQL-shared rpm is $mysql_shared_rpm_version_orig" );
+        }
+    }
+}
+
+sub check_for_system_mem_below_512M {
+    my $meminfo = '/proc/meminfo';
+    my $memtotal;
+
+    if ( open my $meminfo_fh, '<', $meminfo ) {
+        while ( <$meminfo_fh> ) {
+            if ( m{ \A MemTotal: \s+ (\d+) \s+ kB \s+ \z }xms ) {
+                $memtotal = $1;
+            }
+        }
+        close $meminfo_fh;
+    }
+
+    if ( $memtotal < 524288 ) {
+        print_warn( 'Memory: ' );
+        print_warning( 'Server has less than 512M physical memory!' );
+    }
+}
+
+##############################
+#  END [WARN] CHECKS
+##############################
+
+
+##############################
+#  BEGIN [3RDP] CHECKS
+##############################
+
+sub check_for_assp {
+    my $assp;
+    my @port_25_processes;
+
+    if ( $os eq 'linux' ) {
+        my @lsof_25 = Cpanel::SafeRun::Errors::saferunnoerror( 'lsof', '-i', 'tcp:25' );
+        for my $line ( @lsof_25 ) {
+            if ( $line =~ m{ (\S+) \s+ (?:.*) \s TCP (?:.*):smtp \s \(LISTEN\) }xms ) {
+                push( @port_25_processes, $1 );
+            }
+        }
+
+        if ( grep { m{ \A assp\.pl }xms } @port_25_processes ) {
+            print_3rpd( 'ASSP: ' );
+            print_warning( 'assp.pl is listening on port 25' );
+        }
+
+        if ( grep { m{ \A perl \z }xms } @port_25_processes ) {
+            print_3rdp( 'Exim: ' );
+            print_3rdp2( 'something other than Exim found listening on port 25' );
+        }
+    }
+}
+
+sub check_for_varnish {
+    my $varnish;
+    my @port_80_processes;
+
+    if ( $os eq 'linux' ) { 
+        my @lsof_80 = Cpanel::SafeRun::Errors::saferunnoerror( 'lsof', '-i', 'tcp:80' );
+        for my $line ( @lsof_80 ) {
+            # TODO: just check for ^httpd ?
+            if ( $line =~ m{ (\S+) \s+ (?:.*) \s TCP (?:.*):http \s \(LISTEN\) }xms ) { 
+                push( @port_80_processes, $1 );
+            }
+        }
+
+        if ( grep { m{ \A varnish }xms } @port_80_processes ) { 
+            print_3rdp( 'Varnish: ' );
+            print_3rdp2( 'varnish is listening on port 80' );
+        }
+    }   
+}
+
+sub check_for_litespeed {
+    my $litespeed = 0;
+
+    for my $line ( @process_list ) {
+        if ( $line =~ /litespeed|lshttp/ and $line !~ /\_/ ) {
+            $litespeed = 1;
+            last;
+        }
+    }
+
+    if ( $litespeed == 1 ) {
+        print_3rdp( 'litespeed: ' );
+        print_3rdp2( 'is running' );
+    }
+}
+
+sub check_for_nginx {
+    my $nginx = 0;
+
+    for my $line ( @process_list ) {
+        if ( $line =~ /nginx:/ ) {
+            $nginx = 1;
+            last;
+        }
+    }
+
+    if ( $nginx == 1 ) {
+        print_3rdp( 'nginx: ' );
+        print_3rdp2( 'is running' );
+    }
+}
+
+sub check_for_mailscanner {
+    my $mailscanner = 0;
+
+    for my $line ( @process_list ) {
+        if ( $line =~ /MailScanner/ ) {
+            $mailscanner = 1;
+            last;
+        }
+    }
+
+    if ( $mailscanner == 1 ) {
+        print_3rdp( 'MailScanner: ' );
+        print_3rdp2( 'is running' );
+    }
+}
+
+sub check_for_apf {
+    my $chkconfig_apf = Cpanel::SafeRun::Errors::saferunnoerror( 'chkconfig', '--list', 'apf');
+    if ( $chkconfig_apf ) {
+        if ( $chkconfig_apf =~ /3:on/ ) {
+            print_3rdp( 'APF: ' );
+            print_3rdp2( 'installed, may be enabled.' );
+        }
+    }
+}
+
+sub check_for_csf {
+    my $lfd = 0;
+    my $csf = Cpanel::SafeRun::Errors::saferunnoerror( 'whereis', 'csf' );
+
+    if ( $csf =~ /\// ) {
+        print_3rdp( 'CSF: ' );
+    }
+    else {
+        return;
+    }
+
+    for my $line ( @process_list ) {
+        if ( $line  =~ m{ \A root (?:.*) lfd }xms ) {
+            $lfd = 1;
+            last;
+        }
+    }
+
+    if ( $lfd ) {
+        print_3rdp2( 'installed, LFD is running' );
+    }
+    else {
+        print_3rdp2( 'installed, LFD is not running' );
+    }
+}
+
+sub check_for_prm {
+    if ( -e '/usr/local/prm' ) {
+        print_3rdp( 'PRM: ' );
+        print_3rdp2( 'PRM exists at /usr/local/prm' );
+    }
+}
+
+sub check_for_les {
+    if ( -e '/usr/local/sbin/les' ) {
+        print_3rdp( 'LES: ' );
+        print_3rdp2( 'Linux Environment Security is installed at /usr/local/sbin/les' );
+    }
+}
+
+sub check_for_1h {
+    my $one_h = 0;
+    my ( $hive_module, $guardian );
+
+    if ( -d '/usr/local/1h' ) {
+        $one_h = 1;
+        if ( -x $apache_bin ) {
+            my $apache_modules = Cpanel::SafeRun::Errors::saferunnoerror( $apache_bin, '-M' );
+            my @apache_modules = split /\n/, $apache_modules;
+            for my $line ( @apache_modules ) {
+                if ( $line =~ /hive/ ) {
+                    $hive_module = 'loaded';
+                }
+                else {
+                    $hive_module = 'not active';
+                }
+            }
+        }
+        if ( -x '/usr/local/1h/sbin/guardian' ) {
+            for my $line ( @process_list ) {
+                if ( $line =~ /Guardian/ ) {
+                    $guardian = 'running';
+                }
+                else {
+                    $guardian = 'not running';
+                }
+            }
+        }
+        else {
+            $guardian = 'not running'
+        }
+    }
+
+    if ( $one_h == 1 ) {
+        print_3rdp( '1H Software: ' );
+        print_3rdp2( "/usr/local/1h exists. hive apache module: [ $hive_module ] Guardian process: [ $guardian ]" );
+    }
+}
+
+sub check_for_webmin {
+    my @lsof_10000 = Cpanel::SafeRun::Errors::saferunnoerror( 'lsof', '-i', 'tcp:10000' );
+    if ( @lsof_10000 ) {
+        print_3rdp( 'Webmin: ' );
+        print_3rdp2( 'Port 10000 is listening, webmin may be running' );
+    }
+}
+
+##############################
+#  END [3RDP] CHECKS
+##############################
+
+sub build_rpm_list {
+    return if ( $os eq 'freebsd' );
+
+    my $timeout = 15;
+
+    print_info2( "RPM check (running \"rpm -qa\"). This will timeout after $timeout seconds." );
+
+    local $SIG{'ALRM'} = sub {
+        print_warning( 'Additional RPM: check timed out' );
+    };
+    alarm $timeout;
+    @rpm_list = Cpanel::SafeRun::Errors::saferunnoerror( 'rpm', '-qa' );
+    alarm 0;
+
+    return @rpm_list;
+}

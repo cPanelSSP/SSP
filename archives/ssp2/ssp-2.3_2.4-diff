@@ -1,0 +1,267 @@
+--- ssp-2.3	2012-05-05 07:55:39.000000000 +0400
++++ ssp-2.4	2012-05-27 08:29:23.000000000 +0400
+@@ -9,8 +9,9 @@
+ use Cpanel::Sys::OS;
+ use Cpanel::OSSys;
+ use Sys::Hostname;
++use File::Find;
+ 
+-my $version = '2.3';
++my $version = '2.4';
+ 
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+@@ -38,6 +39,7 @@
+ print_cpanel_birthday();
+ print_cpanel_version();
+ check_for_cpanel_update();
++check_for_missing_root_cron();
+ check_for_upcp();
+ check_valid_upcp();
+ print_kernel_and_cpu();
+@@ -48,13 +50,16 @@
+ check_interface_lo();
+ check_for_cpanelsync_exclude();
+ check_for_lve_environment();
++check_for_clustering();
+ print_apache_version();
+ print_apache_uptime();
+ check_for_rawopts();
+ check_for_rawenv();
++check_for_custom_opt_mods();
+ check_for_local_apache_templates();
+ check_for_local_makecpphp_template();
+ check_for_custom_apache_includes();
++check_for_sneaky_htaccess();
+ print_php_configuration();
+ check_sysinfo();
+ check_perl_sanity();
+@@ -351,6 +356,13 @@
+     }
+ }
+ 
++sub check_for_missing_root_cron {
++    if ( ! -f '/var/spool/cron/root' ) {
++        print_start( 'Missing cron: ' );
++        print_warning( 'root\'s cron file is missing!' );
++    }
++}
++
+ sub check_for_upcp {
+     my $upcp_running = 0;
+     
+@@ -604,6 +616,13 @@
+     }    
+ }
+ 
++sub check_for_clustering {
++    if ( -e '/var/cpanel/useclusteringdns' ) {
++        print_start( 'DNS Clustering: ' );
++        print_normal( 'is enabled' );
++    }
++}
++
+ sub print_apache_version {
+ 
+     my ( $apache_version, $apache_built, $apache_ea_version );
+@@ -622,10 +641,17 @@
+                 $apache_ea_version = $1;
+             }
+         }
+-        print_start( 'Apache Version: ' );
+-        print_normal( $apache_version );
+-        print_start( 'Apache Built: ' );
+-        print_normal( "$apache_built w/ $apache_ea_version" );
++
++        if ( ! $apache_version or ! $apache_built or ! $apache_ea_version ) {
++            print_start( 'Apache Info: ' );
++            print_warning( 'could not determine Apache info!' );
++        }
++        else {
++            print_start( 'Apache Version: ' );
++            print_normal( $apache_version );
++            print_start( 'Apache Built: ' );
++            print_normal( "$apache_built w/ $apache_ea_version" );
++        }
+     }
+     else {
+         print_start( 'Apache Info: ' );
+@@ -693,6 +719,32 @@
+     }
+ }
+ 
++sub check_for_custom_opt_mods {
++    if ( -d '/var/cpanel/easy/apache/custom_opt_mods' ) {
++        finddepth( \&find_custom_opt_mods, '/var/cpanel/easy/apache/custom_opt_mods' );
++    }    
++}
++
++sub find_custom_opt_mods {
++    ## ignore these, Attracta:
++    # /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm
++    # /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm.tar.gz
++
++    my @dir_contents;
++    my $filename = $File::Find::name;
++
++    unless ( $filename =~ /\/ModFastInclude\.pm(.*)/ ) {
++        if ( -f $filename ) {
++            push @dir_contents, $filename;
++        }
++    }
++
++    if ( @dir_contents ) {
++        print_start( 'custom opt mods: ' );
++        print_warning( ' exists! check /var/cpanel/easy/apache/custom_opt_mods/' );
++    }
++}
++
+ sub check_for_local_apache_templates {
+     my $apache2_template_dir = '/var/cpanel/templates/apache2';
+     my @dir_contents;
+@@ -755,6 +807,23 @@
+     }
+ }
+ 
++sub check_for_sneaky_htaccess {
++    ## this is lazy checking. ideally we'd check HOMEMATCH from wwwacct.conf and go from there
++    my @dirs = qw( / /home/ /home2/ /home3/ /home4/ /home5/ /home6/ /home7/ /home8/ /home9/ );
++    my $htaccess;
++
++    for my $dir ( @dirs ) {
++        if ( -f $dir . '.htaccess' and ! -z $dir . '.htaccess' ) {
++            $htaccess .= $dir . '.htaccess ';
++        }
++    }
++
++    if ( $htaccess ) {
++        print_start( 'Sneaky .htaccess file(s) found: ' );
++        print_warning( $htaccess );
++    }
++}
++
+ sub print_php_configuration {
+     my $phpconf = '/usr/local/apache/conf/php.conf.yaml';
+     return if ! -f $phpconf;
+@@ -792,6 +861,10 @@
+             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
+                 $php5version = $1;
+             }
++            else {
++                $php5version = '(version unknown)';
++            }
++
+             print_start( 'PHP Default: ' );
+             print_normal( "PHP $php5version $php5handler $suexec" );
+         }
+@@ -802,6 +875,10 @@
+             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
+                 $php4version = $1;
+             }
++            else {
++                $php4version = '(version unknown)';
++            }
++
+             print_start( 'PHP Secondary: ' );
+             print_normal( "PHP $php4version $php4handler $suexec" );
+         }
+@@ -814,6 +891,10 @@
+             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
+                 $php4version = $1;
+             }
++            else {
++                $php4version = '(version unknown)';
++            }
++
+             print_start( 'PHP Default: ' );
+             print_normal( "PHP $php4version $php4handler $suexec" );
+         }
+@@ -824,6 +905,10 @@
+             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
+                 $php5version = $1;
+             }
++            else {
++                $php5version = '(version unknown)';
++            }
++
+             print_start( 'PHP Secondary: ' );
+             print_normal( "PHP $php5version $php5handler $suexec" );
+         }
+@@ -925,7 +1010,13 @@
+ }
+ 
+ sub check_for_non_default_permissions {
+-    my %perms_and_resources = (
++    my %resources_and_perms = (
++        '/bin'                  => '755',
++        '/sbin'                 => '755',
++        '/usr/bin'              => '755',
++        '/usr/sbin'             => '755',
++        '/usr/local/bin'        => '755',
++        '/usr/local/sbin'       => '755',
+         '/opt'                  => '755',
+         '/tmp'                  => '1777',
+         '/usr'                  => '755',
+@@ -937,13 +1028,13 @@
+         '/etc/hosts'            => '644',
+     );
+ 
+-    for my $resource ( keys %perms_and_resources ) {
++    for my $resource ( keys %resources_and_perms ) {
+         if ( -e $resource ) {
+             my $mode = ( stat ( $resource ) )[2] & 07777;
+             $mode = sprintf "%lo", $mode;
+-            if ( $mode != $perms_and_resources{$resource} ) {
++            if ( $mode != $resources_and_perms{$resource} ) {
+                 print_start( 'Non-default Permissions: ' );
+-                print_warning( "$resource (mode: $mode | default: $perms_and_resources{$resource})" );
++                print_warning( "$resource (mode: $mode | default: $resources_and_perms{$resource})" );
+             }
+         }
+     }
+@@ -1021,7 +1112,7 @@
+     }
+ 
+     if ( $group_root_files ) {
+-        print_start( '/v/c/users file owned by group "root": ' );
++        print_start( '/v/c/users file(s) owned by group "root": ' );
+         print_warning( $group_root_files );
+     }
+ }
+@@ -1176,7 +1267,7 @@
+     my $nginx = 0;
+ 
+     for my $line ( @process_list ) {
+-        if ( $line =~ /\s+nginx:\smaster\sprocess\s/ ) {
++        if ( $line =~ /nginx:/ ) {
+             $nginx = 1;
+             last;
+         }
+@@ -1352,7 +1443,7 @@
+ 
+     my $timeout = 15;
+ 
+-    print_info( "<< RPM check (running \"rpm -qa\"). This will timeout after $timeout seconds." );
++    print_info( "RPM check (running \"rpm -qa\"). This will timeout after $timeout seconds." );
+ 
+     local $SIG{'ALRM'} = sub {
+         print_warning( 'Additional RPM: check timed out' );
+@@ -1367,9 +1458,17 @@
+     if ( @additional_rpms ) {
+         @additional_rpms = sort @additional_rpms;
+         for my $additional_rpm ( @additional_rpms ) {
+-            next if ( $additional_rpm =~ /sendmail-(cf|doc)-/ );
++            next if ( $additional_rpm =~ /sendmail-(cf|doc|devel)-|httpd-tools/ );
+             print_start( 'Additional RPM: ' );
+             print_warning( $additional_rpm );
+         }
+     }
++
++#    check for MySQL rpm version mismatches
++#
++#    for my $rpm ( @rpm_list ) {
++#        if ( $rpm =~ /^MySQL-(client|devel|server|shared|test)-/ ) {
++#            print "$rpm\n";
++#        }
++#    }
+ }

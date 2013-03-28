@@ -1,0 +1,704 @@
+--- ssp-4.11	2013-02-11 14:54:15.000000000 -0600
++++ ssp-4.12	2013-02-12 11:12:08.000000000 -0600
+@@ -18,7 +18,7 @@
+ 
+ $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
+ 
+-my $version = '4.11';
++my $version = '4.12';
+ 
+ $| = 1;
+ $Term::ANSIColor::AUTORESET = 1;
+@@ -27,6 +27,7 @@
+ ##  BEGIN GLOBALS   ##
+ ######################
+ 
++my $cpanel_version              = get_cpanel_version();
+ my $hostname                    = hostname();
+ my $os                          = get_os();
+ my $TIERS                       = get_tiers_file();
+@@ -149,7 +150,7 @@
+ #check_for_cpphpopts();
+ check_for_cPanel_lower_than_11_30_7_3();
+ check_for_custom_exim_conf_local();
+-check_for_maxclients_reached();
++check_for_maxclients_or_maxrequestworkers_reached();
+ check_for_non_default_umask();
+ check_for_multiple_imagemagick_installs();
+ check_for_custom_locales();
+@@ -169,6 +170,8 @@
+ check_for_cpanel_CN_newline();
+ check_for_my_cnf_skip_name_resolve();
+ check_for_my_cnf_sql_mode();
++check_for_rpm_dist_ver_unknown();
++
+ 
+ # [3RDP]
+ print "\n";
+@@ -275,6 +278,24 @@
+     }
+ }
+ 
++sub get_cpanel_version {
++    my $cpanel_version_file = '/usr/local/cpanel/version';
++
++    if ( open my $file_fh, '<', $cpanel_version_file ) {
++        while ( <$file_fh> ) {
++            chomp( $cpanel_version = $_ );
++        }
++        close $file_fh;
++    }
++
++    if ( $cpanel_version =~ /(\d+\.\d+\.\d+\.\d+)/ ) {
++        return $cpanel_version;
++    }
++    else {
++        return 'unknown';
++    }
++}
++
+ # shameless rip of /usr/local/cpanel/Cpanel/SafeRun/Simple.pm which, along with
+ # all other current cPanel modules, is not guaranteed to work with 11.35+ apparently.
+ # so, we take what we need and put it here
+@@ -322,14 +343,14 @@
+ }
+ 
+ sub get_os {
+-    chomp( my $os = lc run( 'uname' ) );
+-    return $os;
++    chomp( my $_os = lc run( 'uname' ) );
++    return $_os;
+ }
+ 
+ # ripped from /usr/local/cpanel/Cpanel/Sys/OS.pm
+ sub get_release_version {
+     my $ises = 0;
+-    my $version;
++    my $ver;
+ 
+     if ( open my $fh, '<', '/etc/redhat-release' ) { 
+         my $line = readline $fh;
+@@ -339,21 +360,21 @@
+         elsif ( $line =~ /CloudLinux|CentOS/i )                          { $ises    = 2; }
+         elsif ( $line =~ /WhiteBox/i )                                   { $ises    = 3; }
+         elsif ( $line =~ /caos/i )                                       { $ises    = 4; }
+-        if    ( $line =~ /(\d+\.\d+)/ )                                  { $version = $1; }
+-        elsif ( $line =~ /(\d+)/ )                                       { $version = $1; }
++        if    ( $line =~ /(\d+\.\d+)/ )                                  { $ver = $1; }
++        elsif ( $line =~ /(\d+)/ )                                       { $ver = $1; }
+     }
+ 
+     if ( $os =~ /freebsd/i ) {
+         if ( ( POSIX::uname()) [2] =~ m/^(\d+\.\d+)/ ) {
+-           $version = $1;
++           $ver = $1;
+         }    
+     }
+ 
+     if ( $ises ) {
+-        return ( $version, $ises );
++        return ( $ver, $ises );
+     }
+     else {
+-        return ( $version, 0 ); 
++        return ( $ver, 0 ); 
+     }
+ }
+ 
+@@ -363,32 +384,32 @@
+ 
+ sub print_tip {
+     my @tips = (
+-        "[FB 63193] File Manager showing 'Out of memory' in cPanel error_log? Try renaming \$HOME/\$USER/.cpanel/datastore/SYSTEMMIME",
+-        "[FB 62819] 'License File Expired: LTD: 1334782495 NOW: 1246416504 FUT!' likely just means the server clock is wrong",
+-        "[FB 62054] (By design) The 'Dedicated IP' box can only be modified when creating a package - not when editing",
+-        "[FB 61735] (By design) '/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings' destroys custom proxy subdomain records. Use WHM >> Tweak Settings instead.",
+-        "[FB 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and 'PCRE is not compiled with UTF-8 support'",
+-        "[FB 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale",
+-        "[FB 44884] upcp resets Mailman lists' hostnames. pre/postupcp hooks workaround in ticket 3541643",
+-        "[FB 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net",
+-        "mod_userdir URLs (/~username) are not compatible with FCGI when Apache's suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)",
+-        "For a list of obscure issues, see the RareIssues wiki article",
+-        "11.35+: Use /scripts/check_cpanel_rpms to fix problems in /usr/local/cpanel/3rdparty/  - not checkperlmodules",
+-        "php.ini for phpMyAdmin, phpPgAdmin, Horde, and RoundCube can be found in /usr/local/cpanel/3rdparty/etc/",
+-        "If Dovecot/POP/IMAP dies every day around the same time, the server's clock could be skewed. Check /var/log/maillog for 'moved backwards'",
+-        "'Allowed memory size of x bytes exhausted' when uploading a db via phpMyAdmin may be resolved by increasing max_allowed_packet",
+-        "Need to edit php.ini for Horde, RoundCube, phpMyAdmin, or phpPgAdmin? Edit /u/l/c/3rdparty/etc/php.ini, then run /u/l/c/b/install_php_inis",
+-        "Seeing 'domainadmin' errors (e.g. 'domainadmin-domainexistsglobal')? Check the Domainadmin-Errors wiki article",
+-        "Transfers showing 'sshcmdpermissiondeny'? Check for modified openssh-clients package (see ticket 3664533)",
+-        "Learn how cPanel 11.36+ handles rpms: http://go.cpanel.net/rpmversions",
+-        "Learn what's new in 11.36: http://docs.cpanel.net/twiki/bin/vief/AllDocumentation/1136ReleaseNotes",
++        '[FB 63193] File Manager showing "Out of memory" in cPanel error_log? Try renaming $HOME/$USER/.cpanel/datastore/SYSTEMMIME',
++        '[FB 62819] "License File Expired: LTD: 1334782495 NOW: 1246416504 FUT!" likely just means the server clock is wrong',
++        '[FB 62054] (By design) The "Dedicated IP" box can only be modified when creating a package - not when editing',
++        '[FB 61735] (By design) "/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings" destroys custom proxy subdomain records. Use WHM >> Tweak Settings instead.',
++        '[FB 61516] cPanel\'s Java SSH term app may say shell access is disabled, even when it is enabled',
++        '[FB 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and "PCRE is not compiled with UTF-8 support"',
++        '[FB 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale',
++        '[FB 44884] upcp resets Mailman lists\' hostnames. pre/postupcp hooks workaround in ticket 3541643',
++        '[FB 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net',
++        'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)',
++        'For a list of obscure issues, see the RareIssues wiki article',
++        '11.35+: Use /scripts/check_cpanel_rpms to fix problems in /usr/local/cpanel/3rdparty/  - not checkperlmodules',
++        'php.ini for phpMyAdmin, phpPgAdmin, Horde, and RoundCube can be found in /usr/local/cpanel/3rdparty/etc/',
++        'If Dovecot/POP/IMAP dies every day around the same time, the server\'s clock could be skewed. Check /var/log/maillog for "moved backwards"',
++        '"Allowed memory size of x bytes exhausted" when uploading a db via phpMyAdmin may be resolved by increasing max_allowed_packet',
++        'Need to edit php.ini for Horde, RoundCube, phpMyAdmin, or phpPgAdmin? Edit /u/l/c/3rdparty/etc/php.ini, then run /u/l/c/b/install_php_inis',
++        'Seeing "domainadmin" errors (e.g. "domainadmin-domainexistsglobal")? Check the Domainadmin-Errors wiki article',
++        'Transfers showing "sshcmdpermissiondeny"? Check for modified openssh-clients package (see ticket 3664533)',
++        'Learn how cPanel 11.36+ handles rpms: http://go.cpanel.net/rpmversions',
++        'Learn what\'s new in 11.36: http://docs.cpanel.net/twiki/bin/vief/AllDocumentation/1136ReleaseNotes',
+     );   
+ 
+     my $size = scalar @tips;
+     my $num = int rand $size;
+ 
+-    print BOLD WHITE ON_BLACK "\tDid you know? ";
+-    print BOLD WHITE ON_BLACK "$tips[$num]\n\n";
++    print BOLD WHITE ON_BLACK "\tDid you know? $tips[$num]" . RESET . "\n\n";
+ }
+ 
+ sub get_tiers_file {
+@@ -418,28 +439,27 @@
+     ## used for checking for nginx, litespeed, mailscanner, etc. 
+     ## better (?) would be to run lsof and check process names on listening ports.
+ 
+-    my @process_list;
+-    my $process_list;
++    my @processlist;
+ 
+     if ( $os eq 'linux' ) {
+-        @process_list = split /\n/, run( 'ps', 'axwwwf', '-o', 'user,cmd' );
++        @processlist = split /\n/, run( 'ps', 'axwwwf', '-o', 'user,cmd' );
+     }
+     elsif ( $os eq 'freebsd' ) {
+-        @process_list = split /\n/, run( 'ps', 'axwwwf', '-o', 'user,comm' );
++        @processlist = split /\n/, run( 'ps', 'axwwwf', '-o', 'user,comm' );
+     }
+ 
+-    return @process_list;
++    return @processlist;
+ }
+ 
+ sub get_hostinfo {
+-    my %hostinfo;
++    my %hostinfos;
+ 
+-    $hostinfo{'kernel'}         = run( 'uname', '-r' );
+-    $hostinfo{'hardware'}       = run( 'uname', '-i' );
+-    $hostinfo{'environment'}    = get_environment();
++    $hostinfos{'kernel'}         = run( 'uname', '-r' );
++    $hostinfos{'hardware'}       = run( 'uname', '-i' );
++    $hostinfos{'environment'}    = get_environment();
+ 
+-    chomp %hostinfo;
+-    return %hostinfo;
++    chomp %hostinfos;
++    return %hostinfos;
+ }
+ 
+ sub get_environment {
+@@ -454,7 +474,7 @@
+ }
+ 
+ sub get_cpuinfo {
+-    my %cpuinfo;
++    my %cpuinfos;
+ 
+     if ( $os eq 'freebsd' ) {
+         my $numcores = run( 'sysctl', 'hw.ncpu' );
+@@ -462,8 +482,8 @@
+         $numcores =~ s/^hw.ncpu://g;
+         $model =~ s/^hw.model://g;
+         $model =~ s/\s+/ /g;
+-        $cpuinfo{'numcores'} = $numcores;
+-        $cpuinfo{'model'} = $model;
++        $cpuinfos{'numcores'} = $numcores;
++        $cpuinfos{'model'} = $model;
+     }
+     else {
+         open my $cpuinfo_fh, '<', '/proc/cpuinfo';
+@@ -474,19 +494,19 @@
+                 $line =~ s/\(tm\)//g;
+                 $line =~ s/\s{2,}/ /;
+                 $line =~ s/ \@/\@/;
+-                $cpuinfo{'model'} = $line;
+-                $cpuinfo{'numcores'}++;
++                $cpuinfos{'model'} = $line;
++                $cpuinfos{'numcores'}++;
+             }
+             if ( $line =~ /^cpu MHz/m ) {
+                 $line =~ s/^cpu MHz\s+:\s+//;
+-                $cpuinfo{'mhz'} = $line;
++                $cpuinfos{'mhz'} = $line;
+             }
+         }    
+         close $cpuinfo_fh;
+     }
+ 
+-    chomp %cpuinfo;
+-    return %cpuinfo;
++    chomp %cpuinfos;
++    return %cpuinfos;
+ }
+ 
+ sub print_info {
+@@ -594,10 +614,10 @@
+     }
+ 
+     if ( $is_cloudlinux == 1 ) {
+-        if ( $php_selector_disabled eq 1 ) {
++        if ( $php_selector_disabled == 1 ) {
+             $os_info .= ' [PHP Selector: disabled for x3]';
+         }
+-        elsif ( $php_selector_disabled eq 0 ) {
++        elsif ( $php_selector_disabled == 0 ) {
+             $os_info .= ' [PHP Selector: enabled for x3]';
+         }
+         elsif ( $php_selector_disabled eq 'status unknown' ) {
+@@ -615,8 +635,8 @@
+ }
+ 
+ sub print_cpanel_info {
+-    my ( $cpanel_version, $cpanel_tier );
+-    my ( $birthday_file, $birthday, $atime );
++    my $cpanel_tier;
++    my ( $birthday_file, $birthday );
+     my $output;
+ 
+     ## cpanel-install-thread0.log is better to be checked before cpanel-install.log
+@@ -632,16 +652,6 @@
+         $birthday = localtime $ctime;
+     }    
+ 
+-    if ( open my $version_fh, '<', '/usr/local/cpanel/version' ) {
+-        while ( <$version_fh> ) {
+-            chomp( $cpanel_version = $_ );
+-        }
+-        close $version_fh;
+-    }
+-    else {
+-        $cpanel_version = 'Unknown (could not open/read /u/l/c/version ?)';
+-    }
+-
+     if ( open my $cpupdate_fh, '<', '/etc/cpupdate.conf' ) {
+         while ( <$cpupdate_fh> ) {
+             if ( m{ \A CPANEL=(.*) }xmsi ) {
+@@ -671,9 +681,10 @@
+ }
+ 
+ sub check_for_cpanel_update {
+-    my ( $TIERS, @tiers );
++    my ( $TIERS_DATA, @tiers );
+     my ( $tier, $available_tier_version );
+-    my ( $local_tier_name, $local_tier_version );
++    my $local_tier_name;
++    my $local_tier_version = $cpanel_version;
+     my $match = 0;
+     my $update_available = 0;
+ 
+@@ -698,14 +709,6 @@
+     #
+     # get local tier version (e.g., 11.36.0.4)
+     #
+-    my $cpanel_version = '/usr/local/cpanel/version';
+-    return if !$cpanel_version;
+-    
+-    if ( open my $file_fh, '<', $cpanel_version ) {
+-        chomp( $local_tier_version = readline $file_fh );
+-        close $file_fh;
+-    }
+-
+     if ( $local_tier_version !~ /(\d+\.\d+\.\d+\.\d+)/ ) {
+         print_info( 'cPanel update check: ' );
+         print_warning( "unknown or old cPanel version $local_tier_version" );
+@@ -728,15 +731,15 @@
+ 
+     if ( $sock ) {
+         print $sock "GET /cpanelsync/TIERS HTTP/1.1\r\nHost: httpupdate.cpanel.net\r\n\r\n";
+-        sysread $sock, $TIERS, 1000;
++        sysread $sock, $TIERS_DATA, 1000;
+         close $sock;
+     }
+ 
+     alarm 0;
+ 
+-    return if !$TIERS;
++    return if !$TIERS_DATA;
+ 
+-    @tiers = split /\n/, $TIERS;
++    @tiers = split /\n/, $TIERS_DATA;
+ 
+ 
+     #
+@@ -767,7 +770,7 @@
+     # FreeBSD won't ever go past 11.30
+     # http://www.cpanel.net/products/cpanelwhm/system-requirements.html
+     #
+-    return if ( ( $os eq 'freebsd' ) && substr( $local_tier_version, 0, 5 ) == '11.30' );
++    return if ( ( $os eq 'freebsd' ) && substr( $local_tier_version, 0, 5 ) eq '11.30' );
+ 
+     my ( $l1, $l2, $l3, $l4 ) = split /\./, $local_tier_version;
+     my ( $r1, $r2, $r3, $r4 ) = split /\./, $available_tier_version;
+@@ -989,7 +992,7 @@
+     }    
+     close $phpconf_fh;
+ 
+-    if ( $suexec eq 1 ) {
++    if ( $suexec == 1 ) {
+         $suexec = '/w suexec';
+     }    
+     else {
+@@ -1160,6 +1163,13 @@
+ }
+ 
+ sub print_which_php_is_used_internally {
++    my ( $v1, $v2 ) = split /\./, $cpanel_version;
++
++    # /var/cpanel/usecpphp is no longer used in cPanel 11.36+
++    if ( ( $v1 > 11 ) || ( $v1 == 11 ) and ( $v2 >= 36 ) ) {
++        return;
++    }
++
+     # http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/CpsrvdAndPhp
+ 
+     my $whm_php;
+@@ -1248,7 +1258,7 @@
+         if ( $who_r =~ m{ \A \s+ run-level \s (\d) }xms ) {
+             $runlevel = $1;
+ 
+-            if ( $runlevel != '3' ) {
++            if ( $runlevel != 3 ) {
+                 print_warn( 'Runlevel: ' );
+                 print_warning(  "runlevel is not 3 (current runlevel: $runlevel)" );
+             }
+@@ -1331,7 +1341,7 @@
+     }
+ 
+     # If we make it here, only check CentOS/RHEL 6.0 - 6.2
+-    if ( $release_version !~ m{ \A ( 6[0-2] ) \z }xms ) {
++    if ( $release_version !~ m{ \A 6[0-2] \z }xms ) {
+         return;
+     }
+ 
+@@ -1563,6 +1573,13 @@
+ }
+ 
+ sub check_for_local_makecpphp_template {
++    my ( $v1, $v2 ) = split /\./, $cpanel_version;
++
++    # makecpphp has been removed from 11.36+
++    if ( ( $v1 > 11 ) || ( $v1 == 11 ) and ( $v2 >= 36 ) ) {
++        return;
++    }
++
+     my $makecpphp_local_profile = '/var/cpanel/easy/apache/profile/makecpphp.profile.yaml.local';
+ 
+     if ( -e $makecpphp_local_profile ) {
+@@ -1664,7 +1681,7 @@
+     if ( -x $usr_bin_perl and ! -l $usr_bin_perl ) {
+         my $mode = ( stat( $usr_bin_perl ))[2] & 07777;
+         $mode = sprintf "%lo", $mode;
+-        if ( $mode != '755' ) {
++        if ( $mode != 755 ) {
+             print_warn( 'Perl Permissions: ' );
+             print_warning( "$usr_bin_perl is $mode" );
+         }
+@@ -1673,7 +1690,7 @@
+     if ( -x $usr_local_bin_perl and ! -l $usr_local_bin_perl ) {
+         my $mode = ( stat( $usr_local_bin_perl ))[2] & 07777;
+         $mode = sprintf "%lo", $mode;
+-        if ( $mode != '755' ) {
++        if ( $mode != 755 ) {
+             print_warn( 'Perl Permissions: ' );
+             print_warning( "$usr_local_bin_perl is $mode" );
+         }
+@@ -1713,8 +1730,8 @@
+             my $mode = ( stat( $resource ))[2] & 07777;
+             $mode = sprintf "%lo", $mode;
+             if ( $mode != $resources_and_perms{$resource} ) {
+-                next if ( $resource =~ '^(/(s?)bin|/usr/(s?)bin|/)$' and $mode == '555' ); # CentOS 6.2+
+-                next if ( $resource =~ '^/(var|sbin|usr/local/sbin|usr|usr/sbin)?$' and $mode == '711' );
++                next if ( $resource =~ '^(/(s?)bin|/usr/(s?)bin|/)$' and $mode == 555 ); # CentOS 6.2+
++                next if ( $resource =~ '^/(var|sbin|usr/local/sbin|usr|usr/sbin)?$' and $mode == 711 );
+                 print_warn( 'Non-default Permissions: ' );
+                 print_warning( "$resource (mode: $mode | default: $resources_and_perms{$resource})" );
+             }
+@@ -1725,7 +1742,7 @@
+     if ( -e '/etc/shadow' ) {
+         my $mode = ( stat( '/etc/shadow' ))[2] & 07777;
+         $mode = sprintf "%lo", $mode;
+-        if ( $mode != '600' and $mode != '400' and $mode != '200' ) {
++        if ( $mode != 600 and $mode != 400 and $mode != 200 ) {
+             print_warn( 'Non-default Permissions: ' );
+             print_warning( "/etc/shadow (mode: $mode | default: 0400 or 0600)" );
+         }
+@@ -1734,7 +1751,7 @@
+     if ( -e '/usr/bin/crontab' ) {
+         my $mode = ( stat( '/usr/bin/crontab' ))[2] & 07777;
+         $mode = sprintf "%lo", $mode;
+-        if ( $mode != '4755' and $mode != '6755' and $mode != '4555' ) {
++        if ( $mode != 4755 and $mode != 6755 and $mode != 4555 ) {
+             print_warn( 'Non-default Permissions: ' );
+             print_warning( "/usr/bin/crontab (mode: $mode | default: 4755 or 6755 or 4555)" );
+         }
+@@ -1752,7 +1769,7 @@
+     if ( -e '/sbin/ifconfig' ) {
+         my $mode = ( stat( '/sbin/ifconfig' ))[2] & 07777;
+         $mode = sprintf "%lo", $mode;
+-        if ( $mode != '755' and $mode != '555' ) {
++        if ( $mode != 755 and $mode != 555 ) {
+               print_warn( 'Non-default Permissions: ' );
+               print_warning( "/sbin/ifconfig (mode: $mode | default: 755 or 555)" );
+         }
+@@ -1761,7 +1778,7 @@
+     if ( -e '/bin/ln' ) {
+         my $mode = ( stat( '/bin/ln' ))[2] & 07777;
+         $mode = sprintf "%lo", $mode;
+-        if ( $mode != '755' and $mode != '555' ) {
++        if ( $mode != 755 and $mode != 555 ) {
+               print_warn( 'Non-default Permissions: ' );
+               print_warning( "/bin/ln (mode: $mode | default: 755 or 555)" );
+         }
+@@ -1788,7 +1805,7 @@
+         if ( -e $awstats ) {
+             my $mode = ( stat( $awstats ))[2] & 07777;
+             $mode = sprintf "%lo", $mode;
+-            if ( $mode != '755' ) {
++            if ( $mode != 755 ) {
+                 print_warn( 'Awstats: ' );
+                 print_warning( " enabled, but $awstats isn't 755 !" );
+             }
+@@ -2197,20 +2214,20 @@
+ 
+ sub get_mysql_datadir {
+     my $my_cnf = '/etc/my.cnf';
+-    my $mysql_datadir = '/var/lib/mysql/';
++    my $datadir = '/var/lib/mysql/';
+ 
+     if ( open my $my_cnf_fh, '<', $my_cnf ) {
+         while ( <$my_cnf_fh> ) {
+             chomp ( my $line = $_ );
+             if ( $line =~ m{ \A datadir \s* = \s* (?:["']?) ([^"']+) }xms ) {
+-                $mysql_datadir = $1;
++                $datadir = $1;
+                 last;
+             }
+         }
+         close $my_cnf_fh;
+     }
+ 
+-    return $mysql_datadir;
++    return $datadir;
+ }
+ 
+ sub check_mysql_non_default_datadir {
+@@ -3110,32 +3127,21 @@
+ }
+ 
+ sub check_for_11_30_scripts_not_a_symlink {
+-    my ( $cpanel_version, $cpanel_version_orig );
++    my ( $v1, $v2 ) = split /\./, $cpanel_version;
+ 
+-    if ( open my $cpanel_version_fh, '<', '/usr/local/cpanel/version' ) {
+-        while ( <$cpanel_version_fh> ) {
+-            chomp( $cpanel_version = $_ );
+-        }
+-        close $cpanel_version_fh;
+-    }    
+-
+-    $cpanel_version_orig = $cpanel_version;
+-    $cpanel_version =~ s/\.//g;
+-    $cpanel_version = substr( $cpanel_version, 0, 4 );
+-    
+-    if ( $cpanel_version >= 1130 ) {
++    if ( ( $v1 > 11 ) || ( ( $v1 == 11 ) and ( $v2 >= 30 ) ) ) {
+         if ( ! -l '/scripts' ) {
+             print_warn( '/scripts: ' );
+-            print_warning( "cPanel is >= 11.30 [$cpanel_version_orig] and /scripts is not a symlink" );
++            print_warning( "cPanel is >= 11.30 [$cpanel_version] and /scripts is not a symlink" );
+         }
+     }
+ }
+ 
+ # ripped some of Cpanel::Sys::GetOS::getos() for this
+ sub check_for_cpanel_not_updating {
++    my ( $v1, $v2 ) = split /\./, $cpanel_version;
+     my $os_vendor;
+     my $release_string;
+-    my ( $cpanel_version, $cpanel_version_orig );
+     my $updates;
+     my @release_files = qw(
+         fedora-release
+@@ -3180,18 +3186,6 @@
+     return if ( $release_string =~ /Red Hat Enterprise Linux (?:.*) release (3|4)/ );
+     return if ( $release_string =~ /Red Hat Linux release ([7-9])/ );
+ 
+-
+-    if ( open my $cpanel_version_fh, '<', '/usr/local/cpanel/version' ) {
+-        $cpanel_version = readline $cpanel_version_fh;
+-        $cpanel_version_orig = $cpanel_version;
+-        $cpanel_version =~ s/\.//g;
+-        $cpanel_version = substr( $cpanel_version, 0, 4 );
+-        close $cpanel_version_fh;
+-    }
+-    else {
+-        $cpanel_version = 'unknown'
+-    }
+-
+     if ( open my $cpupdate_conf_fh, '<', '/etc/cpupdate.conf' ) {
+         while ( <$cpupdate_conf_fh> ) {
+             if ( /UPDATES=(.*)/ ) {
+@@ -3206,7 +3200,7 @@
+ 
+ 
+     ## TEST 1: cPanel < 11.29, updates set to daily
+-    if ( $cpanel_version < 1129 ) {
++    if ( ( $v1 < 11 ) || ( $v1 == 11 ) and ( $v2 < 29 ) ) {
+         if ( $updates eq 'daily' ) {
+             print "\n!! cPanel may not be updating on this server !!\n";
+             print_warn( 'L1/L2: ' );
+@@ -3357,18 +3351,8 @@
+ # cPanel < 11.30.7.3 will get YAML::Syck from CPAN. If this causes any issues with
+ # Cpanel::TaskQueue, cPanel's position is to upgrade cPanel.
+ sub check_for_cPanel_lower_than_11_30_7_3 {
+-    my $cpanel_version;
+     my $could_be_affected = 0;
+ 
+-    if ( open my $version_fh, '<', '/usr/local/cpanel/version' ) {
+-        while ( <$version_fh> ) {
+-            chomp( $cpanel_version = $_ );
+-        }
+-        close $version_fh;
+-    }    
+-
+-    return if !$cpanel_version;
+-
+     if ( $cpanel_version =~ m{ \A (\d+)\.(\d+)\.(\d+)\.(\d+) \z }xms ) {
+         if ( $1 < 11 ) {
+             $could_be_affected = 1;
+@@ -3413,14 +3397,31 @@
+     }
+ }
+ 
+-sub check_for_maxclients_reached {
++sub check_for_maxclients_or_maxrequestworkers_reached {
++    my ( $version_major, $version_minor );
++    my $apache_version;
++
++    for my $line ( @apache_version_output ) {
++        if ( $line =~ m{ \A Server \s version: \s Apache/(\d\.\d) }xms ) {
++            ( $version_major, $version_minor ) = split /\./, $1;
++            last;
++        }
++    }
++
++    if ( ( $version_major == 2 ) and ( $version_minor == 2 ) ) {
++        $apache_version = '2.2';
++    }
++    elsif ( ( $version_major == 2 ) and ( $version_minor == 4 ) ) {
++        $apache_version = '2.4';
++    }
++
+     my $log = '/usr/local/apache/logs/error_log';
+     my $size = ( stat( $log ))[7];
+     my $bytes_to_check = 20_971_520; # 20M limit of logs to check, may need adjusting, depending how much time it adds to SSP
+     my $seek_position = 0;
+     my $log_data;
+     my @logs;
+-    my $max_clients_last_hit_date;
++    my $limit_last_hit_date;
+ 
+     if ( $size > $bytes_to_check ) {
+         $seek_position = ( $size - $bytes_to_check );
+@@ -3437,15 +3438,31 @@
+     @logs = reverse @logs;
+ 
+     for my $log_line ( @logs ) {
+-        if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s+ \[error\] \s+ server \s+ reached \s+ MaxClients }xms ) {
+-            $max_clients_last_hit_date = "$1";
+-            last;
++        if ( $apache_version eq '2.2' ) {
++            # [Wed Nov 14 05:55:04 2012] [error] server reached MaxClients setting, consider raising the MaxClients setting
++            if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s+ \[error\] \s+ server \s+ reached \s+ MaxClients }xms ) {
++                $limit_last_hit_date = $1;
++                last;
++            }
++        }
++        elsif ( $apache_version eq '2.4' ) {
++            # [Fri Feb 08 09:58:45.875187 2013] [mpm_prefork:error] [pid 23220] AH00161: server reached MaxRequestWorkers
++            if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s (.*) server \s reached \s MaxRequestWorkers }xms ) {
++                $limit_last_hit_date = $1;
++                last;
++            }
+         }
+     }
+ 
+-    if ( $max_clients_last_hit_date ) {
+-        print_warn( 'MaxClients: ' );
+-        print_warning( "limit last reached at $max_clients_last_hit_date" );
++    if ( $limit_last_hit_date ) {
++        if ( $apache_version eq '2.2' ) {
++            print_warn( 'MaxClients: ' );
++        }
++        elsif ( $apache_version eq '2.4' ) {
++            print_warn( 'MaxRequestWorkers: ' );
++        }
++
++        print_warning( "limit last reached at $limit_last_hit_date" );
+     }
+ }
+ 
+@@ -3713,7 +3730,7 @@
+ sub check_if_httpdconf_ipaddrs_exist {
+     my $httpdconf = '/usr/local/apache/conf/httpd.conf';
+     my @vhost_ipaddrs;
+-    my ( @unbound_ipaddrs, $unbound_ipaddrs );
++    my @unbound_ipaddrs;
+ 
+     return if !$httpdconf;
+ 
+@@ -4029,6 +4046,27 @@
+     }    
+ }
+ 
++sub check_for_rpm_dist_ver_unknown {
++    my $sysinfo_config = '/var/cpanel/sysinfo.config';
++    my $is_broken = 0;
++
++    return if !$sysinfo_config;
++
++    if ( open my $file_fh, '<', $sysinfo_config ) {
++        while ( <$file_fh> ) {
++            if ( /^rpm_dist_ver=unknown$/ ) {
++                $is_broken = 1;
++                last;
++            }
++        }
++        close $file_fh;
++    }
++
++    if ( $is_broken == 1 ) {
++        print_warn( "${sysinfo_config}: " );
++        print_warning( "contains 'rpm_dist_ver=unknown'. Try running '/scripts/gensysinfo' to fix" );
++    }    
++}
+ 
+ ##############################
+ #  END [WARN] CHECKS
+@@ -4040,7 +4078,6 @@
+ ##############################
+ 
+ sub check_for_assp {
+-    my $assp;
+     my @port_25_processes;
+ 
+     if ( $os eq 'linux' ) {
+@@ -4067,7 +4104,6 @@
+ }
+ 
+ sub check_for_varnish {
+-    my $varnish;
+     my @port_80_processes;
+ 
+     if ( $os eq 'linux' ) { 

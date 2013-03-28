@@ -1,0 +1,86 @@
+-----------------------------------------------------------------------------------------
+
+!! SSP is now run as a shell script !!
+!! SSP is now run as a shell script !!
+!! SSP is now run as a shell script !!
+
+This is the old way to call SSP:
+# lwp-request ssp.cptechs.info | perl
+
+This is the new way to call SSP:
+# lwp-request ssp.cptechs.info | sh
+
+This change is mandatory to prepare for upcoming changes to the way that
+cPanel implements perl on 11.35+. When the shell script is executed, it will
+decide which version of perl to use to execute SSP (/usr/local/cpanel/3rdparty/bin/perl,
+/usr/bin/perl, or /usr/local/bin/perl - in that order).
+
+If you use a custom application or alias like AutoSSH or rc.remote, you should
+have already updated accordingly.
+
+-----------------------------------------------------------------------------------------
+
+SSP 4.0 removes all external, non-core perl dependencies. It no longer relies on
+modules from the Cpanel:: namespace, or File::ReadBackwards, or LWP::Simple. This
+should allow it to run on <= 11.26 (rare, but they're out there), and allow it to
+run problem free on every version of cPanel from now until the end of time.
+
+These changes involved removing calls to Cpanel::SafeRun::Errors::saferunnoerror
+and replacing them with a subroutine named run(), which shamelessly borrows directly
+from the module it replaced. This led to some strange (at the time) issues involving
+empty arrays being reported as containing content. That has since been resolved by
+always using split// when populating arrays via run(), like so:
+
+    my @lsof_10000 = split /\n/, run( 'lsof', '-n', '-i', 'tcp:10000' );
+
+
+The complete list of modules that have been removed is as follows:
+
+* Cpanel::SafeRun::Errors (not guaranteed to work in the future)
+* Cpanel::Ips::Fetch (not guaranteed to work in the future)
+* Cpanel::Sys::OS (not guaranteed to work in the future)
+* Cpanel::Sys::GetOS (not guaranteed to work in the future)
+* Cpanel::OSSys (not guaranteed to work in the future)
+* File::ReadBackwards (doesn't currently exist in 11.35+)
+* LWP::Simple (this was the only remaining external dependency)
+
+LWP::Simple was only used for issuing basic GETs over port 80. That functionality
+was replaced with direct socket communication via IO::Socket::INET.
+
+File::ReadBackwards didn't last long, and was used to check Apache's error_log for
+MaxClients issues. That functionality has been changed to open() /usr/local/apache/logs/error_log,
+seek() to ( $log_size - 20MB ), and check the last 20MB for MaxClients issues.
+
+
+[NEW] Print a warning if multiple ImageMagick installs exist. This will check
+for the existence of files at both /usr/bin/convert and /usr/local/bin/convert .
+
+[NEW] If the server runs CloudLinux, print PHP Selector's status on the OS [INFO] line.
+The status will be either 'enabled', 'disabled', or 'status unknown', the latter of
+which probably means that PHP Selector is not installed. This check is currently only
+for the x3 theme.
+
+[NEW] die() if SSP is not run as root.
+
+[NEW] Supress output of warnings about default hooks. This is done by comparing
+the md5 checksum of found hooks with known default checksums. This will cut down
+on unimportant information provided by SSP, mainly on CloudLinux servers.
+
+[NEW] If any users are using custom locales, print a warning that "500 Internal
+Server Errors" seen in cPanel may be related to case 62119.
+
+[NEW] SSP will print a random tip each time its run. These are designed to be
+short, informative items that are helpful to be aware of. This will help to save
+time from troublehsooting something that is already known about, and to provide
+information about current cases.
+
+[UPDATED] All calls to lsof are now passed the '-n' argument to avoid doing
+hostname lookups. This can improve the speed at which SSP runs, dramatically so
+in some cases.
+
+[UPDATED] Ignore rpms that start with "cpanel-" and "alt-php".
+
+[UPDATED] Remove check_for_missing_limits_h() and incorporated it into the
+check_for_kernel_headers_rpm() subroutine.
+
+[UPDATED] General code cleanup; tidied up the GLOBALS section, for example.

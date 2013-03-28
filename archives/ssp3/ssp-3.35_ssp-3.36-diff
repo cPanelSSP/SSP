@@ -1,0 +1,56 @@
+--- ssp-3.35	2012-10-29 20:13:04.000000000 +0400
++++ ssp-3.36	2012-10-30 23:40:52.000000000 +0400
+@@ -17,7 +17,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.35';
++my $version = '3.36';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ ######################
+@@ -148,6 +148,8 @@
+ check_for_apache_listen_host_is_localhost();
+ check_roundcube_mysql_pass_mismatch();
+ check_for_missing_limits_h();
++check_for_extra_uid0_pwcache_file();
++check_for_11_30_scripts_not_a_symlink();
+ 
+ # [3RDP]
+ check_for_assp();
+@@ -2699,6 +2701,35 @@
+     }
+ }
+ 
++sub check_for_extra_uid0_pwcache_file {
++    if ( -f '/var/cpanel/pw.cache/2:0' ) {
++        print_warn( 'MySQL: ' );
++        print_warning( '/var/cpanel/pw.cache/2:0 exists. If MySQL shows as offline in cPanel, please update case 59670' );
++    }
++}
++
++sub check_for_11_30_scripts_not_a_symlink {
++    my ( $cpanel_version, $cpanel_version_orig );
++
++    if ( open my $cpanel_version_fh, '<', '/usr/local/cpanel/version' ) {
++        while ( <$cpanel_version_fh> ) {
++            chomp( $cpanel_version = $_ );
++        }
++        close $cpanel_version_fh;
++    }    
++
++    $cpanel_version_orig = $cpanel_version;
++    $cpanel_version =~ s/\.//g;
++    $cpanel_version = substr( $cpanel_version, 0, 4 );
++    
++    if ( $cpanel_version >= 1130 ) {
++        if ( ! -l '/scripts' ) {
++            print_warn( '/scripts: ' );
++            print_warning( "cPanel is >= 11.30 [$cpanel_version_orig] and /scripts is not a symlink" );
++        }
++    }
++}
++
+ ##############################
+ #  END [WARN] CHECKS
+ ##############################

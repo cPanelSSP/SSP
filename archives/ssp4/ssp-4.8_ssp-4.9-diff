@@ -1,0 +1,245 @@
+--- ssp-4.8	2013-02-01 15:32:12.000000000 -0600
++++ ssp-4.9	2013-02-06 09:44:46.000000000 -0600
+@@ -16,7 +16,9 @@
+     die "SSP must be run as root\n";
+ }
+ 
+-my $version = '4.8';
++$ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
++
++my $version = '4.9';
+ 
+ $| = 1;
+ $Term::ANSIColor::AUTORESET = 1;
+@@ -46,9 +48,9 @@
+ ##  END GLOBALS     ##
+ ######################
+ 
+-print "\n";
+ 
+ ## [INFO]
++print "\n";
+ check_for_dnsonly();
+ print_tip();
+ print_version();
+@@ -68,6 +70,7 @@
+ print_which_php_is_used_internally();
+ 
+ ## [WARN]
++print "\n";
+ check_selinux_status();
+ check_runlevel();
+ check_for_missing_root_cron();
+@@ -165,6 +168,7 @@
+ check_for_noxsave_in_grub_conf();
+ 
+ # [3RDP]
++print "\n";
+ check_for_assp();
+ check_for_varnish();
+ check_for_litespeed();
+@@ -372,6 +376,8 @@
+         "Need to edit php.ini for Horde, RoundCube, phpMyAdmin, or phpPgAdmin? Edit /u/l/c/3rdparty/etc/php.ini, then run /u/l/c/b/install_php_inis",
+         "Seeing 'domainadmin' errors (e.g. 'domainadmin-domainexistsglobal')? Check the Domainadmin-Errors wiki article",
+         "Transfers showing 'sshcmdpermissiondeny'? Check for modified openssh-clients package (see ticket 3664533)",
++        "Learn how cPanel 11.36+ handles rpms: http://go.cpanel.net/rpmversions",
++        "Learn what's new in 11.36: http://docs.cpanel.net/twiki/bin/vief/AllDocumentation/1136ReleaseNotes",
+     );   
+ 
+     my $size = scalar @tips;
+@@ -661,68 +667,120 @@
+ }
+ 
+ sub check_for_cpanel_update {
++    my ( $TIERS, @tiers );
++    my ( $tier, $available_tier_version );
++    my ( $local_tier_name, $local_tier_version );
++    my $match = 0;
++
++    #
++    # get local tier name (e.g., edge)
++    #
++    my $cpupdate_conf = '/etc/cpupdate.conf';
++    return if !$cpupdate_conf;
+ 
+-    my ( $local_tier_name, $local_tier_version, $remote_tier_version );
+-
+-    ## get local tier name 
+-    if ( open my $cpupdateconf_fh, '<', '/etc/cpupdate.conf' ) {
+-        while ( <$cpupdateconf_fh> ) {
+-            if ( m{ \A CPANEL=([\w\d\.]+) }xms ) {
+-                chomp( $local_tier_name =  lc( $1 ) );
++    if ( open my $file_fh, '<', $cpupdate_conf ) {
++        while ( <$file_fh> ) {
++            if ( /\bcpanel=(.*)/i ) {
++                $local_tier_name = $1;
++                last;
+             }
+         }
+-        close $cpupdateconf_fh;
+-    }    
+-    else {
+-        $local_tier_name = "Unknown ( can't open/read /etc/cpupdate.conf ?)";
+-    }    
++        close $file_fh;
++    }
+ 
+-    ## get local tier version
+-    if ( open my $cpanel_version_fh, '<', '/usr/local/cpanel/version' ) {
+-        while ( <$cpanel_version_fh> ) {
+-            chomp( $local_tier_version = $_ );
+-        }
+-        close $cpanel_version_fh;
+-    }    
+-    else {
+-        $local_tier_version = "Unknown (could not open/read /u/l/c/version ?)";
+-    }    
++    return if !$local_tier_name;
+ 
+-    ## We skip checking for updates of anything else such as "manual-release", "11.32.4.5", etc.
+-    if ( $local_tier_name !~ m{ ( edge | current | release | stable | 11\.3(0|2|4|6) ) }xmsi ) {
++    #
++    # get local tier version (e.g., 11.36.0.4)
++    #
++    my $cpanel_version = '/usr/local/cpanel/version';
++    return if !$cpanel_version;
++    
++    if ( open my $file_fh, '<', $cpanel_version ) {
++        chomp( $local_tier_version = readline $file_fh );
++        close $file_fh;
++    }
++
++    if ( $local_tier_version !~ /(\d+\.\d+\.\d+\.\d+)/ ) {
++        print_info( 'cPanel update check: ' );
++        print_warning( "unknown or old cPanel version: $local_tier_version" );
+         return;
+     }
+ 
+-    if ( $local_tier_name !~ /Unknown/ ) {
+-        if ( $local_tier_version !~ /Unknown/ ) {
++    #
++    # get available tiers and versions (e.g., edge:11.36.0.4)
++    #
++    local $SIG{'ALRM'} = sub { return(); };
+ 
+-            ## compare the local tier version with that of the currently available version.
++    alarm 5;
+ 
+-            if ( ! $TIERS ) {
+-                print_info( 'cPanel update check: ' );
+-                print_warning( 'Request timed out for http://httpupdate.cpanel.net/cpanelsync/TIERS' );
+-            }
+-            return if ! $TIERS;
++    my $sock = IO::Socket::INET->new(
++        PeerAddr    => 'httpupdate.cpanel.net',
++        PeerPort    => 80,
++        Proto       => 'tcp',
++        Timeout     => 3,
++    );   
+ 
+-            if ( $TIERS =~ m{ $local_tier_name : (\d+\.\d+\.\d+\.\d+) }xms ) {
+-                $remote_tier_version = $1;
+-            }
++    if ( $sock ) {
++        print $sock "GET /cpanelsync/TIERS HTTP/1.1\r\nHost: httpupdate.cpanel.net\r\n\r\n";
++        sysread $sock, $TIERS, 1000;
++        close $sock;
++    }
+ 
+-            my $local_tier_version_converted = $local_tier_version;
+-            $local_tier_version_converted =~ s/\.//g;
+-            my $remote_tier_version_converted = $remote_tier_version;
+-            $remote_tier_version_converted =~ s/\.//g;
++    alarm 0;
++
++    return if !$TIERS;
+ 
+-            ## FreeBSD won't ever go past 11.30
+-            ## http://www.cpanel.net/products/cpanelwhm/system-requirements.html
+-            return if ( ( $os eq 'freebsd' ) && substr( $local_tier_version_converted, 0, 4 ) == '1130' );
++    @tiers = split /\n/, $TIERS;
+ 
+-            if ( $local_tier_version_converted < $remote_tier_version_converted ) {
+-                print_info( 'cPanel update check: ' );
+-                print_warning( " UPDATE AVAILABLE: $local_tier_version -> $remote_tier_version" );
++
++    #
++    # does the local server use a recognized tier?
++    #
++    for my $line ( @tiers ) {
++        if ( $line =~ m{ \A (.*) : (\d+\.\d+\.\d+\.\d+) \z }xms ) {
++            ( $tier, $available_tier_version ) = ( $1, $2 );
++            if ( $tier eq $local_tier_name ) {
++                $match = 1;
++                last;
+             }
+         }
+     }
++
++    if ( $match == 0 ) {
++        print_info( 'cPanel update check: ' );
++        print_warning( "server is configured to use an unknown tier ($local_tier_name)" );
++        return;
++    }
++
++    #
++    # does the local tier version match the available tier version?
++    #
++    return if ( $local_tier_version eq $available_tier_version );
++
++
++    my $local_tier_version_tmp = $local_tier_version;
++    my $available_tier_version_tmp = $available_tier_version;
++    $local_tier_version_tmp =~ s/\.//g;
++    $available_tier_version_tmp =~ s/\.//g;
++
++    #
++    # FreeBSD won't ever go past 11.30
++    # http://www.cpanel.net/products/cpanelwhm/system-requirements.html
++    #
++    return if ( ( $os eq 'freebsd' ) && substr( $local_tier_version_tmp, 0, 4 ) == '1130' );
++
++    #
++    # is the available tier version higher than the local tier version?
++    #
++    if ( $local_tier_version_tmp < $available_tier_version_tmp ) {
++        print_info( 'cPanel update check: ' );
++        print_warning( "UPDATE AVAILABLE ($local_tier_version -> $available_tier_version)" );
++    }
++    else {
++        print_info( 'cPanel update check: ' );
++        print_warning( "local version ($local_tier_version) is higher than available version ($available_tier_version) [configured tier is: $local_tier_name]" );
++    }
+ }
+ 
+ sub check_perl_version_less_than_588 {
+@@ -1634,10 +1692,12 @@
+         '/usr/sbin'                     => '755',
+         '/usr/local/apache'             => '755',
+         '/usr/local/apache/bin/httpd'   => '755',
++        '/usr/local/cpanel/bin/cpwrap'  => '4755',
+         '/usr/local/bin'                => '755',
+         '/usr/local/sbin'               => '755',
+         '/var'                          => '755',
+         '/var/cpanel/locale'            => '755',
++        '/var/cpanel/resellers'         => '644',
+     );
+ 
+     for my $resource ( keys %resources_and_perms ) {
+@@ -1814,6 +1874,7 @@
+     my %hooks_ignore = qw(
+         e5e13640299ec439fb4c7f79a054e42b    /scripts/posteasyapache
+         42a624c843f34085f1532b0b4e17fe8c    /scripts/postmodifyacct
++        22cf7db1c069fd9672cd9dad3a3d371d    /scripts/postupcp
+         57f8ea2d494e299827cc365c86a357ac    /scripts/postupcp
+         e464adf0531fea2af4fe57361d9a43fb    /scripts/postupcp
+         941772daaa48999f1d5ae5fe2f881e36    /scripts/postupcp
+@@ -3763,6 +3824,8 @@
+ }
+ 
+ sub check_for_rpm_overrides {
++    return if ( $os eq 'freebsd' );
++
+     my $rpm_override_dir = '/var/cpanel/rpm.versions.d/';
+     my $local_versions = '/var/cpanel/rpm.versions.d/local.versions';
+     my $md5;

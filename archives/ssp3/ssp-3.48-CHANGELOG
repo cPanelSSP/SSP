@@ -1,0 +1,8 @@
+[UPDATED] The /usr/local/apache/conf/modsec2.conf that is installed when modsec is
+enabled via EasyApache is now ~1192 bytes in size. Previously it was smaller, and
+if it was over 800 bytes, a warning would be printed that the file may contain customizations.
+Now we print that warning if the file is over 1200 bytes in size.
+
+
+[UPDATED] Added '/usr/local/cpanel/Cpanel/ThirdParty/Attracta/Hooks/pkgacct-restore'
+to the list of hooks to be ignored in /var/cpanel/hooks.yaml .

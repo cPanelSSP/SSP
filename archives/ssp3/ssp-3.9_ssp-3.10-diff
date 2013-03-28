@@ -1,0 +1,62 @@
+--- ssp-3.9	2012-08-15 17:08:53.000000000 +0400
++++ ssp-3.10	2012-08-16 20:03:53.000000000 +0400
+@@ -20,7 +20,7 @@
+ use IO::Socket::INET;
+ 
+ $| = 1;
+-my $version = '3.9';
++my $version = '3.10';
+ $Term::ANSIColor::AUTORESET = 1;
+ 
+ my $os                  = Cpanel::OSSys::getos();
+@@ -823,20 +823,26 @@
+ sub check_for_sandy_bridge {
+     return if ! -e '/proc/cpuinfo';
+ 
++    my $sandy_bridge = 0; 
++
+     my $release_version = Cpanel::Sys::OS::getreleaseversion();
+     $release_version =~ s/\.//g;
+ 
+     # CentOS/RHEL 5 is not affected
+     return if ( $release_version < 60 );
+ 
+-    # QEMU + KVM + CentOS/RHEL 6.3 can be affected (is /proc/cpuinfo sufficient for QEMU checking?)
+-    unless ( $release_version == 63 and $cpuinfo{'model'} =~ m{ QEMU }ixms ) {
+-
+-        # Only check CentOS/RHEL 6.0 - 6.2
+-        return if $release_version !~ m{ \A ( 6[0-2] ) \z }xms;
++    # QEMU + CentOS 6.3 could be affected if using Sandy Bridge.
++    # No way to determine if using Sandy Bridge, however.
++    if ( $release_version == 63 and $cpuinfo{'model'} =~ m{ QEMU }ixms ) {
++        print_warn( 'QEMU + CentOS 6.3: ' );
++        print_warning( 'if server is using Sandy Bridge CPU, could be affected by the AVX issue' );
++        return;
+     }
+ 
+-    my $sandy_bridge = 0; 
++    # If we make it here, only check CentOS/RHEL 6.0 - 6.2
++    if ( $release_version !~ m{ \A ( 6[0-2] ) \z }xms ) {
++        return;
++    }
+ 
+     if ( open my $cpuinfo_fh, '<', '/proc/cpuinfo' ) {
+         while ( <$cpuinfo_fh> ) {
+@@ -867,7 +873,7 @@
+     if ( $sandy_bridge == 1 ) {
+         print_warn( 'AVX / Sandy Bridge: ' );
+         print_warning( 'detected! compile ssp.cptechs.info/glibc_avx.tar.gz and run ./exe (check for "Illegal instruction")' );
+-    }    
++    }
+ }
+ 
+ 
+@@ -998,7 +1004,7 @@
+ 
+     if ( @dir_contents ) {
+         print_warn( 'Rawenv detected: ' );
+-        print_warning( 'check /var/cpanel/easy/apahe/rawenv !' );
++        print_warning( 'check /var/cpanel/easy/apache/rawenv !' );
+     }
+ }
+ 

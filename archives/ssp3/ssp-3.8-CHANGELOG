@@ -1,0 +1,16 @@
+[NEW] Print a warning if non-empty /var/cpanel/domainfwdip,
+which would indicate that Domain Forwarding is in use.
+
+[NEW] Print a warning if empty templates exist in /var/cpanel/templates/apache2 .
+This can affect the ability to remove domains.
+
+[NEW] Print a warning if empty /var/lib/pgsql/data/pg_hba.conf, which could indicate
+that /scripts/installpostgres was run, but WHM >> Postgres Config >> Install Config
+was not. This results in "The PostgreSQL server is currently offline" in cPanel,
+even though it is running.
+
+[NEW] Print a warning if any templates in /var/cpanel/easy/apache/profile are empty.
+This can cause issues with EasyApache similar to "Subprocess didn't respond", etc.
+
+[UPDATED] Don't print the Sandy Bridge warning if the server's release version
+is greater than 6.2.

@@ -1,0 +1,10 @@
+[UPDATED] Added check_for_symantec() to be run on DNSONLY servers.
+
+
+[NEW] If clustering is enabled, print a list of the active members
+and their roles, like this:
+
+	[INFO] * DNS Clustering: is enabled
+	         \_ dns3.example.com  (10.1.1.1)  [sync]
+	         \_ dns1.example.com  (10.1.1.2)  [sync]
+	         \_ dns2.example.com  (10.1.1.3)  [sync]
