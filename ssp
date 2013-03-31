@@ -24,7 +24,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.33';
+my $version = '4.34';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -43,8 +43,8 @@ my %hostinfo              = get_hostinfo();
 my %cpuinfo               = get_cpuinfo();
 my $mysql_datadir         = get_mysql_datadir();
 my $mysql_error_log       = get_mysql_error_log();
-my @apache_version_output = split /\n/, run( '/usr/local/apache/bin/httpd', '-v' );
-my @apache_modules_output = split /\n/, run( '/usr/local/apache/bin/httpd', '-M' );
+my @apache_version_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-v' );
+my @apache_modules_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-M' );
 my @mysql_rpm_versions;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
 my @custom_opt_mods;           # items in /var/cpanel/easy/apache/custom_opt_mods/
 my @usr_local_cpanel_hooks;    # items in /usr/local/cpanel/hooks/
@@ -225,6 +225,7 @@ check_mysql_rpm_mismatch();
 check_php_libmysqlclient_mismatch();
 check_for_percona_rpms();
 check_for_duplicate_rpms();
+check_for_better_linux();
 
 # All checks for DNSONLY go here
 sub check_for_dnsonly {
@@ -384,6 +385,19 @@ sub run {
     close($prog_fh);
 
     return $output;
+}
+
+sub timed_run {
+    eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require Cpanel::SafeRun::Timed; };
+
+    if ( !$@ && $INC{'Cpanel/SafeRun/Timed.pm'} ) {
+        open( my $save_stderr_fh, '>&STDERR' );
+        open( STDERR, '>', '/dev/null' );
+        my $result = Cpanel::SafeRun::Timed::timedsaferun( 10, @_ );
+        open( STDERR, '>&=' . fileno($save_stderr_fh) );
+        return $result;
+    }
+    goto \&run;
 }
 
 sub get_local_ipaddrs {
@@ -3851,6 +3865,17 @@ sub check_for_zlib_h {
     }
 }
 
+sub check_for_better_linux {
+    return if !@extended_rpm_list;
+
+    foreach my $rpm_ref ( grep { $_->{'name'} =~ m/^kernel/ } @extended_rpm_list ) {
+        if ( $rpm_ref->{'release'} =~ m/\.bl/ ) {
+            print_warn('BetterLinux detected: ');
+            print_warnings("Branding problems? See FB 64368");
+        }
+    }
+}
+
 sub check_for_duplicate_rpms {
     return if !@extended_rpm_list;
 
@@ -4373,7 +4398,7 @@ sub check_for_var_cpanel_conf_apache_local {
     my $local = '/var/cpanel/conf/apache/local';
 
     if ( -f $local ) {
-        print_warn('Apache: ' );
+        print_warn('Apache: ');
         print_warning("file $local exists. This can potentially cause various issues. See ticket 3915299 for an example");
     }
 }
@@ -4381,7 +4406,7 @@ sub check_for_var_cpanel_conf_apache_local {
 sub check_for_PERL5LIB_env_var {
     my $PERL5LIB = $ENV{'PERL5LIB'};
 
-    if ( $PERL5LIB ) {
+    if ($PERL5LIB) {
         print_warn('PERL5LIB env var: ');
         print_warning('exists! This can break cPanel\'s perl. See FB 64265');
     }
