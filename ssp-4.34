@@ -3871,7 +3871,7 @@ sub check_for_better_linux {
     foreach my $rpm_ref ( grep { $_->{'name'} =~ m/^kernel/ } @extended_rpm_list ) {
         if ( $rpm_ref->{'release'} =~ m/\.bl/ ) {
             print_warn('BetterLinux detected: ');
-            print_warnings("Branding problems? See FB 64368");
+            print_warning("Branding problems? See FB 64368");
         }
     }
 }
