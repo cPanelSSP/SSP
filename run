@@ -1,0 +1,14 @@
+#!/bin/sh
+
+REQUEST='curl -s https://ssp.cpanel.net/SSP/ssp'
+
+if [ -f /usr/local/cpanel/3rdparty/bin/perl ] && [ -x /usr/local/cpanel/3rdparty/bin/perl ] ; then 
+    $REQUEST | /usr/local/cpanel/3rdparty/bin/perl
+elif [ -f /usr/bin/perl ] && [ -x /usr/bin/perl ] ; then 
+    $REQUEST | /usr/bin/perl
+elif [ -f /usr/local/bin/perl ] && [ -x /usr/local/bin/perl ] ; then 
+    $REQUEST | /usr/local/bin/perl
+else
+    echo 'Could not find a working perl interpreter'
+fi
+
