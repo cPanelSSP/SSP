@@ -1,7 +1,0 @@
-[NEW] added Oracle Linux detection by checking for the presence of
-/etc/enterprise-release or /etc/oracle-release
-
-For more info:
-
-www.oracle.com/us/technologies/027626.pdf
-www.oracle.com/technetwork/articles/servers-storage-dev/linux6cert-400781.pdf

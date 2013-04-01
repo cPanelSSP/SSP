@@ -1,2 +1,0 @@
-[FIX] Don't print a warning if /usr/bin/crontab is 4755 or 6755.
-Both are ok.

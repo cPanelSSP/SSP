@@ -1,8 +1,0 @@
-[NEW] Print a warning if either of these conditions apply:
-
-    A) cPanel < 11.29, updates set to daily
-    B) cPanel >= 11.29, updates set to daily, not updated in > 24 hours
-
-The message will instruct L1/L2 to escalate the ticket to L3, and
-instruct L3 to see why the server is not updating, and to escalate
-to L4 if it cannot be updated.

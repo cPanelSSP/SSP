@@ -1,4 +1,0 @@
-[FIXED] Fixed an issue where commented out CustomLog entries would be printed twice, like this:
-
-[WARN] * CustomLog commented out: /var/cpanel/templates/apache2/vhost.local /var/cpanel/templates/apache2/vhost.local  httpd.conf
-

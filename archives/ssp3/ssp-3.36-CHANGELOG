@@ -1,5 +1,0 @@
-[NEW] Print a warning to update case 59670 if /var/cpanel/pw.cache/2:0 exists
-AND MySQL shows as offline in cPanel.
-
-
-[NEW] Print a warning if cPanel is >= 11.30 and /scripts is not a symlink.

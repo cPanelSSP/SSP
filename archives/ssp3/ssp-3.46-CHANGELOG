@@ -1,3 +1,0 @@
-[FIXED] DNS cluster members' hostnames could not be obtained after
-the recent cPanel updates. Changing Storable::pretrieve to
-Storable::fd_retrieve fixes this.

@@ -1,2 +1,0 @@
-[FIXED] If MySQL was using a non-default datadir, this would
-cause the MySQL error log to be reported incorrectly.

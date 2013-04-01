@@ -1,3 +1,0 @@
-print a warning if /var/cpanel/mgmt_queue/apache_update_no_restart exists:
-
-[WARN] * apache_update_no_restart: /var/cpanel/mgmt_queue/apache_update_no_restart exists! This will prevent EA from completing successfully.

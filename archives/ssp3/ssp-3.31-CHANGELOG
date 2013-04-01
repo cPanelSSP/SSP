@@ -1,1 +1,0 @@
-[FIX] Don't print a warning about "::1 localhost" entries in /etc/hosts .

@@ -1,2 +1,0 @@
-[NEW] Print a warning if /usr/include/linux/limits.h is not found.
-Does not apply to FreeBSD, of course.

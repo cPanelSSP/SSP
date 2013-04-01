@@ -1,3 +1,0 @@
-[NEW] Print a warning if /etc/yum.conf does not exist.
-
-[NEW] Print a warning if /etc/yum.conf is empty.

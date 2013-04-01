@@ -1,5 +1,0 @@
-[FIXED] Removed the check to see if cPanel is >= 11.29, and an update is available,
-and updates are configured to run daily, and the server has not been updated in
-more than 24 hours. The check was removed due to false positives. A check still
-exists for cPanel <11.28 + daily updates enabled (which could indicate the server
-is unable to update, requiring L3 investigation).

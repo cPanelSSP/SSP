@@ -1,7 +1,0 @@
-[UPDATED] Removed the unnecessary warning about MINUID not being set
-in /etc/wwwacct.conf .
-
-[FIXED] If MINUID was set to 0, this would not be detected.
-
-[FIXED] There were 6 places in the code where filehandles were
-not being closed after being opened due to lack of close() statements.

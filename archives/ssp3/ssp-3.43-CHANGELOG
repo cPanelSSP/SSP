@@ -1,3 +1,0 @@
-[FIXED] chomp roundcubepass to prevent false positive when it contains a newline
-
-[UPDATED] disabled cPPHPOpts check for now due to false positives

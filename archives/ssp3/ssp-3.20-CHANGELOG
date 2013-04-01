@@ -1,3 +1,0 @@
-[FIX] Check that $minuid is actually populated. This fixes these warnings:
-
-Use of uninitialized value in pattern match (m//) at - line 2109.
