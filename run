@@ -11,3 +11,4 @@ elif [ -f /usr/local/bin/perl ] && [ -x /usr/local/bin/perl ] ; then
 else
     echo 'Could not find a working perl interpreter'
 fi
+
