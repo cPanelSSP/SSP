@@ -24,7 +24,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.34';
+my $version = '4.35';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -34,6 +34,7 @@ $Term::ANSIColor::AUTORESET = 1;
 ######################
 
 my $cpanel_version        = get_cpanel_version();
+my ( $cpanel_version_major, $cpanel_version_minor ) = split /\./, $cpanel_version;
 my $hostname              = hostname();
 my $os                    = get_os();
 my $TIERS                 = get_tiers_file();
@@ -1833,7 +1834,6 @@ sub check_for_non_default_permissions {
         '/usr/sbin'                    => '755',
         '/usr/local/apache'            => '755',
         '/usr/local/apache/bin/httpd'  => '755',
-        '/usr/local/cpanel/bin/cpwrap' => '4755',
         '/usr/local/bin'               => '755',
         '/usr/local/sbin'              => '755',
         '/var'                         => '755',
@@ -1897,6 +1897,23 @@ sub check_for_non_default_permissions {
         if ( $mode != 755 and $mode != 555 ) {
             print_warn('Non-default Permissions: ');
             print_warning("/bin/ln (mode: $mode | default: 755 or 555)");
+        }
+    }
+
+    if ( -e '/usr/local/cpanel/bin/cpwrap' ) {
+        my $mode = ( stat('/usr/local/cpanel/bin/cpwrap') )[2] & 07777;
+        $mode = sprintf "%lo", $mode;
+        if ( ( $cpanel_version_major <= 11 ) and ( $cpanel_version_minor <= 36 ) ) {
+            if ( $mode != 4755 ) {
+                print_warn('Non-default Permissions: ');
+                print_warning("/usr/local/cpanel/bin/cpwrap (mode: $mode | default: 4755 )");
+            }
+        }
+        else {
+            if ( $mode != 755 ) {
+                print_warn('Non-default Permissions: ');
+                print_warning("/usr/local/cpanel/bin/cpwrap (mode: $mode | default: 0755 )");
+            }
         }
     }
 }
