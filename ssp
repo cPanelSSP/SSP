@@ -24,7 +24,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.37';
+my $version = '4.38';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -58,6 +58,12 @@ my %pureftpdconf;              # /etc/pure-ftpd.conf
 ######################
 ##  END GLOBALS     ##
 ######################
+
+
+print "\n";
+print BOLD GREEN ON_RED "\tPlease DO NOT paste the entire SSP output into tickets. This skews the search results." . RESET . "\n";
+print BOLD GREEN ON_RED "\tPlease DO paste any output from SSP that is relevant to the issue, however. Thank you." . RESET . "\n";
+sleep 2;
 
 
 ## [INFO]
