@@ -24,7 +24,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.35';
+my $version = '4.36';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -452,7 +452,7 @@ sub get_release_version {
 }
 
 sub print_version {
-    print BOLD YELLOW ON_BLACK "\tSSP $version (use ssp.cptechs.info/ssp.previous for previous version)\n\n";
+    print BOLD YELLOW ON_BLACK "\tSSP $version\n\n";
 }
 
 sub print_tip {
