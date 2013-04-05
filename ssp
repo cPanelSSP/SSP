@@ -164,7 +164,7 @@ check_for_C_compiler_optimization();
 check_perl_version_less_than_588();
 check_for_low_ulimit_for_root();
 check_for_fork_bomb_protection();
-check_for_broken_list_utils();
+check_for_broken_list_util();
 
 #check_for_cpphpopts();
 check_for_cPanel_lower_than_11_30_7_3();
@@ -4435,7 +4435,7 @@ sub check_for_PERL5LIB_env_var {
     }
 }
 
-sub check_for_broken_list_utils {
+sub check_for_broken_list_util {
     system('/usr/bin/perl', '-MList::Util', '-e', '1');
     if ($?) {
         print_warn('List::Util: ');
