@@ -24,7 +24,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.38';
+my $version = '4.39';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -164,6 +164,7 @@ check_for_C_compiler_optimization();
 check_perl_version_less_than_588();
 check_for_low_ulimit_for_root();
 check_for_fork_bomb_protection();
+check_for_broken_list_utils();
 
 #check_for_cpphpopts();
 check_for_cPanel_lower_than_11_30_7_3();
@@ -4434,6 +4435,14 @@ sub check_for_PERL5LIB_env_var {
     }
 }
 
+sub check_for_broken_list_utils {
+    system('/usr/bin/perl', '-MList::Util', '-e', '1');
+    if ($?) {
+        print_warn('List::Util: ');
+        print_warning('seems broken. 1) Add this ticket to FB 64268 now. 2) Run to fix: /scripts/autorepair scalarutil');
+    }
+}
+
 ##############################
 #  END [WARN] CHECKS
 ##############################
@@ -4791,17 +4800,5 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
         }
     }
 }
-
-# Print alerts about current issues that would otherwise take too long to run in SSP
-
-sub print_alert_about_scalar_util_and_list_util {
-    print "\n\t[FB 64268] Seeing issues with Scalar::Util or List::Util? Run this:\n\n";
-    print "# for f in \$(find /usr/lib /usr/lib64 -wholename '*/List/Util.pm' 2>/dev/null); do grep -l 'package List::Util;' \$f; done\n";
-    print "\n\tIf any files are found, run 'rpm -qf <file>' to see if they are unowned by any package.\n";
-    print "\tRename any unowned files, then run this:\n\n";
-    print "# /usr/local/cpanel/scripts/perlinstaller --force List::Util\n";
-}
-
-print_alert_about_scalar_util_and_list_util();
 
 1;
