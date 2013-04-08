@@ -24,7 +24,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.39';
+my $version = '4.40';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -4323,7 +4323,7 @@ sub check_for_libkeyutils_malware {
 
     ## check for the existence of known illegitimate files
     my @dirs  = qw( /lib /lib64 );
-    my @files = qw( libkeyutils.so.1.9 libkeyutils.so.1.3.2 libkeyutils-1.2.so.2 );
+    my @files = qw( libkeyutils.so.1.9 libkeyutils.so.1.3.2 libkeyutils-1.2.so.2 libkeyutils.so.1.3.0 );
 
     for my $dir (@dirs) {
         for my $file (@files) {
