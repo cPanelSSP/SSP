@@ -13,6 +13,10 @@ use Storable;
 use POSIX;
 use Time::Local;
 
+if ( !-d '/usr/local/cpanel' ) {
+    die '/usr/local/cpanel not found';
+}
+
 {
     local @INC = ( @INC, "/usr/local/cpanel" );
     eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require Cpanel::CachedCommand; };
@@ -24,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.40';
+my $version = '4.41';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
