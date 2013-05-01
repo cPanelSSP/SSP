@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.44';
+my $version = '4.45';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -169,7 +169,6 @@ check_perl_version_less_than_588();
 check_for_low_ulimit_for_root();
 check_for_fork_bomb_protection();
 check_for_broken_list_util();
-check_for_cdorked();
 
 #check_for_cpphpopts();
 check_for_cPanel_lower_than_11_30_7_3();
@@ -208,6 +207,8 @@ check_pure_ftpd_conf_for_upload_script_and_dead();    #must come after check_cpa
 check_for_extra_uid_0_user();                         # this is NOT a security check, but for FB 62467
 check_for_var_cpanel_conf_apache_local();
 check_for_PERL5LIB_env_var();
+check_for_cdorked();
+check_for_disabled_services();
 
 # [3RDP]
 print "\n";
@@ -305,6 +306,7 @@ sub check_for_dnsonly {
         check_for_noxsave_in_grub_conf();
         check_for_cpanel_CN_newline();
         check_for_networkmanager();
+        check_for_disabled_services();
 
         ## [3RDP]
         check_for_apf();
@@ -4468,6 +4470,61 @@ sub check_for_cdorked {
         print_warn('!! [ Linux/Cdorked ] !! ');
         print_warning('L1/L2 escalate this ticket to L3. L3 use 00 - Cdorked premade');
     }    
+}
+
+sub check_for_disabled_services {
+    my ( @disabled_services );
+    my $disabled;
+
+    my %touchfiles = (
+        '/etc/ftpddisable'          => 'ftpd',
+        '/etc/ftpserverdisable'     => 'ftpd',
+        '/etc/sshddisable'          => 'sshd',
+        '/etc/eximdisable'          => 'exim',
+        '/etc/httpddisable'         => 'httpd',
+        '/etc/imapdisable'          => 'imapd',
+        '/etc/imapddisable'         => 'imapd',
+        '/etc/nameddisable'         => 'named',
+        '/etc/binddisable'          => 'named',
+        '/etc/dnsdisable'           => 'named',
+        '/etc/nsddisable'           => 'nsd',
+        '/etc/mydnsdisable'         => 'mydns',
+        '/etc/mysqldisable'         => 'mysql',
+        '/etc/postgresdisable'      => 'postgresql',
+        '/etc/postgresqldisable'    => 'postgresql',
+        '/etc/postmasterdisable'    => 'postgresql',
+        '/etc/clamddisable'         => 'clamd',
+        '/etc/antirelayddisable'    => 'antirelayd',
+        '/etc/tailwatchddisable'    => 'tailwatchd',
+        '/var/cpanel/version/securetmp_disabled'    => 'securetmp',
+        '/etc/queueprocddisable'    => 'queueprocd',
+        '/etc/spamdisable'          => 'spamd',
+        '/etc/mailmandisable'       => 'mailman',
+        '/etc/ipaliasesdisable'     => 'ipaliases',
+        '/etc/cpsrvdddisable'       => 'cpsrvd',
+        '/etc/cpdavddisable'        => 'cpdavd',
+        '/etc/cpanellogddisable'    => 'cpanellogd',
+        '/etc/rsyslogdisable'       => 'rsyslogd',
+        '/etc/syslogdisable'        => 'syslogd',
+        '/etc/disablehackcheck'     => 'hackcheck',
+    );
+
+    while ( my ( $touchfile, $service ) = each ( %touchfiles ) ) {
+        if ( -e $touchfile ) {
+            if ( ! grep { /^${service}$/ } @disabled_services ) {
+                push @disabled_services, $touchfiles{$touchfile};
+            }
+        }
+    }
+
+    return if !@disabled_services;
+
+    for my $service ( @disabled_services ) {
+        $disabled .= "[$service] ";
+    }
+
+    print_warn('Disabled services: ');
+    print_warning($disabled);
 }
 
 ##############################
