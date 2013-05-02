@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.45';
+my $version = '4.46';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -168,7 +168,6 @@ check_for_C_compiler_optimization();
 check_perl_version_less_than_588();
 check_for_low_ulimit_for_root();
 check_for_fork_bomb_protection();
-check_for_broken_list_util();
 
 #check_for_cpphpopts();
 check_for_cPanel_lower_than_11_30_7_3();
@@ -4439,14 +4438,6 @@ sub check_for_PERL5LIB_env_var {
     if ($PERL5LIB) {
         print_warn('PERL5LIB env var: ');
         print_warning('exists! This can break cPanel\'s perl. See FB 64265');
-    }
-}
-
-sub check_for_broken_list_util {
-    system('/usr/bin/perl', '-MList::Util', '-e', '1');
-    if ($?) {
-        print_warn('List::Util: ');
-        print_warning('seems broken. 1) Add this ticket to FB 64268 now. 2) Run to fix: /scripts/autorepair scalarutil');
     }
 }
 
