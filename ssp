@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.46';
+my $version = '4.47';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -208,6 +208,7 @@ check_for_var_cpanel_conf_apache_local();
 check_for_PERL5LIB_env_var();
 check_for_cdorked();
 check_for_disabled_services();
+check_for_broken_list_util();
 
 # [3RDP]
 print "\n";
@@ -4516,6 +4517,14 @@ sub check_for_disabled_services {
 
     print_warn('Disabled services: ');
     print_warning($disabled);
+}
+
+sub check_for_broken_list_util {
+    system('/usr/bin/perl', '-MList::Util', '-e', '1');
+    if ($?) {
+        print_warn('List::Util: ');
+        print_warning('seems broken. To fix, run this: /scripts/autorepair scalarutil');
+    }
 }
 
 ##############################
