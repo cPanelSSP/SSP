@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.47';
+my $version = '4.48';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -41,6 +41,8 @@ my $cpanel_version        = get_cpanel_version();
 my ( $cpanel_version_major, $cpanel_version_minor ) = split /\./, $cpanel_version;
 my $hostname              = hostname();
 my $os                    = get_os();
+my $is_cloudlinux         = 0;
+my $external_ip_address;
 my $TIERS                 = get_tiers_file();
 my @local_ipaddrs_list    = get_local_ipaddrs();
 my @process_list          = get_process_list();
@@ -91,7 +93,6 @@ print_if_using_modruid2();
 print_which_php_is_used_internally();
 
 ## [WARN]
-print "\n";
 check_selinux_status();
 check_runlevel();
 check_for_missing_root_cron();
@@ -168,6 +169,7 @@ check_for_C_compiler_optimization();
 check_perl_version_less_than_588();
 check_for_low_ulimit_for_root();
 check_for_fork_bomb_protection();
+check_for_cloudlinux_not_licensed_through_cpanel();
 
 #check_for_cpphpopts();
 check_for_cPanel_lower_than_11_30_7_3();
@@ -211,7 +213,6 @@ check_for_disabled_services();
 check_for_broken_list_util();
 
 # [3RDP]
-print "\n";
 check_for_assp();
 check_for_varnish();
 check_for_litespeed();
@@ -226,7 +227,6 @@ check_for_webmin();
 check_for_symantec();
 
 # This is run closer to the end since it has the potential to take the longest
-print "\n";
 build_rpm_list();
 
 # These require build_rpm_list() to have been run, so that @rpm_list is populated
@@ -672,7 +672,6 @@ sub print_hostname {
 sub print_os {
     my $release_info;
     my $os_info;
-    my $is_cloudlinux         = 0;
     my $php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
     my $php_selector_disabled = 0;
 
@@ -2228,7 +2227,6 @@ sub check_for_home_noexec {
 ## as NAT can still be used with external IP addrs of course)
 sub check_for_nat {
     my @external_ipaddrs;
-    my $external_ip_address;
     my $reply;
     my $count = 0;
 
@@ -4524,6 +4522,38 @@ sub check_for_broken_list_util {
     if ($?) {
         print_warn('List::Util: ');
         print_warning('seems broken. To fix, run this: /scripts/autorepair scalarutil');
+    }
+}
+
+sub check_for_cloudlinux_not_licensed_through_cpanel {
+    return if ( $is_cloudlinux == 0 );
+
+    my $host = 'verify.cpanel.net';
+    my $url  = '/index.cgi?ip=' . $external_ip_address;
+    my $is_licensed_for_cloudlinux_through_cpanel = 0;
+
+    my $sock = IO::Socket::INET->new(
+        PeerAddr    => $host,
+        PeerPort    => 80,
+        Proto       => 'tcp',
+        Timeout     => 3,
+    ) or return;
+
+    local $SIG{'ALRM'} = sub { return (); };
+
+    print $sock "GET $url HTTP/1.1\r\nHost: verify.cpanel.net\r\n\r\n";
+    alarm 3;
+    read $sock, my $buffer, 50_000;
+    alarm 0;
+    close $sock;
+
+    if ( $buffer =~ /cloud_linux_os/ ) {
+        $is_licensed_for_cloudlinux_through_cpanel = 1;
+    }
+
+    if ( $is_licensed_for_cloudlinux_through_cpanel == 0 ) {
+        print_warn('CloudLinux: ');
+        print_warning('installed, not licensed by cPanel');
     }
 }
 
