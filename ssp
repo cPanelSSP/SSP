@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.49';
+my $version = '4.50';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2226,7 +2226,7 @@ sub check_for_home_noexec {
 ## check if only internal IP addrs are bound to server (this is not as reliable,
 ## as NAT can still be used with external IP addrs of course)
 sub check_for_nat {
-    return if -f '/var/cpanel/cpnat';
+    return if -e '/var/cpanel/cpnat';
 
     my @external_ipaddrs;
     my $reply;
