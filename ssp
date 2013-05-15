@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.50';
+my $version = '4.51';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -497,6 +497,8 @@ sub print_tip {
         'Imagick install issues on PHP 5.4? You may need to run \'pear config-set preferred_state beta\' (see ticket 3754991)',
         'Need to enable ZTS support for PHP? Try \'--enable-maintainer-zts\' (see ticket 3769493)',
         'WHM\'s "Apache mod_userdir Tweak" can be toggled via /scripts/userdirctl',
+        'Issues with MySQL for a single user? Check for /home/${USER}/.my.cnf',
+        'Services reported as failing while backups are running? chksrvd may be simply timing out due to excessive disk I/O',
     );
 
     my $size = scalar @tips;
@@ -4090,7 +4092,8 @@ sub check_for_rpm_overrides {
         $md5 = run( 'md5sum', $local_versions );
     }
 
-    if ( $md5 && $md5 =~ m{ \A fd3f270edda79575343e910369b75ab7 \s }xms ) {
+    if ( $md5 && $md5 =~ m{ \A ( fab8a718f7e3a1ff9c9d04fb4e8c94c4
+                               | fd3f270edda79575343e910369b75ab7 ) \s }xms ) {
         $is_default = 1;
     }
 
