@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.51';
+my $version = '4.52';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -211,6 +211,7 @@ check_for_PERL5LIB_env_var();
 check_for_cdorked();
 check_for_disabled_services();
 check_for_broken_list_util();
+check_for_cpbackup_exclude_everything();
 
 # [3RDP]
 check_for_assp();
@@ -4559,6 +4560,29 @@ sub check_for_cloudlinux_not_licensed_through_cpanel {
     if ( $is_licensed_for_cloudlinux_through_cpanel == 0 ) {
         print_warn('CloudLinux: ');
         print_warning('installed, not licensed by cPanel');
+    }
+}
+
+# Yes, this actually happened...
+sub check_for_cpbackup_exclude_everything {
+    my $conf = '/etc/cpbackup-exclude.conf';
+    return if ( !-f $conf );
+
+    my $excluding_everything = 0;
+
+    open my $conf_fh, '<', $conf or return;
+    while ( <$conf_fh> ) {
+        chomp;
+        if ( /^\*$/ ) {
+            $excluding_everything = 1;
+            last;
+        }
+    }
+    close $conf_fh;
+
+    if ( $excluding_everything == 1 ) {
+        print_warn('Backups: ');
+        print_warning("'*' exists by itself in $conf . This can cause 0 byte backups");
     }
 }
 
