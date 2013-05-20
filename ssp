@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.52';
+my $version = '4.53';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -4559,7 +4559,7 @@ sub check_for_cloudlinux_not_licensed_through_cpanel {
 
     if ( $is_licensed_for_cloudlinux_through_cpanel == 0 ) {
         print_warn('CloudLinux: ');
-        print_warning('installed, not licensed by cPanel');
+        print_warning("installed, not licensed by cPanel [ http://verify.cpanel.net/index.cgi?ip=${external_ip_address} ]");
     }
 }
 
