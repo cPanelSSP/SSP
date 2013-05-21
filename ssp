@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.53';
+my $version = '4.54';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -3212,7 +3212,7 @@ sub check_for_empty_or_missing_files {
 
     if ( !-e $userdatadomains ) {
         print_warn('Missing file: ');
-        print_warning($userdatadomains);
+        print_warning("$userdatadomains (new server with no accounts, perhaps)");
     }
     elsif ( -f $userdatadomains and -z $userdatadomains ) {
         print_warn('Empty file: ');
@@ -3292,7 +3292,10 @@ sub check_roundcube_mysql_pass_mismatch {
     }
 }
 
+
+# Fixed in 11.36.1.3, case 62467
 sub check_for_extra_uid0_pwcache_file {
+    return if ($cpanel_version_major <= 11 and $cpanel_version_minor > 36);
     if ( -f '/var/cpanel/pw.cache/2:0' ) {
         print_warn('MySQL: ');
         print_warning('/var/cpanel/pw.cache/2:0 exists. If MySQL shows as offline in cPanel, please update FB 59670');
@@ -3905,6 +3908,7 @@ sub check_for_better_linux {
         if ( $rpm_ref->{'release'} =~ m/\.bl/ ) {
             print_warn('BetterLinux detected: ');
             print_warning("Branding problems? See FB 64368");
+            last;
         }
     }
 }
