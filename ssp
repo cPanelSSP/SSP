@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.54';
+my $version = '4.55';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -1742,8 +1742,11 @@ sub check_for_custom_apache_includes {
         if ( !-z "${include_dir}/${include}" ) {
             if ( $include eq 'pre_virtualhost_global.conf' ) {
                 my $md5 = run( 'md5sum', '/usr/local/apache/conf/includes/pre_virtualhost_global.conf' );
-                next if ( $md5 =~ m{ \A 1693b9075fa54ede224bfeb8ad42a182 \s }xms );
-                $custom_includes .= " $include";
+                next if ( $md5 && $md5 =~ m{ \A 1693b9075fa54ede224bfeb8ad42a182 \s }xms );
+                $custom_includes .= " [$include]";
+            }
+            else {
+                $custom_includes .= " [$include]";
             }
         }
     }
