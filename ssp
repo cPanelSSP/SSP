@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.57';
+my $version = '4.58';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -213,6 +213,7 @@ check_for_disabled_services();
 check_for_broken_list_util();
 check_for_cpbackup_exclude_everything();
 check_for_usr_local_include_jpeglib_h();
+check_for_bw_module_and_more_than_1024_vhosts();
 
 # [3RDP]
 check_for_assp();
@@ -4603,6 +4604,29 @@ sub check_for_usr_local_include_jpeglib_h {
         print_warning( 'Seeing "Wrong JPEG library version"? This file may be the cause. See ticket 4159697' );
     }
 }
+
+sub check_for_bw_module_and_more_than_1024_vhosts {
+    my $httpdconf = '/usr/local/apache/conf/httpd.conf';
+    return if !-f $httpdconf;
+
+    return if ( !grep { /^\sbw_module\s/ } @apache_modules_output );
+
+    my $num_vhosts = 0;
+
+    open my $httpdconf_fh, '<', $httpdconf or return;
+    while ( <$httpdconf_fh> ) {
+        if ( m{ \A (?:\s+)? <VirtualHost \s }xms ) {
+            $num_vhosts++;
+        }
+    }
+    close $httpdconf_fh;
+
+    if ( $num_vhosts and $num_vhosts > 1024 ) {
+        print_warn('bw_module: ');
+        print_warning("loaded, and httpd.conf has >1024 VirtualHosts ($num_vhosts). Apache failing to start? See FB 69121");
+    }
+}
+
 
 ##############################
 #  END [WARN] CHECKS
