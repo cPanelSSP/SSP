@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.55';
+my $version = '4.57';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -212,6 +212,7 @@ check_for_cdorked();
 check_for_disabled_services();
 check_for_broken_list_util();
 check_for_cpbackup_exclude_everything();
+check_for_usr_local_include_jpeglib_h();
 
 # [3RDP]
 check_for_assp();
@@ -3665,9 +3666,11 @@ sub check_for_non_default_umask {
 }
 
 sub check_for_multiple_imagemagick_installs {
-    if ( -e '/usr/bin/convert' and -e '/usr/local/bin/convert' ) {
-        print_warn('ImageMagick: ');
-        print_warning('multiple "convert" binaries found [/usr/bin/convert] [/usr/local/bin/convert]');
+    if ( -x '/usr/bin/convert' and !-l '/usr/bin/convert' ) {
+        if ( -x '/usr/local/bin/convert' and !-l '/usr/local/bin/convert' ) {
+            print_warn('ImageMagick: ');
+            print_warning('multiple "convert" binaries found [/usr/bin/convert] [/usr/local/bin/convert]');
+        }
     }
 }
 
@@ -3782,7 +3785,7 @@ sub check_eximstats_size {
 }
 
 sub check_eximstats_corrupt {
-    return if !$mysql_error_log;
+    return if !-f $mysql_error_log;
 
     my $size           = ( stat($mysql_error_log) )[7];
     my $bytes_to_check = 20_971_520;                      # 20M limit of logs to check
@@ -4590,6 +4593,14 @@ sub check_for_cpbackup_exclude_everything {
     if ( $excluding_everything == 1 ) {
         print_warn('Backups: ');
         print_warning("'*' exists by itself in $conf . This can cause 0 byte backups");
+    }
+}
+
+sub check_for_usr_local_include_jpeglib_h {
+    my $jpeglib = '/usr/local/include/jpeglib.h';
+    if ( -f $jpeglib ) {
+        print_warn( "$jpeglib: " );
+        print_warning( 'Seeing "Wrong JPEG library version"? This file may be the cause. See ticket 4159697' );
     }
 }
 
