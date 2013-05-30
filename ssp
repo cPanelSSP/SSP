@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.58';
+my $version = '4.59';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -50,8 +50,6 @@ my %hostinfo              = get_hostinfo();
 my %cpuinfo               = get_cpuinfo();
 my $mysql_datadir         = get_mysql_datadir();
 my $mysql_error_log       = get_mysql_error_log();
-my @apache_version_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-v' );
-my @apache_modules_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-M' );
 my @mysql_rpm_versions;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
 my @custom_opt_mods;           # items in /var/cpanel/easy/apache/custom_opt_mods/
 my @usr_local_cpanel_hooks;    # items in /usr/local/cpanel/hooks/
@@ -60,6 +58,13 @@ my @extended_rpm_list;         # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERS
 my @rpm_list;                  # rpm -qa
 my %cpconf;                    # cpanel.config
 my %pureftpdconf;              # /etc/pure-ftpd.conf
+my @apache_version_output;     # httpd -v
+my @apache_modules_output;     # httpd -M
+
+if ( -x '/usr/local/apache/bin/httpd' ) {
+    @apache_version_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-v' );
+    @apache_modules_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-M' );
+}
 
 ######################
 ##  END GLOBALS     ##
