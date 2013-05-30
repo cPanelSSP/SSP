@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.59';
+my $version = '4.60';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -507,6 +507,7 @@ sub print_tip {
         'WHM\'s "Apache mod_userdir Tweak" can be toggled via /scripts/userdirctl',
         'Issues with MySQL for a single user? Check for /home/${USER}/.my.cnf',
         'Services reported as failing while backups are running? chksrvd may be simply timing out due to excessive disk I/O',
+        'Blank page in File Manager\'s HTML Editor and iconv "illegal input sequence" in cPanel error_log? Try windows-1251 encoding (see ticket 4088633)',
     );
 
     my $size = scalar @tips;
