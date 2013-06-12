@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.61';
+my $version = '4.62';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -219,6 +219,7 @@ check_for_broken_list_util();
 check_for_cpbackup_exclude_everything();
 check_for_usr_local_include_jpeglib_h();
 check_for_bw_module_and_more_than_1024_vhosts();
+check_for_uppercase_chars_in_hostname();
 
 # [3RDP]
 check_for_assp();
@@ -4634,6 +4635,12 @@ sub check_for_bw_module_and_more_than_1024_vhosts {
     }
 }
 
+sub check_for_uppercase_chars_in_hostname {
+    if ( $hostname =~ /[A-Z]/ ) {
+        print_warn('Hostname: ');
+        print_warning('contains UPPERCASE characters. Seeing incorrect info at cPanel >> Configure Email Client? See ticket 4231465');
+    }
+}
 
 ##############################
 #  END [WARN] CHECKS
