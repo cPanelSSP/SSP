@@ -1,6 +1,6 @@
 #!/bin/sh
 
-REQUEST='curl -s --insecure https://ssp.cpanel.net/SSP/ssp'
+REQUEST='curl -s --insecure https://ssp.cpanel.net/ssp'
 
 if [ -f /usr/local/cpanel/3rdparty/bin/perl ] && [ -x /usr/local/cpanel/3rdparty/bin/perl ] ; then 
     $REQUEST | /usr/local/cpanel/3rdparty/bin/perl
