@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.60';
+my $version = '4.61';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -3919,8 +3919,9 @@ sub check_for_better_linux {
 
     foreach my $rpm_ref ( grep { $_->{'name'} =~ m/^kernel/ } @extended_rpm_list ) {
         if ( $rpm_ref->{'release'} =~ m/\.bl/ ) {
-            print_warn('BetterLinux detected: ');
-            print_warning("Branding problems? See FB 64368");
+            print_warn("BetterLinux detected:\n");
+            print_magenta("\t \\_ Branding problems? See FB 64368");
+            print_magenta("\t \\_ ImageMagick segfaulting? See tickets 4185629, 4087003");
             last;
         }
     }
