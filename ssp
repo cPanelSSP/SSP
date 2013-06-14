@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.62';
+my $version = '4.63';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -175,6 +175,7 @@ check_perl_version_less_than_588();
 check_for_low_ulimit_for_root();
 check_for_fork_bomb_protection();
 check_for_cloudlinux_not_licensed_through_cpanel();
+check_for_harmful_php_mode_600_cron();
 
 #check_for_cpphpopts();
 check_for_cPanel_lower_than_11_30_7_3();
@@ -316,6 +317,7 @@ sub check_for_dnsonly {
         check_for_cpanel_CN_newline();
         check_for_networkmanager();
         check_for_disabled_services();
+        check_for_harmful_php_mode_600_cron();
 
         ## [3RDP]
         check_for_apf();
@@ -1866,6 +1868,13 @@ sub check_for_non_default_permissions {
         '/var'                         => '755',
         '/var/cpanel/locale'           => '755',
         '/var/cpanel/resellers'        => '644',
+        '/usr/local/cpanel/php/cpanel.php'  => '644',
+        '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => '644',
+        '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'  => '644',
+        '/usr/local/cpanel/base/3rdparty/phpPgAdmin/index.php'  => '644',
+        '/usr/local/cpanel/base/3rdparty/roundcube/index.php'   => '644',
+        '/usr/local/cpanel/base/horde/index.php'                => '644',
+        '/usr/local/cpanel/base/3rdparty/squirrelmail/index.php'    => '644',
     );
 
     for my $resource ( keys %resources_and_perms ) {
@@ -4639,6 +4648,14 @@ sub check_for_uppercase_chars_in_hostname {
     if ( $hostname =~ /[A-Z]/ ) {
         print_warn('Hostname: ');
         print_warning('contains UPPERCASE characters. Seeing incorrect info at cPanel >> Configure Email Client? See ticket 4231465');
+    }
+}
+
+sub check_for_harmful_php_mode_600_cron {
+    my $harmful_cron = '/etc/cron.daily/php-mode-600';
+    if ( -e $harmful_cron ) {
+        print_warn( "${harmful_cron}: ");
+        print_warning( 'exists! Breaks webmail, phpMyAdmin, and more! See tickets 4225765, 4237465, 4099807, 4231469, 4231473. Vendor: http://whmscripts.net/misc/2013/apache-symlink-security-issue-fixpatch/' );
     }
 }
 
