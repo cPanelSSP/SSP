@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.63';
+my $version = '4.64';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -4362,7 +4362,13 @@ sub check_for_libkeyutils_malware {
 
     ## check for the existence of known illegitimate files
     my @dirs  = qw( /lib /lib64 );
-    my @files = qw( libkeyutils.so.1.9 libkeyutils.so.1.3.2 libkeyutils-1.2.so.2 libkeyutils.so.1.3.0 );
+    my @files = qw(
+                    libkeyutils.so.1.9
+                    libkeyutils-1.2.so.0
+                    libkeyutils-1.2.so.2
+                    libkeyutils.so.1.3.0
+                    libkeyutils.so.1.3.2
+                );
 
     for my $dir (@dirs) {
         for my $file (@files) {
@@ -4652,10 +4658,31 @@ sub check_for_uppercase_chars_in_hostname {
 }
 
 sub check_for_harmful_php_mode_600_cron {
-    my $harmful_cron = '/etc/cron.daily/php-mode-600';
-    if ( -e $harmful_cron ) {
-        print_warn( "${harmful_cron}: ");
-        print_warning( 'exists! Breaks webmail, phpMyAdmin, and more! See tickets 4225765, 4237465, 4099807, 4231469, 4231473. Vendor: http://whmscripts.net/misc/2013/apache-symlink-security-issue-fixpatch/' );
+    return if !-d '/etc/cron.daily';
+
+    my @dir_contents;
+    my $has_harmful_cron = 0;
+    my $cron_file;
+
+    opendir( my $dir_fh, '/etc/cron.daily' ) or return;
+    @dir_contents = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+    closedir $dir_fh;
+
+    for my $file ( @dir_contents ) {
+        $file = '/etc/cron.daily/' . $file;
+        open my $file_fh, '<', $file or next;
+        while ( <$file_fh> ) {
+            if ( /^mytmpfile=\/tmp\/php-mode-/ ) {
+                $has_harmful_cron = 1;
+                $cron_file = $file;
+                last;
+            }
+        }
+    }
+
+    if ( $has_harmful_cron == 1 ) {
+                print_warn('harmful cron: ');
+        print_warning( "${cron_file}! Breaks webmail, phpMyAdmin, and more! See tickets 4225765, 4237465, 4099807, 4231469, 4231473. Vendor: http://whmscripts.net/misc/2013/apache-symlink-security-issue-fixpatch/" );
     }
 }
 
