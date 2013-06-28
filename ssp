@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.64';
+my $version = '4.65';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -221,6 +221,7 @@ check_for_cpbackup_exclude_everything();
 check_for_usr_local_include_jpeglib_h();
 check_for_bw_module_and_more_than_1024_vhosts();
 check_for_uppercase_chars_in_hostname();
+check_for_stale_upgrade_in_progress_txt();
 
 # [3RDP]
 check_for_assp();
@@ -4684,6 +4685,23 @@ sub check_for_harmful_php_mode_600_cron {
                 print_warn('harmful cron: ');
         print_warning( "${cron_file}! Breaks webmail, phpMyAdmin, and more! See tickets 4225765, 4237465, 4099807, 4231469, 4231473. Vendor: http://whmscripts.net/misc/2013/apache-symlink-security-issue-fixpatch/" );
     }
+}
+
+sub check_for_stale_upgrade_in_progress_txt {
+    my $upgradefile = '/usr/local/cpanel/upgrade_in_progress.txt';
+
+    my $upcp_running = 0;
+    for my $line (@process_list) {
+        if ( $line =~ m{ \A root (?:.*) upcp }xms ) {
+            $upcp_running = 1; 
+            last;
+        }    
+    }    
+
+    if ( -e $upgradefile && $upcp_running == 0 ) {
+        print_warn("${upgradefile}: ");
+        print_warning('exists, but upcp is not running. If Tweak Settings is not loading, this may be why');
+    }   
 }
 
 ##############################
