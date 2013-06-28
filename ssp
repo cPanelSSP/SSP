@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.65';
+my $version = '4.66';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -222,6 +222,7 @@ check_for_usr_local_include_jpeglib_h();
 check_for_bw_module_and_more_than_1024_vhosts();
 check_for_uppercase_chars_in_hostname();
 check_for_stale_upgrade_in_progress_txt();
+check_for_bad_permissions_on_named_ca();
 
 # [3RDP]
 check_for_assp();
@@ -4702,6 +4703,27 @@ sub check_for_stale_upgrade_in_progress_txt {
         print_warn("${upgradefile}: ");
         print_warning('exists, but upcp is not running. If Tweak Settings is not loading, this may be why');
     }   
+}
+
+sub check_for_bad_permissions_on_named_ca {
+    return if ( $os eq 'freebsd' );
+
+    my $namedca = '/var/named/named.ca';
+    if ( !-e $namedca ) {   
+        print_warn("${namedca}: ");
+        print_warning('missing. named may not start without it');
+        return;
+    }
+
+    my ( $mode, $uid, $gid ) = (stat('/var/named/named.ca'))[2,4,5];
+    my $world_readable_bit = $mode & 007;
+    my $user = getpwuid($uid);
+    my $group = getgrgid($gid);
+
+    if (($user ne 'named' and $group ne 'named') and ($world_readable_bit == 0)) {
+        print_warn("${namedca}: ");
+        print_warning('may not be readable to the \'named\' user, causing named to not restart');
+    }
 }
 
 ##############################
