@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.66';
+my $version = '4.67';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -223,6 +223,8 @@ check_for_bw_module_and_more_than_1024_vhosts();
 check_for_uppercase_chars_in_hostname();
 check_for_stale_upgrade_in_progress_txt();
 check_for_bad_permissions_on_named_ca();
+check_for_skiphttpauth_disabled();
+check_for_use_compiled_dnsadmin();
 
 # [3RDP]
 check_for_assp();
@@ -4725,6 +4727,78 @@ sub check_for_bad_permissions_on_named_ca {
         print_warning('may not be readable to the \'named\' user, causing named to not restart');
     }
 }
+
+sub check_for_skiphttpauth_disabled {
+    my $cpanel_config = '/var/cpanel/cpanel.config';
+    my $skiphttpauth_setting; # should be 0 or 1 in cpanel.config
+
+    if ( open my $config_fh, '<', $cpanel_config ) {
+        while ( <$config_fh> ) {
+            if ( /^skiphttpauth=(\d)$/ ) {
+                $skiphttpauth_setting = $1;
+                last;
+            }
+        }
+        close $config_fh;
+    }
+    else {
+        return;
+    }
+
+    if ( defined $skiphttpauth_setting && $skiphttpauth_setting == 0 ) {
+        print_warn('skiphttpauth: ');
+        print_warning('not set to \'1\' in cpanel.config. Compatibility problems with security tokens possible. Can be toggled at Tweak Settings >> Enable HTTP Authentication');
+    }
+}
+
+sub check_for_use_compiled_dnsadmin {
+    my $cpanel_config = '/var/cpanel/cpanel.config';
+    my $has_custom_dnsadmin_modules;
+    my ( @setup_modules, @remote_modules );
+    my $setup_modules_dir = '/usr/local/cpanel/Cpanel/NameServer/Remote';
+    my $remote_modules_dir = '/usr/local/cpanel/Cpanel/NameServer/Setup/Remote';
+
+    my $disable_compiled_dnsadmin_setting; # should be 0 or 1
+
+    # http://docs.cpanel.net/twiki/bin/view/SoftwareDevelopmentKit/WritingSetupModules
+    if ( -d $setup_modules_dir ) {
+        opendir( my $dir_fh, $setup_modules_dir );
+        @setup_modules = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+        closedir $dir_fh;
+    }
+
+    # http://docs.cpanel.net/twiki/bin/view/SoftwareDevelopmentKit/WritingRemoteModules
+    if ( -d $remote_modules_dir ) {
+        opendir( my $dir_fh, $remote_modules_dir );
+        @remote_modules = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+        closedir $dir_fh;
+    }
+
+    @setup_modules = grep { !/^(cPanel\.pm|SoftLayer\.pm|VPSNET\.pm)/ } @setup_modules;
+    @remote_modules = grep { !/^(cPanel\.pm|SoftLayer\.pm|VPSNET\.pm)/ } @remote_modules;
+
+    # return if there are no custom dnsadmin modules being used
+    return if ( scalar @setup_modules == 0 and scalar @remote_modules == 0 );
+
+    if ( open my $config_fh, '<', $cpanel_config ) {
+        while ( <$config_fh> ) {
+            if ( /^disable_compiled_dnsadmin=(\d)$/ ) {
+                $disable_compiled_dnsadmin_setting = $1;
+                last;
+            }    
+        }    
+        close $config_fh;
+    }    
+    else {
+        return;
+    }    
+
+    if ( defined $disable_compiled_dnsadmin_setting && $disable_compiled_dnsadmin_setting == 0 ) {
+        print_warn('dnsadmin: ');
+        print_warning('Tweak Settings >> Use compiled dnsadmin: On. If problems with custom dnsadmin modules, see if disabling helps (see ticket 4279965)');
+    }    
+}
+
 
 ##############################
 #  END [WARN] CHECKS
