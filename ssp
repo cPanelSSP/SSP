@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.67';
+my $version = '4.68';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -496,6 +496,7 @@ sub print_tip {
         '[FB 46853] Customer complaining that they can\'t log into cPanel as root? Update FB 46853',
         '[FB 44884] upcp resets Mailman lists\' hostnames. pre/postupcp hooks workaround in ticket 3541643',
         '[FB 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net',
+        '[FB 42027] "Recently Uploaded Cgi Script Mail" scans and sends email alerts about downloaded files too',
         'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)',
         'For a list of obscure issues, see the RareIssues wiki article',
         '11.35+: Use /scripts/check_cpanel_rpms to fix problems in /usr/local/cpanel/3rdparty/  - not checkperlmodules',
@@ -515,6 +516,7 @@ sub print_tip {
         'Issues with MySQL for a single user? Check for /home/${USER}/.my.cnf',
         'Services reported as failing while backups are running? chksrvd may be simply timing out due to excessive disk I/O',
         'Blank page in File Manager\'s HTML Editor and iconv "illegal input sequence" in cPanel error_log? Try windows-1251 encoding (see ticket 4088633)',
+        'CentOS 5.x and CloudLinux 5.x do not support SNI. See the "SNI" wiki article for more info',
     );
 
     my $size = scalar @tips;
@@ -2080,9 +2082,11 @@ sub check_for_hooks_in_scripts_directory {
       a4df04a6440073fe40363cfd241b1fe7    /scripts/postwwwacct
       03a0dc919c892bde254c52cefe4d0673    /scripts/postwwwacct
       2401d6260dac6215596be1652b394200    /scripts/postwwwacct
+      677da3bdd8fbd16d4b8917a9fe0f6f89    /scripts/postwwwacct
       44caf075fc0f9847ede43de5dd563edc    /scripts/prekillacct
       86f9b53c81a8f2fd77a8626ddd3b2c71    /scripts/prekillacct
       46fee9faf2d5f83cbcda17ce0178a465    /scripts/prekillacct
+      677da3bdd8fbd16d4b8917a9fe0f6f89    /scripts/prekillacct
 
     );
 
