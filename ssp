@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.68';
+my $version = '4.69';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -517,6 +517,7 @@ sub print_tip {
         'Services reported as failing while backups are running? chksrvd may be simply timing out due to excessive disk I/O',
         'Blank page in File Manager\'s HTML Editor and iconv "illegal input sequence" in cPanel error_log? Try windows-1251 encoding (see ticket 4088633)',
         'CentOS 5.x and CloudLinux 5.x do not support SNI. See the "SNI" wiki article for more info',
+        'domlogs are created 0644 by default. cpanellogd changes permissions on them to 0640 a few minutes later',
     );
 
     my $size = scalar @tips;
@@ -2223,6 +2224,7 @@ sub check_for_easyapache_hooks {
     # default CloudLinux hooks that can be ignored
     my %hooks_ignore = qw(
       41ec2d3f35d8cd7cb01b60485fb3bdbb    /scripts/before_apache_make
+      407df66f28c8822cd4f51fe56160f74e    /scripts/before_apache_make
     );
 
     for my $hook (@hooks) {
