@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.69';
+my $version = '4.71';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -485,6 +485,7 @@ sub print_version {
 
 sub print_tip {
     my @tips = (
+        '[FB 72733] (By design) File Manager\'s "Compress" feature has a hard coded timeout due to using cPanel\'s form upload logic',
         '[FB 63530] When setting up a remote MySQL server, that server must have the openssh-clients package installed',
         '[FB 63193] File Manager showing "Out of memory" in cPanel error_log? Try renaming $HOME/$USER/.cpanel/datastore/SYSTEMMIME',
         '[FB 62819] "License File Expired: LTD: 1334782495 NOW: 1246416504 FUT!" likely just means the server clock is wrong',
@@ -518,6 +519,7 @@ sub print_tip {
         'Blank page in File Manager\'s HTML Editor and iconv "illegal input sequence" in cPanel error_log? Try windows-1251 encoding (see ticket 4088633)',
         'CentOS 5.x and CloudLinux 5.x do not support SNI. See the "SNI" wiki article for more info',
         'domlogs are created 0644 by default. cpanellogd changes permissions on them to 0640 a few minutes later',
+        'cPanel >> Error Log only searches "recent" logs in Apache\'s error_log . Showing as blank? Maybe there are no recent errors',
     );
 
     my $size = scalar @tips;
