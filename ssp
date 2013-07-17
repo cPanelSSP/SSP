@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.71';
+my $version = '4.72';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -203,6 +203,7 @@ check_for_my_cnf_sql_mode();
 check_for_rpm_dist_ver_unknown();
 check_for_homeloader_php_extension();
 check_for_networkmanager();
+check_for_dhclient();
 check_for_var_cpanel_roundcube_install();
 check_for_missing_etc_localtime();
 check_for_immutable_files();
@@ -240,11 +241,13 @@ check_for_1h();
 check_for_webmin();
 check_for_symantec();
 
+check_for_libkeyutils_malware();
+
 # This is run closer to the end since it has the potential to take the longest
 build_rpm_list();
 
 # These require build_rpm_list() to have been run, so that @rpm_list is populated
-check_for_libkeyutils_malware();
+check_for_ebury_malware();
 populate_mysql_rpm_versions_array();
 check_for_mysql_4();
 check_for_additional_rpms();
@@ -485,6 +488,7 @@ sub print_version {
 
 sub print_tip {
     my @tips = (
+        '[FB 72801] (By design) File Manager creates new files with 0600 perms, even when saving an existing file as a new one',
         '[FB 72733] (By design) File Manager\'s "Compress" feature has a hard coded timeout due to using cPanel\'s form upload logic',
         '[FB 63530] When setting up a remote MySQL server, that server must have the openssh-clients package installed',
         '[FB 63193] File Manager showing "Out of memory" in cPanel error_log? Try renaming $HOME/$USER/.cpanel/datastore/SYSTEMMIME',
@@ -2076,6 +2080,7 @@ sub check_for_hooks_in_scripts_directory {
     # default CloudLinux, cPGs hooks that can be ignored
     my %hooks_ignore = qw(
       e5e13640299ec439fb4c7f79a054e42b    /scripts/posteasyapache
+      16d94b5426681a977e2beedd0ad871e9    /scripts/posteasyapache
       42a624c843f34085f1532b0b4e17fe8c    /scripts/postmodifyacct
       22cf7db1c069fd9672cd9dad3a3d371d    /scripts/postupcp
       57f8ea2d494e299827cc365c86a357ac    /scripts/postupcp
@@ -4369,8 +4374,6 @@ sub check_for_libkeyutils_malware {
     return if ( $os eq 'freebsd' );
 
     my $bad_libs;
-    my $bad_rpms;
-    my $warning;
 
     ## check for the existence of known illegitimate files
     my @dirs  = qw( /lib /lib64 );
@@ -4390,6 +4393,15 @@ sub check_for_libkeyutils_malware {
         }
     }
 
+    if ($bad_libs) {
+        print "\n\n";
+        print_warn('!! [ LIBKEYUTILS ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "The following file(s) were found:\n$bad_libs\n";
+    }
+}
+
+sub check_for_ebury_malware {
     #### check for the existence if illegitimate rpms, like these:
     #
     #  openssh-4.3p2-721.el5_61.65
@@ -4401,25 +4413,19 @@ sub check_for_libkeyutils_malware {
     #  openssh-server-4.3p2-721.el5_61.65
     #  openssh-server-5.3p1-209.el6_10.41.x86_64
 
+    my $bad_rpms;
+
     for my $rpm (@rpm_list) {
         if ( $rpm =~ m{ \A openssh-(clients|server|\d)(.*)-(\d){3}\. }xms ) {
             $bad_rpms .= "\t$rpm\n";
         }
     }
 
-    if ($bad_libs) {
-        $warning = "The following file(s) were found:\n$bad_libs\n";
-    }
-
     if ($bad_rpms) {
-        $warning .= "The following rpm(s) were found:\n$bad_rpms\n";
-    }
-
-    if ($warning) {
         print "\n\n";
-        print_warn('!! [ LIBKEYUTILS / EBURY ] !! ');
+        print_warn('!! [ EBURY ] !! ');
         print_warning('L1/L2 escalate this ticket to L3');
-        print "$warning\n";
+        print "The following rpm(s) were found:\n$bad_rpms\n";
     }
 }
 
@@ -4437,6 +4443,22 @@ sub check_for_networkmanager {
         print_warn('NetworkManager: ');
         print_warning('found in the process list');
     }
+}
+
+sub check_for_dhclient {
+    my $dhclient_running;
+
+    for my $line (@process_list) {
+        if ( $line =~ m{ \A root (?:.*) dhclient }xms ) {
+            $dhclient_running = 1; 
+            last;
+        }    
+    }    
+
+    if ( $dhclient_running && $dhclient_running == 1 ) {
+        print_warn('dhclient: ');
+        print_warning('found in the process list');
+    }    
 }
 
 sub check_for_var_cpanel_roundcube_install {
