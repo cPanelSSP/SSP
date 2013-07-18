@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.73';
+my $version = '4.74';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -491,7 +491,7 @@ sub print_tip {
         '[FB 72801] (By design) File Manager creates new files with 0600 perms, even when saving an existing file as a new one',
         '[FB 72733] (By design) File Manager\'s "Compress" feature has a hard coded timeout due to using cPanel\'s form upload logic',
         '[FB 63530] When setting up a remote MySQL server, that server must have the openssh-clients package installed',
-        '[FB 63283] (By design) Bandwidth will process during blackout hours if it was started before the blackout hour',
+        '[FB 63283] (By design) In cPanel <= 11.38, bandwidth will process during blackout hours if it was started before the blackout hour',
         '[FB 63193] File Manager showing "Out of memory" in cPanel error_log? Try renaming $HOME/$USER/.cpanel/datastore/SYSTEMMIME',
         '[FB 62819] "License File Expired: LTD: 1334782495 NOW: 1246416504 FUT!" likely just means the server clock is wrong',
         '[FB 62054] (By design) The "Dedicated IP" box can only be modified when creating a package - not when editing',
