@@ -4851,7 +4851,7 @@ sub check_for_mysql_root_pass_with_single_quote {
     open my $mycnf_fh, '<', $mycnf or return;
     while ( <$mycnf_fh> ) {
         chomp;
-        if ( /^(?:[\s\t]?)+pass(?:[^"]+)?=(?:[\s\t]?)+(?:"?)([^"]+)/ ) {
+        if ( /^(?:[\s\t]?)+pass(?:[^"']+)?=(?:[\s\t]?)+(?:["']?)(.*)(?:["']+)$/ ) {
             if ( $1 =~ /'/ ) {
                 $has_single_quote = 1;
                 last;
