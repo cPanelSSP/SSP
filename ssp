@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.74';
+my $version = '4.75';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -75,7 +75,6 @@ print "\n";
 for ( 1 .. 3 ) {
     print BOLD GREEN ON_RED "\tPlease DO NOT paste output from SSP into tickets unless it is relevant to an issue" . RESET . "\n";
 }
-sleep 3;
 
 ## [INFO]
 print "\n";
@@ -226,6 +225,7 @@ check_for_stale_upgrade_in_progress_txt();
 check_for_bad_permissions_on_named_ca();
 check_for_skiphttpauth_disabled();
 check_for_use_compiled_dnsadmin();
+check_for_mysql_root_pass_with_single_quote();
 
 # [3RDP]
 check_for_assp();
@@ -4842,6 +4842,29 @@ sub check_for_use_compiled_dnsadmin {
     }    
 }
 
+sub check_for_mysql_root_pass_with_single_quote {
+    my $mycnf = '/root/.my.cnf';
+    return if !-f $mycnf;
+
+    my $has_single_quote = 0;
+
+    open my $mycnf_fh, '<', $mycnf or return;
+    while ( <$mycnf_fh> ) {
+        chomp;
+        if ( /^(?:[\s\t]?)+pass(?:[^"]+)=(?:[\s\t]?)+(?:"?)([^"]+)/ ) {
+            if ( $1 =~ /'/ ) {
+                $has_single_quote = 1;
+                last;
+            }
+        }
+    }
+    close $mycnf_fh;
+
+    if ( $has_single_quote == 1 ) {
+        print_warn('mysql root user: ');
+        print_warning('pass has single quote. This breaks mysql_upgrade! mysql.proc issues? See ticket 4294869');
+    }
+}
 
 ##############################
 #  END [WARN] CHECKS
