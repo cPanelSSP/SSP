@@ -4862,7 +4862,7 @@ sub check_for_mysql_root_pass_with_single_quote {
 
     if ( $has_single_quote && $has_single_quote == 1 ) {
         print_warn('mysql root user: ');
-        print_warning('pass has single quote. This breaks mysql_upgrade! mysql.proc issues? See ticket 4294869');
+        print_warning('pass has single quote. This breaks mysql_upgrade! mysql.proc issues? See FB 73533');
     }
 }
 
