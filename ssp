@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.76';
+my $version = '4.77';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -226,6 +226,7 @@ check_for_bad_permissions_on_named_ca();
 check_for_skiphttpauth_disabled();
 check_for_use_compiled_dnsadmin();
 check_for_mysql_root_pass_with_single_quote();
+check_for_jailshell_additional_mounts_trailing_slash();
 
 # [3RDP]
 check_for_assp();
@@ -497,6 +498,7 @@ sub print_tip {
         '[FB 62054] (By design) The "Dedicated IP" box can only be modified when creating a package - not when editing',
         '[FB 61735] (By design) "/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings" destroys custom proxy subdomain records. Use WHM >> Tweak Settings instead.',
         '[FB 61516] cPanel\'s Java SSH term app may say shell access is disabled, even when it is enabled',
+        '[FB 60471] PureFTPd allows FTP users to follow symlinks',
         '[FB 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and "PCRE is not compiled with UTF-8 support"',
         '[FB 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale',
         '[FB 46853] Customer complaining that they can\'t log into cPanel as root? Update FB 46853',
@@ -4889,6 +4891,34 @@ sub check_for_mysql_root_pass_with_single_quote {
     if ( $has_single_quote && $has_single_quote == 1 ) {
         print_warn('mysql root user: ');
         print_warning('pass has single quote. This breaks mysql_upgrade! mysql.proc issues? See FB 73533');
+    }
+}
+
+sub check_for_jailshell_additional_mounts_trailing_slash {
+    return if ( $os eq 'freebsd' );
+
+    my $mounts_file = '/var/cpanel/jailshell-additional-mounts';
+    return if ( !-f $mounts_file );
+
+    my $has_slash = 0;
+
+    if ( open my $file_fh, '<', $mounts_file ) {
+        while ( <$file_fh> ) {
+            chomp;
+            if ( m#/(?:[\s\t]+)?\z# ) {
+                $has_slash = 1;
+                last;
+            }
+        }
+        close $file_fh;
+    }
+    else {
+        return;
+    }
+
+    if ( $has_slash == 1 ) {
+        print_warn("$mounts_file: ");
+        print_warning( 'contains trailing slashes! Server may become unstable. See FB 71613');
     }
 }
 
