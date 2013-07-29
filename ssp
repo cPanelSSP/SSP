@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.77';
+my $version = '4.78';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -692,7 +692,7 @@ sub print_hostname {
     print_info('Hostname: ');
 
     if ( $hostname !~ /([\w-]+)\.([\w-]+)\.(\w+)/ ) {
-        print_warning("$hostname is not a FQDN ( en.wikipedia.org/wiki/Fully_qualified_domain_name )");
+        print_warning("$hostname may not be a FQDN ( en.wikipedia.org/wiki/Fully_qualified_domain_name )");
     }
     else {
         print_normal($hostname);
