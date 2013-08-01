@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.80';
+my $version = '4.81';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -4929,24 +4929,24 @@ sub check_for_allow_query_localhost {
 
     my $allow_query_localhost = 0;
 
-    ## This is kind of lazy checking, since it could span multiple lines
-    if ( open my $named_conf_fh, '<', $named_conf ) {
-        while ( <$named_conf_fh> ) {
-            if ( m#allow-query (?:.*) ( localhost | 127\.\d+\.\d+\.\d+ )#xms ) {
-                $allow_query_localhost = 1;
-                last;
-            }
-        }
+    my $namedconf_contents;
+    if ( open my $named_conf_fh, '<', $named_conf ) { 
+        local $/; 
+        $namedconf_contents = <$named_conf_fh>;
         close $named_conf_fh;
-    }
+    }   
     else {
         return;
+    }   
+
+    if ( $namedconf_contents =~ m#allow-query ([\s\t\r\n]+)? { ([\s\t]+)? ( localhost | 127\. )#xms ) { 
+        $allow_query_localhost = 1;
     }
 
     if ( $allow_query_localhost == 1 ) {
         print_warn('named.conf: ');
         print_warning('allow-query is restricted to localhost. Remote DNS queries may not work');
-    }
+    }    
 }
 
 ##############################
