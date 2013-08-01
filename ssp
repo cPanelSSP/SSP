@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.78';
+my $version = '4.79';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -1520,7 +1520,7 @@ sub check_for_sandy_bridge {
 
     if ( $sandy_bridge == 1 ) {
         print_warn('AVX / Sandy Bridge: ');
-        print_warning('detected! compile ssp.cptechs.info/glibc_avx.tar.gz and run ./exe (check for "Illegal instruction")');
+        print_warning('detected! compile ssp.cpanel.net/glibc_avx.tar.gz and run ./exe (check for "Illegal instruction")');
     }
 }
 
