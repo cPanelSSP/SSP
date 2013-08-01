@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.79';
+my $version = '4.80';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -227,6 +227,7 @@ check_for_skiphttpauth_disabled();
 check_for_use_compiled_dnsadmin();
 check_for_mysql_root_pass_with_single_quote();
 check_for_jailshell_additional_mounts_trailing_slash();
+check_for_allow_query_localhost();
 
 # [3RDP]
 check_for_assp();
@@ -4919,6 +4920,32 @@ sub check_for_jailshell_additional_mounts_trailing_slash {
     if ( $has_slash == 1 ) {
         print_warn("$mounts_file: ");
         print_warning( 'contains trailing slashes! Server may become unstable. See FB 71613');
+    }
+}
+
+sub check_for_allow_query_localhost {
+    my $named_conf = '/etc/named.conf';
+    return if !-f $named_conf;
+
+    my $allow_query_localhost = 0;
+
+    ## This is kind of lazy checking, since it could span multiple lines
+    if ( open my $named_conf_fh, '<', $named_conf ) {
+        while ( <$named_conf_fh> ) {
+            if ( m#allow-query (?:.*) ( localhost | 127\.\d+\.\d+\.\d+ )#xms ) {
+                $allow_query_localhost = 1;
+                last;
+            }
+        }
+        close $named_conf_fh;
+    }
+    else {
+        return;
+    }
+
+    if ( $allow_query_localhost == 1 ) {
+        print_warn('named.conf: ');
+        print_warning('allow-query is restricted to localhost. Remote DNS queries may not work');
     }
 }
 
