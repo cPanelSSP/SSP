@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.81';
+my $version = '4.84';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -528,6 +528,8 @@ sub print_tip {
         'CentOS 5.x and CloudLinux 5.x do not support SNI. See the "SNI" wiki article for more info',
         'domlogs are created 0644 by default. cpanellogd changes permissions on them to 0640 a few minutes later',
         'cPanel >> Error Log only searches "recent" logs in Apache\'s error_log . Showing as blank? Maybe there are no recent errors',
+        'Horde showing "server configuration did not allow file to be uploaded"? Check disk/inode usage on /tmp',
+        'IMAP/webmail showing no email? The cPanel account may have been over its quota. Try renaming dovecot-uidlist, send account an email (see ticket 4314723)',
     );
 
     my $size = scalar @tips;
@@ -1895,8 +1897,10 @@ sub check_for_non_default_permissions {
         '/usr/local/bin'               => '755',
         '/usr/local/sbin'              => '755',
         '/var'                         => '755',
+        '/var/cpanel/features'         => '755',
         '/var/cpanel/locale'           => '755',
         '/var/cpanel/resellers'        => '644',
+        '/var/tmp'                     => '1777',
         '/usr/local/cpanel/php/cpanel.php'  => '644',
         '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => '644',
         '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'  => '644',
