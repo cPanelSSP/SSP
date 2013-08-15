@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.84';
+my $version = '4.85';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -1897,6 +1897,7 @@ sub check_for_non_default_permissions {
         '/usr/local/bin'               => '755',
         '/usr/local/sbin'              => '755',
         '/var'                         => '755',
+        '/var/cpanel'                  => '755',
         '/var/cpanel/features'         => '755',
         '/var/cpanel/locale'           => '755',
         '/var/cpanel/resellers'        => '644',
