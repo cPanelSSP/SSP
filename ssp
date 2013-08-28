@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.85';
+my $version = '4.86';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -95,6 +95,7 @@ check_for_remote_mysql();
 print_if_using_mydns_or_nsd();
 print_if_using_modruid2();
 print_which_php_is_used_internally();
+print_mysql_version();
 
 ## [WARN]
 check_selinux_status();
@@ -228,6 +229,7 @@ check_for_use_compiled_dnsadmin();
 check_for_mysql_root_pass_with_single_quote();
 check_for_jailshell_additional_mounts_trailing_slash();
 check_for_allow_query_localhost();
+check_for_nocloudlinux_touchfile();
 
 # [3RDP]
 check_for_assp();
@@ -490,6 +492,7 @@ sub print_version {
 
 sub print_tip {
     my @tips = (
+        '[FB 75793] (By design) Proxy subdomains are not created for addon domains',
         '[FB 72801] (By design) File Manager creates new files with 0600 perms, even when saving an existing file as a new one',
         '[FB 72733] (By design) File Manager\'s "Compress" feature has a hard coded timeout due to using cPanel\'s form upload logic',
         '[FB 63530] When setting up a remote MySQL server, that server must have the openssh-clients package installed',
@@ -1151,8 +1154,14 @@ sub print_php_configuration {
                 $php5version = '(version unknown)';
             }
 
-            print_info('PHP Default: ');
-            print_normal("PHP $php5version $php5handler $suexec");
+            if ( $php5handler eq 'fcgi' ) {
+                print_info('PHP Default: ');
+                print_warning("PHP $php5version $php5handler $suexec (mod_userdir style URLs don't work with fcgi!)");
+            }
+            else {
+                print_info('PHP Default: ');
+                print_normal("PHP $php5version $php5handler $suexec");
+            }
         }
 
         if ( $php4handler ne 'none' ) {
@@ -1179,8 +1188,14 @@ sub print_php_configuration {
                 $php4version = '(version unknown)';
             }
 
-            print_info('PHP Default: ');
-            print_normal("PHP $php4version $php4handler $suexec");
+            if ( $php4handler eq 'fcgi' ) {
+                print_info('PHP Default: ');
+                print_warning("PHP $php4version $php4handler $suexec (mod_userdir style URLs don't work with fcgi!)");
+            }
+            else {
+                print_info('PHP Default: ');
+                print_normal("PHP $php4version $php4handler $suexec");
+            }
         }
 
         if ( $php5handler ne 'none' ) {
@@ -1371,6 +1386,15 @@ sub print_which_php_is_used_internally {
     else {
         print_info('Internal PHP: ');
         print_normal("$whm_php (used by WHM, webmail, phpMyAdmin, phpPgAdmin) $cpanel_php (used by cPanel)");
+    }
+}
+
+sub print_mysql_version {
+    my $mysql_output = run( 'mysql', '-V' );
+    if ( $mysql_output ) {
+        chomp $mysql_output;
+        print_info('MySQL Version: ');
+        print_normal($mysql_output);
     }
 }
 
@@ -2315,8 +2339,11 @@ sub check_for_nat {
             close $sock;
         }
 
-        if ( $reply =~ m{ (\d+\.\d+\.\d+\.\d+) }xms ) {
+        if ( $reply and $reply =~ m{ (\d+\.\d+\.\d+\.\d+) }xms ) {
             $external_ip_address = $1;
+        }
+        else {
+            return;
         }
 
         if ($external_ip_address) {
@@ -4952,6 +4979,13 @@ sub check_for_allow_query_localhost {
         print_warn('named.conf: ');
         print_warning('allow-query is restricted to localhost. Remote DNS queries may not work');
     }    
+}
+
+sub check_for_nocloudlinux_touchfile {
+    if ( -e '/var/cpanel/nocloudlinux' ) {
+        print_warn('/var/cpanel/nocloudlinux: ');
+        print_warning('exists! CloudLinux cannot be installed when this file is present.');
+    }
 }
 
 ##############################
