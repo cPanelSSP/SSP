@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.86';
+my $version = '4.87';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -230,6 +230,7 @@ check_for_mysql_root_pass_with_single_quote();
 check_for_jailshell_additional_mounts_trailing_slash();
 check_for_allow_query_localhost();
 check_for_nocloudlinux_touchfile();
+check_for_phphandler_and_opcode_caching_incompatibility();
 
 # [3RDP]
 check_for_assp();
@@ -4985,6 +4986,68 @@ sub check_for_nocloudlinux_touchfile {
     if ( -e '/var/cpanel/nocloudlinux' ) {
         print_warn('/var/cpanel/nocloudlinux: ');
         print_warning('exists! CloudLinux cannot be installed when this file is present.');
+    }
+}
+
+sub check_for_phphandler_and_opcode_caching_incompatibility {
+    my $php_conf_yaml = '/usr/local/apache/conf/php.conf.yaml';
+    return if !-e $php_conf_yaml;
+
+    my $using_suphp = 0;
+
+    if ( open my $file_fh, '<', $php_conf_yaml ) {
+        while ( <$file_fh> ) {
+            if ( /^php5:[ \t]+['"]?suphp/ ) {
+                $using_suphp = 1;
+            }
+        }
+        close $file_fh;
+    }
+    else {
+        return;
+    }
+
+    my $has_eaccelerator    = 0;
+    my $has_xcache          = 0;
+    my $has_apc             = 0;
+
+    if ( $using_suphp == 1 ) {
+        if ( open my $phpconf_fh, '<', '/usr/local/lib/php.ini' ) {
+            while ( <$phpconf_fh> ) {
+                if ( m{ \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? eaccelerator\.so ['"]? }xms) {
+                    $has_eaccelerator = 1;
+                }
+                elsif ( m{ \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? xcache\.so ['"]? }xms) {
+                    $has_xcache = 1;
+                }
+                elsif ( m{ \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? apc\.so ['"]? }xms) {
+                    $has_apc = 1;
+                }
+            }
+            close $phpconf_fh;
+        }
+        else {
+            return;
+        }
+    }
+    else {
+        return;
+    }
+
+    my $message;
+    if ( $has_eaccelerator == 1 ) {
+        $message = '[eAccelerator] ';
+    }
+    if ( $has_xcache == 1 ) {
+        $message .= '[XCache] ';
+    }
+    if ( $has_apc == 1 ) {
+        $message .= '[APC] ';
+    }
+
+    if ($message) {
+        print_warn('PHP: ');
+        print_warning("suPHP enabled, but the following installed opcode cachers are not suPHP compatible: $message");
     }
 }
 
