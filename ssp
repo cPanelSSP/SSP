@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.89';
+my $version = '4.90';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -3015,6 +3015,9 @@ sub check_roots_cron_for_certain_commands {
             }
             if (m{ \A [^#]+ (\s|\/)skill\s }xms) {
                 $commands{'skill'} = 1;
+            }
+            if (m{ \A [^#]+ (\s|\/)tmpwatch\s }xms) {
+                $commands{'tmpwatch'} = 1;
             }
         }
         close $cron_fh;
