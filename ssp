@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.87';
+my $version = '4.89';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -231,6 +231,7 @@ check_for_jailshell_additional_mounts_trailing_slash();
 check_for_allow_query_localhost();
 check_for_nocloudlinux_touchfile();
 check_for_phphandler_and_opcode_caching_incompatibility();
+check_for_invalid_HOMEDIR();
 
 # [3RDP]
 check_for_assp();
@@ -496,6 +497,7 @@ sub print_tip {
         '[FB 75793] (By design) Proxy subdomains are not created for addon domains',
         '[FB 72801] (By design) File Manager creates new files with 0600 perms, even when saving an existing file as a new one',
         '[FB 72733] (By design) File Manager\'s "Compress" feature has a hard coded timeout due to using cPanel\'s form upload logic',
+        '[FB 65253] cPHulk may report root logins to Pure-FTPd despite no evidence being found',
         '[FB 63530] When setting up a remote MySQL server, that server must have the openssh-clients package installed',
         '[FB 63283] (By design) In cPanel <= 11.38, bandwidth will process during blackout hours if it was started before the blackout hour',
         '[FB 63193] File Manager showing "Out of memory" in cPanel error_log? Try renaming $HOME/$USER/.cpanel/datastore/SYSTEMMIME',
@@ -5048,6 +5050,35 @@ sub check_for_phphandler_and_opcode_caching_incompatibility {
     if ($message) {
         print_warn('PHP: ');
         print_warning("suPHP enabled, but the following installed opcode cachers are not suPHP compatible: $message");
+    }
+}
+
+sub check_for_invalid_HOMEDIR {
+    my $wwwacctconf = '/etc/wwwacct.conf';
+
+    return if !-f $wwwacctconf;
+
+    my $homedir;
+
+    if ( open my $file_fh, '<', $wwwacctconf ) {
+        while ( <$file_fh> ) {
+            if ( /\AHOMEDIR[\s\t]+([^\s]+)/ ) {
+                $homedir = $1;
+                last;
+            }
+        }
+        close $file_fh;
+    }
+
+    if (!$homedir) {
+        print_warn("$wwwacctconf: ");
+        print_warning('HOMEDIR value not found!');
+    }
+    else {
+        if (!-d $homedir) {
+            print_warn("$wwwacctconf: ");
+            print_warning("the directory that is specified as the HOMEDIR does not exist! ($homedir)");
+        }
     }
 }
 
