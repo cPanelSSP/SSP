@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.90';
+my $version = '4.91';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -60,6 +60,7 @@ my %cpconf;                    # cpanel.config
 my %pureftpdconf;              # /etc/pure-ftpd.conf
 my @apache_version_output;     # httpd -v
 my @apache_modules_output;     # httpd -M
+my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexec );
 
 if ( -x '/usr/local/apache/bin/httpd' ) {
     @apache_version_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-v' );
@@ -176,8 +177,6 @@ check_for_low_ulimit_for_root();
 check_for_fork_bomb_protection();
 check_for_cloudlinux_not_licensed_through_cpanel();
 check_for_harmful_php_mode_600_cron();
-
-#check_for_cpphpopts();
 check_for_cPanel_lower_than_11_30_7_3();
 check_for_custom_exim_conf_local();
 check_for_maxclients_or_maxrequestworkers_reached();
@@ -232,6 +231,7 @@ check_for_allow_query_localhost();
 check_for_nocloudlinux_touchfile();
 check_for_phphandler_and_opcode_caching_incompatibility();
 check_for_invalid_HOMEDIR();
+check_for_unsupported_options_in_phpini(); # case 75397
 
 # [3RDP]
 check_for_assp();
@@ -1119,8 +1119,6 @@ sub print_apache_info {
 sub print_php_configuration {
     my $phpconf = '/usr/local/apache/conf/php.conf.yaml';
     return if !-f $phpconf;
-
-    my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexec );
 
     open my $phpconf_fh, '<', $phpconf;
     while (<$phpconf_fh>) {
@@ -3589,26 +3587,6 @@ sub check_for_low_ulimit_for_root {
     }
 }
 
-sub check_for_cpphpopts {
-    my $state_yaml = '/var/cpanel/easy/apache/state.yaml';
-    my $cPPHPOpts  = 0;
-
-    if ( open my $file_fh, '<', $state_yaml ) {
-        while (<$file_fh>) {
-            if (/Cpanel::Easy::PHP5::cPPHPOpts: 1/) {
-                $cPPHPOpts = 1;
-                last;
-            }
-        }
-        close $file_fh;
-    }
-
-    if ( $cPPHPOpts == 1 ) {
-        print_warn('EA: ');
-        print_warning('"Save my profile (...) so that it is compatible with cpphp" enabled. EA can fail if Postgres isn\'t installed (see FB 59092)');
-    }
-}
-
 sub check_for_fork_bomb_protection {
     if ( -f '/etc/profile.d/limits.sh' or -f '/etc/profile.d/limits.csh' ) {
         print_warn('Fork Bomb Protection: ');
@@ -5082,6 +5060,39 @@ sub check_for_invalid_HOMEDIR {
             print_warn("$wwwacctconf: ");
             print_warning("the directory that is specified as the HOMEDIR does not exist! ($homedir)");
         }
+    }
+}
+
+sub check_for_unsupported_options_in_phpini { # case 75397
+    my $phpini = '/usr/local/lib/php.ini';
+    return if ( !-f $phpini );
+
+    my $unsupported_options;
+    if ($php5version) {
+        my ( undef, $php5minor ) = split /\./, $php5version;
+
+        return if ($php5minor <= 3);
+
+        if ( open my $file_fh, '<', $phpini ) {
+            while ( <$file_fh> ) {
+                # http://www.php.net/manual/en/migration54.ini.php
+                # apparently "safe_mode = off" won't trigger 75397, but "safe_mode = on" will
+                # some items like "y2k_compliance = On" don't appear to trigger the issue
+                if ( m{ \A (?:[\s\t]+)? (register_globals|safe_mode) (?:[\s\t]+)? = (?:[\s\t]+)? ["']? on ['"]? }ixms ) {
+                    $unsupported_options .= "[$1] ";
+                }
+            }
+            close $file_fh;
+        }
+        else {
+            return;
+        }
+    }
+
+    if ( $unsupported_options ) {
+        $unsupported_options =~ s/\s$//g;
+        print_warn("$phpini: ");
+        print_warning("PHP $php5version does not support $unsupported_options, but found enabled in php.ini. See FB 75397");
     }
 }
 
