@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.91';
+my $version = '4.92';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2457,6 +2457,7 @@ sub get_mysql_datadir {
             chomp( my $line = $_ );
             if ( $line =~ m{ \A datadir \s* = \s* (?:["']?) ([^"']+) }xms ) {
                 $datadir = $1;
+                $datadir =~ s/[\s\t]+$//g;
                 last;
             }
         }
