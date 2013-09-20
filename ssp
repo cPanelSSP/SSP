@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.92';
+my $version = '4.93';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -538,9 +538,7 @@ sub print_tip {
         'IMAP/webmail showing no email? The cPanel account may have been over its quota. Try renaming dovecot-uidlist, send account an email (see ticket 4314723)',
     );
 
-    my $size = scalar @tips;
-    my $num  = int rand $size;
-
+    my $num  = int rand scalar @tips;
     print BOLD WHITE ON_BLACK "\tDid you know? $tips[$num]" . RESET . "\n\n";
 }
 
@@ -4183,12 +4181,14 @@ sub check_for_rpm_overrides {
                                  fab8a718f7e3a1ff9c9d04fb4e8c94c4
                                | fd3f270edda79575343e910369b75ab7
                                | 57baebe121bcd5ab9752dd63f60ecd81
+                               | 1d9f5d246ef2c9ab29f33cf00a3af9a5
                                 ) \s }xms ) {
         $local_is_default = 1;
     }
 
     if ( $md5_easy && $md5_easy =~ m{ \A (
                                   d56abe76c47853eceb706f0855e642a7
+                                | 89d631ef7c1d43475c20d7be7b7290ff
                                 ) \s }xms ) {
         $easy_is_default = 1;
     }
