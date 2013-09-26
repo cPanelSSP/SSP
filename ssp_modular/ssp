@@ -72,21 +72,6 @@ print_mysql_version();
 ## [WARN]
 check_perl_sanity();                        # remove?
 
-check_limitsconf();                         # LimitsConf
-
-check_for_hooks_in_scripts_directory();         # Hooks
-check_for_usr_local_cpanel_hooks();             # Hooks
-check_for_hooks_from_var_cpanel_hooks_yaml();   # Hooks
-
-check_pkgacct_override();                   # Override
-
-check_for_gdm();                            # OSInfo
-check_for_redhat_firewall();                # OSInfo
-check_for_home_noexec();                    # OSInfo
-check_for_oracle_linux();                   # OSInfo
-check_for_proc_mdstat_recovery();           # OSInfo
-check_for_system_mem_below_512M();          # OSInfo
-
 check_for_nat();                            # NAT
 
 check_for_sql_safe_mode();                                  # PHP
@@ -103,13 +88,10 @@ check_for_my_cnf_skip_name_resolve();               # MySQL
 check_for_my_cnf_sql_mode();                        # MySQL
 check_for_mysql_root_pass_with_single_quote();      # MySQL
 
-check_for_cloudlinux_mysql_gov();                   # CloudLinux
-check_for_nocloudlinux_touchfile();                 # CloudLinux
+check_for_cloudlinux_mysql_gov();                   # CloudLinux        @rpm_list
+check_for_nocloudlinux_touchfile();                 # CloudLinux        $is_cloudlinux
 check_for_cloudlinux_not_licensed_through_cpanel(); # CloudLinux
 check_for_lve_environment();                        # CloudLinux
-
-check_for_empty_postgres_config();          # Postgres
-check_for_custom_postgres_repo();           # Postgres
 
 check_for_options_rotate_redhat_centos_63();# DNS
 check_for_allow_query_localhost();          # DNS
@@ -120,19 +102,6 @@ check_for_odd_yum_conf();                   # Yum
 
 check_bash_history_for_certain_commands();  # BashHistory
 
-check_for_usr_local_lib_libz_so();          # OSInfo
-check_etc_hosts_sanity();                   # OSInfo
-check_for_kernel_headers_rpm();             # OSInfo
-check_for_low_ulimit_for_root();            # OSInfo
-check_for_clock_skew();                     # OSInfo
-check_for_zlib_h();                         # OSInfo
-check_for_noxsave_in_grub_conf();           # OSInfo
-check_for_networkmanager();                 # OSInfo
-check_for_dhclient();                       # OSInfo
-check_for_missing_etc_localtime();          # OSInfo
-check_for_immutable_files();                # OSInfo
-check_for_uppercase_chars_in_hostname();    # OSInfo
-check_for_disabled_services();              # OSInfo
 check_for_usr_local_include_jpeglib_h();    # OSInfo
 check_for_non_default_umask();              # OSInfo
 check_for_extra_uid_0_user(); # this is NOT a security check, but for FB 62467      # OSInfo
@@ -145,10 +114,6 @@ check_for_PERL5LIB_env_var();               # Perl
 check_for_broken_list_util();               # Perl
 check_perl_version_less_than_588();         # Perl
 check_for_missing_perl_modules();           # Perl
-
-check_for_custom_exim_conf_local();         # Exim
-check_eximstats_size();                     # Exim
-check_eximstats_corrupt();                  # Exim
 
 check_for_multiple_imagemagick_installs();  # ImageMagick
 
@@ -1341,129 +1306,6 @@ sub check_perl_sanity {
     }
 }
 
-sub check_limitsconf {
-    my @limitsconf;
-
-    if ( open my $limitsconf_fh, '<', '/etc/security/limits.conf' ) {
-        while (<$limitsconf_fh>) {
-            push @limitsconf, $_;
-        }
-        close $limitsconf_fh;
-    }
-
-    @limitsconf = grep { !/^(\s+|#)/ } @limitsconf;
-
-    if (@limitsconf) {
-        print_warn('limits.conf: ');
-        print_warning('custom limits defined in /etc/security/limits.conf!');
-    }
-}
-
-sub check_for_hooks_in_scripts_directory {
-    if ( -f '/usr/local/cpanel/Cpanel/CustomEventHandler.pm' ) {
-        print_warn('Hooks: ');
-        print_warning('/usr/local/cpanel/Cpanel/CustomEventHandler.pm exists!');
-    }
-
-    # default CloudLinux, cPGs hooks that can be ignored
-    my %hooks_ignore = qw(
-      e5e13640299ec439fb4c7f79a054e42b    /scripts/posteasyapache
-      16d94b5426681a977e2beedd0ad871e9    /scripts/posteasyapache
-      42a624c843f34085f1532b0b4e17fe8c    /scripts/postmodifyacct
-      22cf7db1c069fd9672cd9dad3a3d371d    /scripts/postupcp
-      57f8ea2d494e299827cc365c86a357ac    /scripts/postupcp
-      e464adf0531fea2af4fe57361d9a43fb    /scripts/postupcp
-      941772daaa48999f1d5ae5fe2f881e36    /scripts/postupcp
-      4988be925a6f50ec505618a7cec702e2    /scripts/postkillacct
-      a4df04a6440073fe40363cfd241b1fe7    /scripts/postwwwacct
-      03a0dc919c892bde254c52cefe4d0673    /scripts/postwwwacct
-      2401d6260dac6215596be1652b394200    /scripts/postwwwacct
-      677da3bdd8fbd16d4b8917a9fe0f6f89    /scripts/postwwwacct
-      44caf075fc0f9847ede43de5dd563edc    /scripts/prekillacct
-      86f9b53c81a8f2fd77a8626ddd3b2c71    /scripts/prekillacct
-      46fee9faf2d5f83cbcda17ce0178a465    /scripts/prekillacct
-      677da3bdd8fbd16d4b8917a9fe0f6f89    /scripts/prekillacct
-
-    );
-
-    my @hooks;
-    if ( -d '/scripts' ) {
-        opendir( my $scripts_fh, '/scripts' );
-        @hooks = grep { /^(pre|post)/ } readdir $scripts_fh;
-        closedir $scripts_fh;
-    }
-
-    # these exist by default
-    @hooks = grep { !/postsuexecinstall/ && !/post_sync_cleanup/ } @hooks;
-
-    # CloudLinux stuff
-    @hooks = grep { !/postwwwacct\.l\.v\.e-manager\.bak/ } @hooks;
-
-    my $hooks_output;
-    if (@hooks) {
-        for my $hook (@hooks) {
-            $hook = '/scripts/' . $hook;
-            unless ( $os eq 'freebsd' ) {
-                chomp( my $checksum = run( 'md5sum', $hook ) );
-                $checksum =~ s/\s.*//g;
-                next if exists $hooks_ignore{$checksum};
-            }
-            if ( !-z $hook ) {
-                $hooks_output .= " $hook ";
-            }
-        }
-    }
-
-    if ($hooks_output) {
-        print_warn('Hooks: ');
-        print_warning($hooks_output);
-    }
-}
-
-sub check_pkgacct_override {
-    if ( -d '/var/cpanel/lib/Whostmgr' ) {
-        print_warn('pkgacct override: ');
-        print_warning(' /var/cpanel/lib/Whostmgr exists, override may exist');
-    }
-}
-
-sub check_for_gdm {
-    my $gdm = 0;
-
-    for my $line (@process_list) {
-        if ( $line =~ m{ \A root (?:.*) gdm }xms ) {
-            $gdm = 1;
-            last;
-        }
-    }
-
-    if ( $gdm == 1 ) {
-        print_warn('gdm Process: ');
-        print_warning('is running');
-    }
-}
-
-sub check_for_redhat_firewall {
-    my $iptables = run( 'iptables', '-L', 'RH-Firewall-1-INPUT' );
-
-    if ($iptables) {
-        print_warn('Default Redhat Firewall Check: ');
-        print_warning('RH-Firewall-1-INPUT table exists. /scripts/configure_rh_firewall_for_cpanel to open ports.');
-    }
-}
-
-sub check_for_home_noexec {
-    my @mount = split /\n/, run('mount');
-
-    for my $mount (@mount) {
-        if ( $mount =~ m{ \s on \s (/home([^\s]?)) \s (:?.*) noexec }xms ) {
-            my $noexec_partition = $1;
-            print_warn('mounted noexec: ');
-            print_warning($noexec_partition);
-        }
-    }
-}
-
 ## compare external IP addr with local IP addrs, OR
 ## check if only internal IP addrs are bound to server (this is not as reliable,
 ## as NAT can still be used with external IP addrs of course)
@@ -1528,53 +1370,6 @@ sub check_for_nat {
             print_warn('NAT: ');
             print_warning('no external IP addresses detected');
         }
-    }
-}
-
-sub check_for_oracle_linux {
-    my $centos_5_oracle_release_file = '/etc/enterprise-release';
-    my $centos_6_oracle_release_file = '/etc/oracle-release';
-
-    if ( -f $centos_5_oracle_release_file ) {
-        print_warn('Oracle Linux: ');
-        print_warning("$centos_5_oracle_release_file detected!");
-    }
-    elsif ( -f $centos_6_oracle_release_file ) {
-        print_warn('Oracle Linux: ');
-        print_warning("$centos_6_oracle_release_file detected!");
-    }
-}
-
-sub check_for_usr_local_cpanel_hooks {
-    my $hooks;
-    my $dir = '/usr/local/cpanel/hooks';
-    find( \&find_usr_local_cpanel_hooks, $dir );
-
-    # default CloudLinux hooks that can be ignored
-    my %hooks_ignore = qw(
-      677da3bdd8fbd16d4b8917a9fe0f6f89    /usr/local/cpanel/hooks/addondomain/addaddondomain
-      677da3bdd8fbd16d4b8917a9fe0f6f89    /usr/local/cpanel/hooks/addondomain/deladdondomain
-      677da3bdd8fbd16d4b8917a9fe0f6f89    /usr/local/cpanel/hooks/subdomain/addsubdomain
-      677da3bdd8fbd16d4b8917a9fe0f6f89    /usr/local/cpanel/hooks/subdomain/delsubdomain
-    );
-
-    if (@usr_local_cpanel_hooks) {
-        for my $hook (@usr_local_cpanel_hooks) {
-            my $tmp_hook = '/usr/local/cpanel/hooks/' . $hook;
-            if ( -f $tmp_hook and !-z $tmp_hook ) {
-                unless ( $os eq 'freebsd' ) {
-                    chomp( my $checksum = run( 'md5sum', $tmp_hook ) );
-                    $checksum =~ s/\s.*//g;
-                    next if exists $hooks_ignore{$checksum};
-                    $hooks .= "$hook ";
-                }
-            }
-        }
-    }
-
-    if ($hooks) {
-        print_warn("$dir: ");
-        print_warning($hooks);
     }
 }
 
@@ -1646,14 +1441,6 @@ sub check_mysql_non_default_datadir {
     }
 }
 
-sub check_for_empty_postgres_config {
-    my $postgres_config = '/var/lib/pgsql/data/pg_hba.conf';
-    if ( -f $postgres_config and -z $postgres_config ) {
-        print_warn('Postgres config: ');
-        print_warning("$postgres_config is empty (install via WHM >> Postgres Config)");
-    }
-}
-
 sub check_for_missing_timezone_from_phpini {
     my $phpini = '/usr/local/lib/php.ini';
 
@@ -1681,27 +1468,6 @@ sub check_for_missing_timezone_from_phpini {
             print_warn("date.timezone from $phpini: ");
             print_warning("$path not found!");
         }
-    }
-}
-
-sub check_for_proc_mdstat_recovery {
-    my $mdstat = '/proc/mdstat';
-
-    my $recovery = 0;
-
-    if ( open my $mdstat_fh, '<', $mdstat ) {
-        while (<$mdstat_fh>) {
-            if (/recovery/) {
-                $recovery = 1;
-                last;
-            }
-        }
-        close $mdstat_fh;
-    }
-
-    if ( $recovery == 1 ) {
-        print_warn('Software RAID recovery: ');
-        print_warning("cat $mdstat to check the status");
     }
 }
 
@@ -1879,40 +1645,6 @@ sub check_php_libmysqlclient_mismatch {
     }
 }
 
-sub check_for_system_mem_below_512M {
-    if ( $os eq 'freebsd' ) {
-        my $memtotal = run( 'sysctl', 'hw.realmem' );
-
-        if ( $memtotal =~ m{ \A hw\.realmem: \s (\d+) }xms ) {
-            $memtotal = $1 / 1024 / 1024;
-        }
-
-        if ( $memtotal < 512 ) {
-            print_warn('Memory: ');
-            print_warning("Server has less than 512M physical memory! [$memtotal MB]");
-        }
-
-        return;
-    }
-
-    my $meminfo = '/proc/meminfo';
-    my $memtotal;
-
-    if ( open my $meminfo_fh, '<', $meminfo ) {
-        while (<$meminfo_fh>) {
-            if (m{ \A MemTotal: \s+ (\d+) \s+ kB \s+ \z }xms) {
-                $memtotal = $1 / 1024;
-            }
-        }
-        close $meminfo_fh;
-    }
-
-    if ( $memtotal < 512 ) {
-        print_warn('Memory: ');
-        print_warning("Server has less than 512M physical memory! [$memtotal MB]");
-    }
-}
-
 ## This is already fixed: http://rhn.redhat.com/errata/RHBA-2012-1158.html
 sub check_for_options_rotate_redhat_centos_63 {
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
@@ -2018,13 +1750,6 @@ sub check_bash_history_for_certain_commands {
     }
 }
 
-sub check_for_usr_local_lib_libz_so {
-    if ( -f '/usr/local/lib/libz.so' ) {
-        print_warn('/usr/local/lib/libz.so: ');
-        print_warning('exists. This can prevent EA from completing');
-    }
-}
-
 sub check_for_non_default_modsec_rules {
     my $modsec_enabled = 0;
 
@@ -2063,63 +1788,6 @@ sub check_for_non_default_modsec_rules {
     if ( -d $modsec_rules_dir ) {
         print_warn('modsec: ');
         print_warning("$modsec_rules_dir exists, 3rd party rules may be in use");
-    }
-}
-
-sub check_etc_hosts_sanity {
-    my $hosts             = '/etc/hosts';
-    my $localhost         = 0;
-    my $httpupdate        = 0;
-    my $localhost_not_127 = 0;
-    my $hostname_entry    = 0;
-
-    if ( !-f $hosts ) {
-        print_warn('/etc/hosts: ');
-        print_warning('missing!');
-        return;
-    }
-    else {
-        if ( open my $hosts_fh, '<', $hosts ) {
-            while ( my $line = <$hosts_fh> ) {
-                chomp $line;
-
-                next if ( $line =~ /^(\s+)?#/ );
-
-                if ( $line =~ m{  127\.0\.0\.1 (.*) localhost }xms ) {
-                    $localhost = 1;
-                }
-                if ( ( $line =~ m{ \s localhost (\s|\z) }xmsi ) and ( $line !~ m{ 127\.0\.0\.1 | ::1 }xms ) ) {
-                    $localhost_not_127 = 1;
-                }
-                if ( $line =~ m{ httpupdate\.cpanel\.net }xmsi ) {
-                    $httpupdate = 1;
-                }
-                if ( $line =~ m{ $hostname }xmsi ) {
-                    $hostname_entry = 1;
-                }
-            }
-            close $hosts_fh;
-        }
-    }
-
-    if ( $localhost == 0 ) {
-        print_warn('/etc/hosts: ');
-        print_warning('no entry for localhost, or commented out');
-    }
-
-    if ( $httpupdate == 1 ) {
-        print_warn('/etc/hosts: ');
-        print_warning('contains an entry for httpupdate.cpanel.net');
-    }
-
-    if ( $localhost_not_127 == 1 ) {
-        print_warn('/etc/hosts: ');
-        print_warning('contains an entry for "localhost" that isn\'t 127.0.0.1 ! This can break EA');
-    }
-
-    if ( $hostname_entry == 0 ) {
-        print_warn('/etc/hosts: ');
-        print_warning("no entry found for the server's hostname! [$hostname]");
     }
 }
 
@@ -2248,40 +1916,6 @@ sub check_for_cpanel_not_updating {
     ## Check removed for now due to false positives
 }
 
-sub check_for_hooks_from_var_cpanel_hooks_yaml {
-    my $hooks_yaml = '/var/cpanel/hooks.yaml';
-    my ( @hooks_tmp, @hooks );
-
-    if ( open my $file_fh, '<', $hooks_yaml ) {
-        while (<$file_fh>) {
-            if (/hook: (.*)/) {
-
-                # Ignore default Attracta hooks
-                next if ( $1 =~ m{ \A ( /usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore | /usr/local/cpanel/Cpanel/ThirdParty/Attracta/Hooks/pkgacct-restore ) \z }xms );
-                push @hooks_tmp, "$1 ";
-            }
-        }
-        close $file_fh;
-    }
-
-    for my $hook (@hooks_tmp) {
-        if ( -e $hook and !-z $hook ) {
-            push @hooks, $hook;
-        }
-    }
-
-    if ( scalar @hooks == 1 ) {
-        print_warn('Hooks in /var/cpanel/hooks.yaml: ');
-        print_warning(@hooks);
-    }
-    elsif ( scalar @hooks > 1 ) {
-        print_warn("Hooks in /var/cpanel/hooks.yaml:\n");
-        for my $hook (@hooks) {
-            print_magenta("\t \\_ $hook");
-        }
-    }
-}
-
 sub get_mysql_error_log {
     if ( open my $file_fh, '<', '/etc/my.cnf' ) {
         while (<$file_fh>) {
@@ -2311,53 +1945,6 @@ sub check_for_non_default_mysql_error_log_location {
     }
 }
 
-sub check_for_low_ulimit_for_root {
-    my $ulimit_m = run('echo `ulimit -m`');
-    my $ulimit_v = run('echo `ulimit -v`');
-
-    chomp( $ulimit_m, $ulimit_v );
-
-    if ( $ulimit_m =~ /\d+/ ) {
-        $ulimit_m = sprintf( '%.0f', $ulimit_m / 1024 );
-    }
-    if ( $ulimit_v =~ /\d+/ ) {
-        $ulimit_v = sprintf( '%.0f', $ulimit_v / 1024 );
-    }
-
-    if ( $ulimit_m =~ /\d+/ and $ulimit_m <= 256 or $ulimit_v =~ /\d+/ and $ulimit_v <= 256 ) {
-        if ( $ulimit_m =~ /\d+/ ) {
-            $ulimit_m .= 'MB';
-        }
-        if ( $ulimit_v =~ /\d+/ ) {
-            $ulimit_v .= 'MB';
-        }
-
-        print_warn('ulimit: ');
-        print_warning("-m [ $ulimit_m ] -v [ $ulimit_v ] Low ulimits can cause EA to fail when run via the shell");
-    }
-}
-
-sub check_for_custom_exim_conf_local {
-    my $exim_conf_local = '/etc/exim.conf.local';
-    my $is_customized   = 0;
-
-    if ( open my $file_fh, '<', $exim_conf_local ) {
-        while ( my $line = <$file_fh> ) {
-            chomp $line;
-            if ( $line !~ m{ \A ( @ | $ ) }xms ) {
-                $is_customized = 1;
-                last;
-            }
-        }
-        close $file_fh;
-    }
-
-    if ( $is_customized == 1 ) {
-        print_warn('Exim: ');
-        print_warning("$exim_conf_local contains customizations");
-    }
-}
-
 sub check_for_non_default_umask {
     my $umask = run('echo `umask`');
 
@@ -2376,22 +1963,6 @@ sub check_for_multiple_imagemagick_installs {
         if ( -x '/usr/local/bin/convert' and !-l '/usr/local/bin/convert' ) {
             print_warn('ImageMagick: ');
             print_warning('multiple "convert" binaries found [/usr/bin/convert] [/usr/local/bin/convert]');
-        }
-    }
-}
-
-sub check_for_kernel_headers_rpm {
-    return if ( $os eq 'freebsd' );
-
-    if ( !-f '/usr/include/linux/limits.h' ) {
-        print_warn('Missing file: /usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
-    }
-    else {
-        my $rpm_check = run( 'rpm', '-q', 'kernel-headers' );
-
-        if ( $rpm_check =~ /not installed/ ) {
-            print_warn('kernel-headers RPM: ');
-            print_warning('not found. This can cause problems with EA');
         }
     }
 }
@@ -2463,154 +2034,6 @@ sub check_for_custom_locales {
 
     print_warn('locales: ');
     print_warning('[FB 62119] Users with custom locales detected. Seeing "500 Internal Server Error" in cPanel? May be related, check the FB');
-}
-
-sub check_eximstats_size {
-    return if !$mysql_datadir;
-
-    my $eximstats_dir = $mysql_datadir . 'eximstats/';
-    my @dir_contents;
-    my $size;
-
-    if ( -d $eximstats_dir ) {
-        opendir( my $dir_fh, $eximstats_dir );
-        @dir_contents = grep { /(defers|failures|sends|smtp)\.(frm|MYI|MYD)$/ } readdir $dir_fh;
-        closedir $dir_fh;
-    }
-
-    for my $file (@dir_contents) {
-        $file = $eximstats_dir . $file;
-        $size += ( stat($file) )[7];
-    }
-
-    if ( $size && $size > 5_000_000_000 ) {
-        $size = sprintf( "%0.2fGB", $size / 1073741824 );
-        print_warn('eximstats db: ');
-        print_warning($size);
-    }
-}
-
-sub check_eximstats_corrupt {
-    return if !-f $mysql_error_log;
-
-    my $size           = ( stat($mysql_error_log) )[7];
-    my $bytes_to_check = 20_971_520;                      # 20M limit of logs to check
-    my $seek_position  = 0;
-    my $log_data;
-    my @logs;
-    my $eximstats_is_crashed;
-
-    if ( $size > $bytes_to_check ) {
-        $seek_position = ( $size - $bytes_to_check );
-    }
-
-    if ( open my $file_fh, '<', $mysql_error_log ) {
-        seek $file_fh, $seek_position, 0;
-        read $file_fh, $log_data, $bytes_to_check;
-        close $file_fh;
-    }
-
-    @logs = split /\n/, $log_data;
-    undef $log_data;
-    @logs = reverse @logs;
-
-    for my $log_line (@logs) {
-
-        # /usr/sbin/mysqld: Table './eximstats/smtp' is marked as crashed and should be repaired
-        if ( $log_line =~ m{ /eximstats/ (.*) marked \s as \s crashed }xms ) {
-            $eximstats_is_crashed = $log_line;
-            last;
-        }
-    }
-
-    if ($eximstats_is_crashed) {
-        print_warn('eximstats: ');
-        print_warning("latest crash: $eximstats_is_crashed");
-    }
-}
-
-sub check_for_clock_skew {
-    my $localtime = time();
-    my $rdate_time;
-    my $clock_skew;
-    my $has_dovecot = 0;
-
-    my %months = qw(
-      Jan 0   Feb 1   Mar 2   Apr 3   May 4   Jun 5
-      Jul 6   Aug 7   Sep 8   Oct 9   Nov 10  Dec 11
-    );
-
-    if ( $os eq 'linux' ) {
-        $rdate_time = run( 'rdate', '-p', '-t', '1', 'rdate.cpanel.net' );
-
-        # fall back to UDP if necessary
-        if ( !$rdate_time ) {
-            $rdate_time = run( 'rdate', '-p', '-t', '1', '-u', 'rdate.cpanel.net' );
-        }
-    }
-    elsif ( $os eq 'freebsd' ) {
-        local $SIG{'ALRM'} = sub { return (); };
-        alarm 1;
-        $rdate_time = run( 'rdate', '-p', 'rdate.cpanel.net' );
-        alarm 0;
-    }
-
-    return if !$rdate_time;
-
-    $rdate_time =~ s/\A rdate: \s \[rdate\.cpanel\.net\] \s+//gxms;
-
-    if ( $rdate_time =~ m{ \A \S+ \s (\S+) \s (\d+) \s (\d+):(\d+):(\d+) \s (\d+) }xms ) {
-        my ( $mon, $mday, $hour, $min, $sec, $year ) = ( $1, $2, $3, $4, $5, $6 );
-        $mon = $months{$mon};
-        $rdate_time = timelocal( $sec, $min, $hour, $mday, $mon, $year );
-    }
-
-    return if ( $rdate_time !~ /\d{10}/ );
-
-    $clock_skew = ( $rdate_time - $localtime );
-    $clock_skew = abs $clock_skew;                # convert negative numbers to positive
-
-    return if ( $clock_skew < 60 );
-
-    if ( $clock_skew >= 31536000 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 31536000 );
-        $clock_skew .= ' years';
-    }
-    elsif ( $clock_skew >= 86400 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 86400 );
-        $clock_skew .= ' days';
-    }
-    elsif ( $clock_skew >= 3600 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 3600 );
-        $clock_skew .= ' hours';
-    }
-    elsif ( $clock_skew >= 60 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 60 );
-        $clock_skew .= ' minutes';
-    }
-
-    for my $process (@process_list) {
-        if ( $process =~ m{ \A root (.*) dovecot }xms ) {
-            $has_dovecot = 1;
-            last;
-        }
-    }
-
-    if ( $has_dovecot == 0 and $clock_skew !~ /minutes/ ) {
-        print_warn('Clock skew: ');
-        print_warning("servers time may be off by $clock_skew");
-    }
-    elsif ( $has_dovecot == 1 ) {
-        print_warn('Clock skew: ');
-        print_warning("server time may be off by ${clock_skew}. This can cause Dovecot to die during upcp");
-    }
-}
-
-sub check_for_zlib_h {
-    if ( -f '/usr/local/include/zlib.h' ) {
-        print_warn('/usr/local/include/zlib.h: ');
-        print_warning('This file can cause EA to fail with libxml issues. You may need to mv it, run EA again');
-    }
 }
 
 sub check_for_better_linux {
@@ -2708,32 +2131,6 @@ sub check_if_httpdconf_ipaddrs_exist {
         for my $unbound_ipaddr (@unbound_ipaddrs) {
             print_magenta("\t \\_ $unbound_ipaddr");
         }
-    }
-}
-
-sub check_for_custom_postgres_repo {
-    return if ( $os eq 'freebsd' );
-
-    my $yum_repos_dir = '/etc/yum.repos.d/';
-    my @dir_contents;
-    my $has_postgres_repo = 0;
-
-    return if !-d $yum_repos_dir;
-
-    opendir( my $dir_fh, $yum_repos_dir );
-    @dir_contents = grep { !/^\.(\.?)$/ } readdir $dir_fh;
-    closedir $dir_fh;
-
-    for my $repos (@dir_contents) {
-        if ( $repos =~ m{ \A pgdg-(\d+)-centos\.repo }xms ) {
-            $has_postgres_repo = 1;
-            last;
-        }
-    }
-
-    if ( $has_postgres_repo == 1 ) {
-        print_warn('PostgreSQL: ');
-        print_warning('custom Postgres repo (pgdg-*) found in /etc/yum.repos.d/ . See tickets 3690445, 3568781');
     }
 }
 
@@ -2871,28 +2268,6 @@ sub check_for_hordepass_newline {
     if ( $has_newline == 1 ) {
         print_warn("$hordepass: ");
         print_warning('contains a newline. This can cause leftover cptmpdb_* MySQL dbs. See FB 63364');
-    }
-}
-
-sub check_for_noxsave_in_grub_conf {
-    my $grub_conf   = '/boot/grub/grub.conf';
-    my $has_noxsave = 0;
-
-    return if !$grub_conf;
-
-    if ( open my $grub_fh, '<', $grub_conf ) {
-        while (<$grub_fh>) {
-            if (/noxsave/) {
-                $has_noxsave = 1;
-                last;
-            }
-        }
-        close $grub_fh;
-    }
-
-    if ( $has_noxsave == 1 ) {
-        print_warn('noxsave: ');
-        print_warning("found in ${grub_conf}. kernel panics? segfaults? see ticket 3689211");
     }
 }
 
@@ -3035,51 +2410,12 @@ sub check_for_ebury_malware {
     }
 }
 
-sub check_for_networkmanager {
-    my $networkmanager_running;
-
-    for my $line (@process_list) {
-        if ( $line =~ m{ \A root (?:.*) NetworkManager }xms ) {
-            $networkmanager_running = 1;
-            last;
-        }
-    }
-
-    if ( $networkmanager_running && $networkmanager_running == 1 ) {
-        print_warn('NetworkManager: ');
-        print_warning('found in the process list');
-    }
-}
-
-sub check_for_dhclient {
-    my $dhclient_running;
-
-    for my $line (@process_list) {
-        if ( $line =~ m{ \A root (?:.*) dhclient }xms ) {
-            $dhclient_running = 1; 
-            last;
-        }    
-    }    
-
-    if ( $dhclient_running && $dhclient_running == 1 ) {
-        print_warn('dhclient: ');
-        print_warning('found in the process list');
-    }    
-}
-
 sub check_for_var_cpanel_roundcube_install {
     my $install = '/var/cpanel/roundcube/install';
 
     if ( -f $install and -x $install ) {
         print_warn('RoundCube: ');
         print_warning("$install exists. /u/l/c/b/update-roundcube won't fully run (by design - see the docs)");
-    }
-}
-
-sub check_for_missing_etc_localtime {
-    if ( !-f '/etc/localtime' ) {
-        print_warn('/etc/locatime: ');
-        print_warning('Missing! upcp may fail with "Error testing if the RPMs will install" (see ticket 3811269)');
     }
 }
 
@@ -3131,61 +2467,6 @@ sub check_for_cdorked {
         print_warn('!! [ Linux/Cdorked ] !! ');
         print_warning('L1/L2 escalate this ticket to L3. L3 use 00 - Cdorked premade');
     }    
-}
-
-sub check_for_disabled_services {
-    my ( @disabled_services );
-    my $disabled;
-
-    my %touchfiles = (
-        '/etc/ftpddisable'          => 'ftpd',
-        '/etc/ftpserverdisable'     => 'ftpd',
-        '/etc/sshddisable'          => 'sshd',
-        '/etc/eximdisable'          => 'exim',
-        '/etc/httpddisable'         => 'httpd',
-        '/etc/imapdisable'          => 'imapd',
-        '/etc/imapddisable'         => 'imapd',
-        '/etc/nameddisable'         => 'named',
-        '/etc/binddisable'          => 'named',
-        '/etc/dnsdisable'           => 'named',
-        '/etc/nsddisable'           => 'nsd',
-        '/etc/mydnsdisable'         => 'mydns',
-        '/etc/mysqldisable'         => 'mysql',
-        '/etc/postgresdisable'      => 'postgresql',
-        '/etc/postgresqldisable'    => 'postgresql',
-        '/etc/postmasterdisable'    => 'postgresql',
-        '/etc/clamddisable'         => 'clamd',
-        '/etc/antirelayddisable'    => 'antirelayd',
-        '/etc/tailwatchddisable'    => 'tailwatchd',
-        '/var/cpanel/version/securetmp_disabled'    => 'securetmp',
-        '/etc/queueprocddisable'    => 'queueprocd',
-        '/etc/spamdisable'          => 'spamd',
-        '/etc/mailmandisable'       => 'mailman',
-        '/etc/ipaliasesdisable'     => 'ipaliases',
-        '/etc/cpsrvdddisable'       => 'cpsrvd',
-        '/etc/cpdavddisable'        => 'cpdavd',
-        '/etc/cpanellogddisable'    => 'cpanellogd',
-        '/etc/rsyslogdisable'       => 'rsyslogd',
-        '/etc/syslogdisable'        => 'syslogd',
-        '/etc/disablehackcheck'     => 'hackcheck',
-    );
-
-    while ( my ( $touchfile, $service ) = each ( %touchfiles ) ) {
-        if ( -e $touchfile ) {
-            if ( ! grep { /^${service}$/ } @disabled_services ) {
-                push @disabled_services, $touchfiles{$touchfile};
-            }
-        }
-    }
-
-    return if !@disabled_services;
-
-    for my $service ( @disabled_services ) {
-        $disabled .= "[$service] ";
-    }
-
-    print_warn('Disabled services: ');
-    print_warning($disabled);
 }
 
 sub check_for_broken_list_util {
@@ -3256,13 +2537,6 @@ sub check_for_usr_local_include_jpeglib_h {
     if ( -f $jpeglib ) {
         print_warn( "$jpeglib: " );
         print_warning( 'Seeing "Wrong JPEG library version"? This file may be the cause. See ticket 4159697' );
-    }
-}
-
-sub check_for_uppercase_chars_in_hostname {
-    if ( $hostname =~ /[A-Z]/ ) {
-        print_warn('Hostname: ');
-        print_warning('contains UPPERCASE characters. Seeing incorrect info at cPanel >> Configure Email Client? See ticket 4231465');
     }
 }
 
@@ -3527,17 +2801,6 @@ sub build_rpm_list {
       map { $_->{'name'} . '-' . $_->{'version'} . '-' . $_->{'release'} } @extended_rpm_list;
 
     return @rpm_list;
-}
-
-sub check_for_immutable_files {
-    return if !-x '/usr/bin/lsattr';
-
-    my @path_dirs = split( m{:}, $ENV{'PATH'} );
-
-    foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, run( 'lsattr', @path_dirs ) ) ) ) {
-        print_warn('Immutable file: ');
-        print_warning("$file");
-    }
 }
 
 sub check_for_missing_perl_modules {

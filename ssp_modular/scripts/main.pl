@@ -7,6 +7,7 @@ use warnings;
 use diagnostics;
 use lib '../lib';
 use Term::ANSIColor qw( :constants );
+use Sys::Hostname;
 use Cmd;
 use PrintText;
 use Tips;
@@ -15,8 +16,7 @@ use ProcessList;
 use Info::Cpanel;
 use Info::HostName;
 
-use Warn::SELinux;
-use Warn::Runlevel;
+use Warn::OS;
 use Warn::Cron;
 use Warn::Upcp;
 use Warn::Loopback;
@@ -27,6 +27,10 @@ use Warn::Tomcat;
 use Warn::Permissions;
 use Warn::DiskUsage;
 use Warn::PureFTPd;
+use Warn::Hooks;
+use Warn::PostgreSQL;
+use Warn::Exim;
+use Warn::DisabledServices;
 
 use ThirdParty::ASSP;
 use ThirdParty::Varnish;
@@ -67,6 +71,8 @@ my $version = '5.0';
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
 
+my $hostname = hostname();
+
 my %cpconf;
 {
     open my $cpconf_fh, '<', '/var/cpanel/cpanel.config';
@@ -95,6 +101,8 @@ if ( -x '/usr/local/apache/bin/httpd' ) {
 }
 
 my @local_ipaddrs_list    = get_local_ipaddrs();
+my $mysql_datadir         = get_mysql_datadir();
+my $mysql_error_log       = get_mysql_error_log();
 
 
 sub get_local_ipaddrs {
@@ -111,6 +119,52 @@ sub get_local_ipaddrs {
     return @local_ipaddrs_list;
 }
 
+sub get_mysql_datadir {
+    my $my_cnf  = '/etc/my.cnf';
+    my $datadir = '/var/lib/mysql/';
+
+    if ( open my $my_cnf_fh, '<', $my_cnf ) {
+        while (<$my_cnf_fh>) {
+            chomp( my $line = $_ );
+            if ( $line =~ m{ \A datadir \s* = \s* (?:["']?) ([^"']+) }xms ) {
+                $datadir = $1;
+                $datadir =~ s/[\s\t]+$//g;
+                last;
+            }
+        }
+        close $my_cnf_fh;
+    }
+
+    if ( $datadir !~ m{ / \z }xms ) {
+        $datadir .= '/';
+    }
+
+    return $datadir;
+}
+
+sub get_mysql_error_log {
+    my $mysql_error_log;
+    if ( open my $file_fh, '<', '/etc/my.cnf' ) {
+        while (<$file_fh>) {
+            if (m{ \A log-error \s? = \s? (.*) \z }xms) {
+                $mysql_error_log = $1;
+                $mysql_error_log =~ s/\"//g;
+                $mysql_error_log =~ s/\'//g;
+                chomp $mysql_error_log;
+                last;
+            }
+        }
+        close $file_fh;
+    }
+
+    if ($mysql_error_log) {
+        return $mysql_error_log;
+    }
+    else {
+        return '/var/lib/mysql/' . $hostname . '.err';
+    }
+}
+
 
 # SSP output can skew ticket system search results
 print "\n\n";
@@ -125,7 +179,7 @@ print_tip();
 print BOLD YELLOW ON_BLACK "\tSSP $version\n\n";
 
 ## [ INFO ]
-print_hostname();
+print_hostname( $hostname );
 
 ## [ WARN ]
 check_selinux_status();
@@ -187,7 +241,37 @@ check_for_skiphttpauth_disabled();
 check_for_use_compiled_dnsadmin();
 check_for_jailshell_additional_mounts_trailing_slash();
 check_for_invalid_HOMEDIR();
+check_pkgacct_override();
 check_pure_ftpd_conf_for_upload_script_and_dead( \%cpconf, \%pureftpdconf );
+check_for_custom_event_handler();
+check_for_hooks_in_scripts_directory();
+check_for_usr_local_cpanel_hooks();
+check_for_hooks_from_var_cpanel_hooks_yaml();
+check_for_empty_postgres_config();
+check_for_custom_postgres_repo();
+check_for_custom_exim_conf_local();
+check_eximstats_size( $mysql_datadir );
+check_eximstats_corrupt( $mysql_error_log );
+check_for_gdm();
+check_limitsconf();
+check_for_redhat_firewall();
+check_for_home_noexec();
+check_for_oracle_linux();
+check_for_proc_mdstat_recovery();
+check_for_system_mem_below_512M();
+check_for_usr_local_lib_libz_so();
+check_etc_hosts_sanity( $hostname );
+check_for_kernel_headers_rpm();
+check_for_low_ulimit_for_root();
+check_for_clock_skew();
+check_for_zlib_h();
+check_for_noxsave_in_grub_conf();
+check_for_networkmanager();
+check_for_dhclient();
+check_for_missing_etc_localtime();
+check_for_immutable_files();
+check_for_uppercase_chars_in_hostname( $hostname );
+check_for_disabled_services();
 
 ## [ 3RDP ]
 check_for_assp();

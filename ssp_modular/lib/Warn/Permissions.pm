@@ -33,6 +33,7 @@ sub check_for_non_default_permissions {
         '/usr'                         => '755',
         '/usr/bin'                     => '755',
         '/usr/sbin'                    => '755',
+        '/usr/sbin/exim'               => '4755',
         '/usr/local/apache'            => '755',
         '/usr/local/apache/bin/httpd'  => '755',
         '/usr/local/bin'               => '755',

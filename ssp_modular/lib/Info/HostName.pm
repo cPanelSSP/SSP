@@ -3,7 +3,6 @@ package Info::HostName;
 use strict;
 use warnings;
 use diagnostics;
-use Sys::Hostname;
 use PrintText;
 
 use Exporter;
@@ -11,7 +10,7 @@ our @ISA = qw( Exporter );
 our @EXPORT = qw( print_hostname );
 
 sub print_hostname {
-    my $hostname = hostname();
+    my $hostname = shift;
 
     print_info( 'Hostname: ' );
     if ( $hostname !~ /([\w-]+)\.([\w-]+)\.(\w+)/ ) {

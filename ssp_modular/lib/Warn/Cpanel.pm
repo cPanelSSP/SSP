@@ -32,6 +32,7 @@ our @EXPORT = qw(
     check_for_use_compiled_dnsadmin
     check_for_jailshell_additional_mounts_trailing_slash
     check_for_invalid_HOMEDIR
+    check_pkgacct_override
 );
 
 sub check_cpanelconfig_filetype {
@@ -471,6 +472,13 @@ sub check_for_invalid_HOMEDIR {
             print_warn("$wwwacctconf: ");
             print_warning("the directory that is specified as the HOMEDIR does not exist! ($homedir)");
         }
+    }
+}
+
+sub check_pkgacct_override {
+    if ( -d '/var/cpanel/lib/Whostmgr' ) {
+        print_warn('pkgacct override: ');
+        print_warning(' /var/cpanel/lib/Whostmgr exists, override may exist');
     }
 }
 
