@@ -1,0 +1,10 @@
+modular
+
+removed:
+fbsd support
+check if multiple crond processes are running
+check if upcp.static was valid
+Sandy Bridge check
+
+improved:
+cpanelsync.exclude logic
