@@ -485,4 +485,15 @@ sub check_bash_history_for_certain_commands {
     }
 }
 
+sub check_for_direct_nfs_backup {
+    my $backupdir  = `grep \"BACKUPDIR:\" /var/cpanel/backups/config | awk '{print \$2}'`;
+    chomp($backupdir);
+    my $check = "mount | grep '$backupdir type nfs' | wc -l";
+    $check = `$check`;
+    if ($check > 0) {
+        print_warn("Backup:");
+        print_warning("Backup directory ($backupdir) is an NFS mount");
+    }
+}
+    
 1;
