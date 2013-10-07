@@ -201,6 +201,7 @@ Warn::Yum::check_for_wget_exclude();
 Warn::Yum::check_for_odd_yumconf();
 Warn::ImageMagick::check_for_multiple_imagemagick_installs();
 Warn::RPM::check_for_rpm_overrides();
+Warn::OS::check_for_direct_nfs_backup();
 
 ## [3RDP]
 ThirdParty::ASSP::assp();
