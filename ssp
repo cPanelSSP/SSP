@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.94';
+my $version = '4.95';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -232,6 +232,7 @@ check_for_nocloudlinux_touchfile();
 check_for_phphandler_and_opcode_caching_incompatibility();
 check_for_invalid_HOMEDIR();
 check_for_unsupported_options_in_phpini(); # case 75397
+check_for_suphp_but_no_fileprotect();
 
 # [3RDP]
 check_for_assp();
@@ -495,6 +496,7 @@ sub print_version {
 sub print_tip {
     my @tips = (
         '[FB 75793] (By design) Proxy subdomains are not created for addon domains',
+        '[FB 73369] Can\'t log into SquirrelMail, but Horde and Roundcube work? Check if webmail pass contains "odd" characters',
         '[FB 72801] (By design) File Manager creates new files with 0600 perms, even when saving an existing file as a new one',
         '[FB 72733] (By design) File Manager\'s "Compress" feature has a hard coded timeout due to using cPanel\'s form upload logic',
         '[FB 65253] cPHulk may report root logins to Pure-FTPd despite no evidence being found',
@@ -507,11 +509,13 @@ sub print_tip {
         '[FB 61516] cPanel\'s Java SSH term app may say shell access is disabled, even when it is enabled',
         '[FB 60471] PureFTPd allows FTP users to follow symlinks',
         '[FB 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and "PCRE is not compiled with UTF-8 support"',
+        '[FB 57237] (By design) Per ISO 3166-1, the country code for the UK is GB (not UK). Look for this in WHM >> Generate an SSL Certificate [...]',
         '[FB 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale',
         '[FB 46853] Customer complaining that they can\'t log into cPanel as root? Update FB 46853',
         '[FB 44884] upcp resets Mailman lists\' hostnames. pre/postupcp hooks workaround in ticket 3541643',
         '[FB 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net',
         '[FB 42027] "Recently Uploaded Cgi Script Mail" scans and sends email alerts about downloaded files too',
+        'The cpanel-postgresql* packages are for phpPgAdmin. The postgresql-* packages are for PostgreSQL',
         'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)',
         'For a list of obscure issues, see the RareIssues wiki article',
         '11.35+: Use /scripts/check_cpanel_rpms to fix problems in /usr/local/cpanel/3rdparty/  - not checkperlmodules',
@@ -1145,7 +1149,7 @@ sub print_php_configuration {
 
     if ( $phpversion == 5 ) {
         if ( -x '/usr/bin/php' ) {
-            my @php_v = split /\n/, cached_run( '/usr/bin/php', '-v' );
+            my @php_v = split /\n/, cached_run( '/usr/bin/php', '-n', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php5version = $1;
             }
@@ -1198,7 +1202,7 @@ sub print_php_configuration {
         }
 
         if ( $php5handler ne 'none' ) {
-            my @php_v = split /\n/, cached_run( '/usr/bin/php', '-v' );
+            my @php_v = split /\n/, cached_run( '/usr/bin/php', '-n', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php5version = $1;
             }
@@ -5095,6 +5099,15 @@ sub check_for_unsupported_options_in_phpini { # case 75397
         $unsupported_options =~ s/\s$//g;
         print_warn("$phpini: ");
         print_warning("PHP $php5version does not support $unsupported_options, but found enabled in php.ini. See FB 75397");
+    }
+}
+
+sub check_for_suphp_but_no_fileprotect {
+    if ( $php5handler and $php5handler eq 'suphp' ) {
+        if ( !-e '/var/cpanel/fileprotect' ) {
+            print_warn('suPHP: ');
+            print_warning("enabled, but /var/cpanel/fileprotect not found. New users' public_htmls will be user:user");
+        }
     }
 }
 
