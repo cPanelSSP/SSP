@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.95';
+my $version = '4.96';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -3500,8 +3500,13 @@ sub check_for_hooks_from_var_cpanel_hooks_yaml {
     }
 
     for my $hook (@hooks_tmp) {
-        if ( -e $hook and !-z $hook ) {
-            push @hooks, $hook;
+        if ( $hook =~ m/^\// ) {
+            if ( -e $hook and !-z $hook ) {
+                push @hooks, $hook;
+            }
+        }
+        else {
+            push @hooks, $hook; # we don't check for the existence of all hooks since they could be anywhere in perl's @INC, I think?
         }
     }
 
