@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.96';
+my $version = '4.97';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -206,7 +206,6 @@ check_for_dhclient();
 check_for_var_cpanel_roundcube_install();
 check_for_missing_etc_localtime();
 check_for_immutable_files();
-check_for_missing_perl_modules();
 check_for_rpmsave_conf();
 check_for_cloudlinux_mysql_gov();
 check_cpanel_config_for_low_maxmem();
@@ -5396,16 +5395,6 @@ sub check_for_immutable_files {
     foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, run( 'lsattr', @path_dirs ) ) ) ) {
         print_warn('Immutable file: ');
         print_warning("$file");
-    }
-}
-
-sub check_for_missing_perl_modules {
-    foreach my $module ( 'Digest::SHA1', 'Crypt::PasswdMD5' ) {
-        my $output = run_trap_stderr( '/usr/bin/perl', '-M' . $module, '-e', "print q{ok};" );
-        if ( $output ne 'ok' ) {
-            print_warn("Missing perl module (see FB 64015): ");
-            print_warning("$module: $output");
-        }
     }
 }
 
