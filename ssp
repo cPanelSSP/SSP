@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.97';
+my $version = '4.98';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -3755,7 +3755,9 @@ sub check_for_kernel_headers_rpm {
         print_warn('Missing file: /usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
     }
     else {
-        my $rpm_check = run( 'rpm', '-q', 'kernel-headers' );
+        my $rpm_check = run_trap_stderr( 'rpm', '-q', 'kernel-headers' );
+
+        return if ( $rpm_check =~ /error: / );
 
         if ( $rpm_check =~ /not installed/ ) {
             print_warn('kernel-headers RPM: ');
