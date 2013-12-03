@@ -5129,7 +5129,7 @@ sub check_for_assp_hates_appconfig_cron {
 
     open my $cron_fh, '<', '/var/spool/cron/root';
     while (<$cron_fh> ) {
-        if ( m{ /usr/local/cpanel/3rdparty/bin/php-cgi /usr/local/assp/deluxe/ex_localdomains.php }xms ) {
+        if ( m{ /usr/local/cpanel/3rdparty/bin/php-cgi \s /usr/local/assp/deluxe/ex_localdomains.php }xms ) {
             $has_bad_assp_cron = 1;
             last;
         }
