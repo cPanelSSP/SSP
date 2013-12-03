@@ -1,5 +1,0 @@
-remove deprecated stuff like FBSD
-
-use correct capitalization of Roundcube
-
-check for incorrect "return if" usage (e.g., "my $dir = '/'; return if !$dir")

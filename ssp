@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.96';
+my $version = '4.99';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -206,7 +206,6 @@ check_for_dhclient();
 check_for_var_cpanel_roundcube_install();
 check_for_missing_etc_localtime();
 check_for_immutable_files();
-check_for_missing_perl_modules();
 check_for_rpmsave_conf();
 check_for_cloudlinux_mysql_gov();
 check_cpanel_config_for_low_maxmem();
@@ -216,7 +215,6 @@ check_for_var_cpanel_conf_apache_local();
 check_for_PERL5LIB_env_var();
 check_for_cdorked();
 check_for_disabled_services();
-check_for_broken_list_util();
 check_for_cpbackup_exclude_everything();
 check_for_usr_local_include_jpeglib_h();
 check_for_bw_module_and_more_than_1024_vhosts();
@@ -233,6 +231,12 @@ check_for_phphandler_and_opcode_caching_incompatibility();
 check_for_invalid_HOMEDIR();
 check_for_unsupported_options_in_phpini(); # case 75397
 check_for_suphp_but_no_fileprotect();
+check_for_assp_hates_appconfig_cron();
+check_for_missing_var_cpanel_dynamicui_ftp();
+check_if_backup_dir_is_nfs();
+check_if_hostname_missing_from_localdomains();
+check_for_eximstats_newline();
+check_for_nfs();
 
 # [3RDP]
 check_for_assp();
@@ -247,6 +251,7 @@ check_for_les();
 check_for_1h();
 check_for_webmin();
 check_for_symantec();
+check_for_newrelic();
 
 check_for_libkeyutils_malware();
 
@@ -495,6 +500,7 @@ sub print_version {
 
 sub print_tip {
     my @tips = (
+        '[FB 78617] (By design) sysup always installs bind',
         '[FB 75793] (By design) Proxy subdomains are not created for addon domains',
         '[FB 73369] Can\'t log into SquirrelMail, but Horde and Roundcube work? Check if webmail pass contains "odd" characters',
         '[FB 72801] (By design) File Manager creates new files with 0600 perms, even when saving an existing file as a new one',
@@ -540,6 +546,9 @@ sub print_tip {
         'cPanel >> Error Log only searches "recent" logs in Apache\'s error_log . Showing as blank? Maybe there are no recent errors',
         'Horde showing "server configuration did not allow file to be uploaded"? Check disk/inode usage on /tmp',
         'IMAP/webmail showing no email? The cPanel account may have been over its quota. Try renaming dovecot-uidlist, send account an email (see ticket 4314723)',
+        'ClamAV not scanning emails? Check if /var/clamd is missing. This will be reflected in Exim\'s logs as well',
+        'Use custom_vhost_template_ap(1|2) in userdata files to make changes for an individual vhost',
+        'File Manager upload size limits can be adjusted at WHM >> Tweak Settings >> Max HTTP submission size',
     );
 
     my $num  = int rand scalar @tips;
@@ -884,7 +893,7 @@ sub check_for_cpanel_update {
     for my $line (@tiers) {
         if ( $line =~ m{ \A (.*) : (\d+\.\d+\.\d+\.\d+) \z }xms ) {
             ( $tier, $available_tier_version ) = ( $1, $2 );
-            if ( $tier eq $local_tier_name ) {
+            if ( $tier =~ /^${local_tier_name}$/i ) {
                 $match = 1;
                 last;
             }
@@ -1094,7 +1103,7 @@ sub print_apache_info {
         }
     }
     else {
-        my $warning = 'Apache is not up (failed: http://localhost/whm-server-status). ';
+        my $warning = 'Is Apache up/slow to respond? (failed: http://localhost/whm-server-status). ';
 
         if ( $os eq 'linux' ) {
             my @lsof_80 = split /\n/, run( 'lsof', '-n', '-i', 'tcp:80' );
@@ -1929,6 +1938,9 @@ sub check_for_non_default_permissions {
         '/var/cpanel/features'         => '755',
         '/var/cpanel/locale'           => '755',
         '/var/cpanel/resellers'        => '644',
+        '/var/lib'                     => '755',
+        '/var/lib/mysql'               => '751',
+        '/var/lib/mysql/mysql.sock'    => '777',
         '/var/tmp'                     => '1777',
         '/usr/local/cpanel/php/cpanel.php'  => '644',
         '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => '644',
@@ -3756,7 +3768,9 @@ sub check_for_kernel_headers_rpm {
         print_warn('Missing file: /usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
     }
     else {
-        my $rpm_check = run( 'rpm', '-q', 'kernel-headers' );
+        my $rpm_check = run_trap_stderr( 'rpm', '-q', 'kernel-headers' );
+
+        return if ( $rpm_check =~ /error: / );
 
         if ( $rpm_check =~ /not installed/ ) {
             print_warn('kernel-headers RPM: ');
@@ -4660,14 +4674,6 @@ sub check_for_disabled_services {
     print_warning($disabled);
 }
 
-sub check_for_broken_list_util {
-    system('/usr/bin/perl', '-MList::Util', '-e', '1');
-    if ($?) {
-        print_warn('List::Util: ');
-        print_warning('seems broken. To fix, run this: /scripts/autorepair scalarutil');
-    }
-}
-
 sub check_for_cloudlinux_not_licensed_through_cpanel {
     return if ( $is_cloudlinux == 0 );
 
@@ -5116,6 +5122,162 @@ sub check_for_suphp_but_no_fileprotect {
     }
 }
 
+sub check_for_assp_hates_appconfig_cron {
+    return if !-f '/var/spool/cron/root';
+
+    my $has_bad_assp_cron = 0;
+
+    open my $cron_fh, '<', '/var/spool/cron/root';
+    while (<$cron_fh> ) {
+        if ( m{ /usr/local/cpanel/3rdparty/bin/php-cgi /usr/local/assp/deluxe/ex_localdomains.php }xms ) {
+            $has_bad_assp_cron = 1;
+            last;
+        }
+    }
+    close $cron_fh;
+
+    if ( $has_bad_assp_cron == 1 ) {
+        print_warn('ASSP: ');
+        print_warning('this software uses a cron job which breaks cPanel\'s AppConfig. See 4394109, 4392691. Complain to vendor (grscripts.com)');
+    }
+}
+
+sub check_for_missing_var_cpanel_dynamicui_ftp {
+    if ( !-e '/etc/ftpddisable' and !-e '/etc/ftpserverdisable' and !-e '/var/cpanel/dynamicui/ftp' ) {
+        print_warn('FTP: ');
+        print_warning('touchfile /v/c/dynamicui/ftp appears to be missing. FTP options may not appear in cPanel. See FB 83193');
+    }
+}
+
+sub check_if_backup_dir_is_nfs {
+    my $old_backups_dir;
+    my $new_backups_dir;
+    my $cpbackup_conf;
+    my $config;
+    my $old_backups_dir_nfs = 0;
+    my $new_backups_dir_nfs = 0;
+
+    if ( -e '/etc/cpbackup.conf' ) {
+        open my $file_fh, '<', '/etc/cpbackup.conf';
+        while (<$file_fh>) {
+            local $/;
+            $cpbackup_conf = <$file_fh>;
+        }
+        close $file_fh;
+    }
+
+    if ( -e '/var/cpanel/backups/config' ) {
+        open my $file_fh, '<', '/var/cpanel/backups/config';
+        while (<$file_fh>) {
+            local $/;
+            $config = <$file_fh>;
+        }
+        close $file_fh;
+    }
+
+    if ( $cpbackup_conf and $cpbackup_conf =~ /BACKUPENABLE yes/ and $cpbackup_conf =~ /BACKUPDIR (.*)/ ) {
+        $old_backups_dir = $1;
+    }
+
+    if ( $config and $config =~ /BACKUPENABLE: 'yes'/ and $config =~ /BACKUPDIR: (.*)/ ) {
+        $new_backups_dir = $1;
+    }
+
+    my @mount;
+
+    open my $mount_fh, '-|', '/bin/mount' or return;
+    while (<$mount_fh>) {
+        chomp;
+        push @mount, $_; 
+    }
+    close $mount_fh;
+    
+    for my $mount (@mount) {
+        if ($old_backups_dir) {
+            if ( $mount =~ /$old_backups_dir type nfs / ) {
+                $old_backups_dir_nfs = 1;
+            }
+        }
+        if ($new_backups_dir) {
+            if ( $mount =~ /$new_backups_dir type nfs / ) {
+                $new_backups_dir_nfs = 1;
+            }
+        }
+    }
+
+    if ( $old_backups_dir_nfs == 1 ) {
+        print_warn('Backups: ');
+        print_warning("$old_backups_dir is NFS (used by old backup system)");
+    }
+    if ( $new_backups_dir_nfs == 1 ) {
+        print_warn('Backup: ');
+        print_warning("$new_backups_dir is NFS (used by new backup system)");
+    }
+}
+
+sub check_if_hostname_missing_from_localdomains {
+    my $hostname_check = 0;
+
+    open my $localdomains_fh, '<', '/etc/localdomains';
+    while (<$localdomains_fh>) {
+        if ( /^${hostname}$/ ) {
+            $hostname_check = 1;
+            last;
+        }
+    }
+    close $localdomains_fh;
+
+    if ( $hostname_check == 0 ) {
+        print_warn('Hostname: ');
+        print_warning('not found in /etc/localdomains. This can cause "lowest numbered MX record points to local host"');
+    }
+}
+
+sub check_for_eximstats_newline {
+    my $eximstatspass = '/var/cpanel/eximstatspass';
+    my $has_newline   = 0; 
+
+    if ( !-e $eximstatspass ) {
+        print_warn("$eximstatspass: ");
+        print_warning('missing!');
+    }    
+    else {
+        if ( open my $eximstatspass_fh, '<', $eximstatspass ) {
+            while (<$eximstatspass_fh>) {
+                if (/\n/) {
+                    $has_newline = 1; 
+                    last;
+                }    
+            }    
+            close $eximstatspass_fh;
+        }    
+    }    
+
+    if ( $has_newline == 1 ) {
+        print_warn("$eximstatspass: ");
+        print_warning('contains a newline. Breaks Mail Delivery Reports / eximstats');
+    }    
+    
+}
+
+sub check_for_nfs {
+    my $has_nfs = 0;
+
+    open my $mount_fh, '-|', '/bin/mount' or return;
+    while (<$mount_fh>) {
+        if ( m{ type[ \t]nfs }xms ) {
+            $has_nfs = 1;
+            last;
+        }
+    }
+    close $mount_fh;
+
+    if ( $has_nfs == 1 ) {
+        print_warn('NFS: ');
+        print_warning('filesystem(s) with NFS detected. This can cause cPanel to load slow (see ticket 4380977, FB 79549)');
+    }    
+}
+
 ##############################
 #  END [WARN] CHECKS
 ##############################
@@ -5344,6 +5506,23 @@ sub check_for_haproxy {
     }
 }
 
+sub check_for_newrelic {
+    my $has_newrelic = 0;
+
+    for my $process (@process_list) {
+        if ( $process =~ /newrelic-daemon/ ) {
+            $has_newrelic = 1;
+            last;
+        }
+    }
+
+    if ( $has_newrelic == 1 ) {
+        print_3rdp('newrelic-daemon: ');
+        print_3rdp2('found in process list. Caused server stability issues in 4396009');
+    }
+            
+}
+
 ##############################
 #  END [3RDP] CHECKS
 ##############################
@@ -5392,20 +5571,11 @@ sub check_for_immutable_files {
     return if !-x '/usr/bin/lsattr';
 
     my @path_dirs = split( m{:}, $ENV{'PATH'} );
+    push @path_dirs, '/usr/local/apache/conf/httpd.conf';
 
     foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, run( 'lsattr', @path_dirs ) ) ) ) {
         print_warn('Immutable file: ');
         print_warning("$file");
-    }
-}
-
-sub check_for_missing_perl_modules {
-    foreach my $module ( 'Digest::SHA1', 'Crypt::PasswdMD5' ) {
-        my $output = run_trap_stderr( '/usr/bin/perl', '-M' . $module, '-e', "print q{ok};" );
-        if ( $output ne 'ok' ) {
-            print_warn("Missing perl module (see FB 64015): ");
-            print_warning("$module: $output");
-        }
     }
 }
 
