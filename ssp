@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.1';
+my $version = '4.99.2';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -253,6 +253,7 @@ check_for_1h();
 check_for_webmin();
 check_for_symantec();
 check_for_newrelic();
+check_for_zamfoo();
 
 check_for_libkeyutils_malware();
 
@@ -5574,6 +5575,26 @@ sub check_for_newrelic {
         print_3rdp2('found in process list. Caused server stability issues in 4396009');
     }
             
+}
+
+sub check_for_zamfoo {
+    my $has_zamfoo = 0;
+
+    if ( -f '/scripts/prekillacct' ) {
+        open my $file_fh, '<', '/scripts/prekillacct' or return;
+        while (<$file_fh>) {
+            if ( /zamfoo/i ) {
+                $has_zamfoo = 1;
+                last;
+            }
+        }
+        close $file_fh;
+    }
+
+    if ($has_zamfoo == 1) {
+        print_3rdp('Zamfoo: ');
+        print_3rdp2('is installed');
+    }
 }
 
 ##############################
