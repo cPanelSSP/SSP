@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.2';
+my $version = '4.99.3';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -238,6 +238,7 @@ check_if_hostname_missing_from_localdomains();
 check_for_eximstats_newline();
 check_for_nfs();
 check_for_processes_killed_by_lfd();
+check_for_broken_userdatadomains();
 
 # [3RDP]
 check_for_assp();
@@ -2158,7 +2159,7 @@ sub check_for_hooks_in_scripts_directory {
       86f9b53c81a8f2fd77a8626ddd3b2c71    /scripts/prekillacct
       46fee9faf2d5f83cbcda17ce0178a465    /scripts/prekillacct
       677da3bdd8fbd16d4b8917a9fe0f6f89    /scripts/prekillacct
-
+      423370856f0be1b80f39d28043d7d4f8    /scripts/postrestoreacct
     );
 
     my @hooks;
@@ -4440,6 +4441,8 @@ sub check_for_rpm_dist_ver_unknown {
 }
 
 sub check_for_homeloader_php_extension {
+    return if ( $php5handler ne 'dso' );
+
     my $php_ini        = '/usr/local/lib/php.ini';
     my $has_homeloader = 0;
 
@@ -5267,7 +5270,7 @@ sub check_for_nfs {
 
     open my $mount_fh, '-|', '/bin/mount' or return;
     while (<$mount_fh>) {
-        if ( m{ type[ \t]nfs }xms ) {
+        if ( m{ type[ \t] nfs [ \t] }xms ) {
             $has_nfs = 1;
             last;
         }
@@ -5328,6 +5331,32 @@ sub check_for_processes_killed_by_lfd {
         for my $killed_process (@killed_by_lfd) {
             print_magenta("\t \\_ $killed_process");
         }
+    }
+}
+
+sub check_for_broken_userdatadomains {
+    return if !-f '/etc/userdatadomains';
+
+    my $is_broken = 0;
+
+    open my $userdatadomains_fh, '<', '/etc/userdatadomains' or return;
+    while (<$userdatadomains_fh>) {
+        if (/^:/) {
+            $is_broken = 1;
+            last;
+        }
+    }
+    close $userdatadomains_fh;
+
+    if ($is_broken == 1) {
+        print_warn('/etc/userdatadomains: ');
+        print_warning('contains a line that begins with ":". Check the following for accuracy (see 4416539 for examples):');
+        print_magenta("\t \\_ /etc/userdatadomains");
+        print_magenta("\t \\_ /var/cpanel/users/USER (check the ^DNS= lines)");
+        print_magenta("\t \\_ /var/cpanel/userdata/USER/main (check for things like '')");
+        print_magenta("\t \\_ /var/cpanel/userdata/USER/DOMAIN (check serveralias line)");
+        print_magenta("\t \\_ /var/cpanel/userdata/USER/cache (userdatadomains uses this)");
+        print_magenta("\t \\_ /usr/local/apache/conf/httpd.conf (may need rebuilding after fixing userdata)");
     }
 }
 
