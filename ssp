@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.3';
+my $version = '4.99.4';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -254,7 +254,9 @@ check_for_1h();
 check_for_webmin();
 check_for_symantec();
 check_for_newrelic();
-check_for_zamfoo();
+check_for_zamfoo();         # Master reseller software
+check_for_whmreseller();    # Master reseller software
+check_for_whmphp();         # Master reseller software
 
 check_for_libkeyutils_malware();
 
@@ -5622,7 +5624,21 @@ sub check_for_zamfoo {
 
     if ($has_zamfoo == 1) {
         print_3rdp('Zamfoo: ');
-        print_3rdp2('is installed');
+        print_3rdp2('is installed. Multi-level reseller setups are not supported!');
+    }
+}
+
+sub check_for_whmreseller {
+    if ( -d '/usr/local/cpanel/whostmgr/docroot/cgi/whmreseller' ) {
+        print_3rdp('WHMReseller: ');
+        print_3rdp2('is installed. Multi-level reseller setups are not supported!');
+    }
+}
+
+sub check_for_whmphp {
+    if ( -d '/usr/local/cpanel/whostmgr/docroot/cgi/whmphp' ) {
+        print_3rdp('WHMPHP: ');
+        print_3rdp2('is installed. Multi-level reseller setups are not supported!');
     }
 }
 
