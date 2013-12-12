@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.5';
+my $version = '4.99.6';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5435,7 +5435,7 @@ sub check_for_nginx {
     my $nginx = 0;
 
     for my $line (@process_list) {
-        if ( $line =~ m{ \A nobody (?:.*) nginx: }xms ) {
+        if ( $line =~ m{ \A (root|nobody) (?:.*) nginx(:?) }xms ) {
             $nginx = 1;
             last;
         }
