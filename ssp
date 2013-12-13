@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.6';
+my $version = '4.99.7';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -4661,6 +4661,7 @@ sub check_for_disabled_services {
         '/etc/rsyslogdisable'       => 'rsyslogd',
         '/etc/syslogdisable'        => 'syslogd',
         '/etc/disablehackcheck'     => 'hackcheck',
+        '/etc/rrdtooldisable'       => 'bandwidth stats',
     );
 
     while ( my ( $touchfile, $service ) = each ( %touchfiles ) ) {
