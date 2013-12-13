@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.7';
+my $version = '4.99.8';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2199,11 +2199,18 @@ sub check_for_hooks_in_scripts_directory {
 }
 
 sub check_for_huge_apache_logs {
-    my @logs = qw( access_log error_log suphp_log suexec_log mod_jk.log modsec_audit.log modsec_debug.log );
+    my @logs = qw(  /usr/local/apache/logs/access_log
+                    /usr/local/apache/logs/error_log
+                    /usr/local/apache/logs/mod_jk.log
+                    /usr/local/apache/logs/modsec_audit.log
+                    /usr/local/apache/logs/modsec_debug.log
+                    /usr/local/apache/logs/suexec_log
+                    /usr/local/apache/logs/suphp_log
+                    /var/named/data/named.run
+                );
     for my $log (@logs) {
-        $log = '/usr/local/apache/logs/' . $log;
         if ( -e $log ) {
-            my $size = ( stat($log) )[7];
+            my $size = (stat($log))[7];
             if ( $size > 2_100_000_000 ) {
                 $size = sprintf( "%0.2fGB", $size / 1073741824 );
                 print_warn('M-M-M-MONSTER LOG!: ');
