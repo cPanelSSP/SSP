@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.9';
+my $version = '4.99.10';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -97,6 +97,7 @@ print_if_using_mydns_or_nsd();
 print_if_using_modruid2();
 print_which_php_is_used_internally();
 print_mysql_version();
+print_backups_info();
 
 ## [WARN]
 check_selinux_status();
@@ -211,7 +212,6 @@ check_for_cloudlinux_mysql_gov();
 check_cpanel_config_for_low_maxmem();
 check_pure_ftpd_conf_for_upload_script_and_dead();    #must come after check_cpanel_config_for_low_maxmem
 check_for_extra_uid_0_user();                         # this is NOT a security check, but for FB 62467
-check_for_var_cpanel_conf_apache_local();
 check_for_PERL5LIB_env_var();
 check_for_cdorked();
 check_for_disabled_services();
@@ -554,6 +554,7 @@ sub print_tip {
         'ClamAV not scanning emails? Check if /var/clamd is missing. This will be reflected in Exim\'s logs as well',
         'Use custom_vhost_template_ap(1|2) in userdata files to make changes for an individual vhost',
         'File Manager upload size limits can be adjusted at WHM >> Tweak Settings >> Max HTTP submission size',
+        '/var/cpanel/conf/apache/local can potentially cause issues. See ticket 3915299 for an example',
     );
 
     my $num  = int rand scalar @tips;
@@ -1415,6 +1416,35 @@ sub print_mysql_version {
     }
 }
 
+sub print_backups_info {
+    my ( $old_backups_enabled, $new_backups_enabled ) = ( 0, 0 );
+
+    if ( -f '/etc/cpbackup.conf' ) {
+        open my $file_fh, '<', '/etc/cpbackup.conf' or return;
+        while (<$file_fh>) {
+            if ( /BACKUPENABLE\s+yes/i ) {
+                $old_backups_enabled = 1;
+                last;
+            }
+        }
+        close $file_fh;
+    }
+
+    if ( -f '/var/cpanel/backups/config' ) {
+        open my $file_fh, '<', '/var/cpanel/backups/config' or return;
+        while (<$file_fh> ) {
+            if ( /BACKUPENABLE:\s+'yes'/ ) {
+                $new_backups_enabled = 1;
+                last;
+            }
+        }
+        close $file_fh;
+    }
+
+    print_info('Backups: ');
+    print_normal("[New: $new_backups_enabled] [Legacy: $old_backups_enabled]");
+}
+
 ##############################
 #  END [INFO] CHECKS
 ##############################
@@ -1962,7 +1992,7 @@ sub check_for_non_default_permissions {
             $mode = sprintf "%lo", $mode;
             if ( $mode != $resources_and_perms{$resource} ) {
                 next if ( $resource =~ '^(/(s?)bin|/usr/(s?)bin|/)$' and $mode == 555 );                  # CentOS 6.2+
-                next if ( $resource =~ '^/(var|sbin|usr/local/sbin|usr|usr/sbin)?$' and $mode == 711 );
+                next if ( $resource =~ '^/(var|sbin|usr/local/sbin|usr|usr/sbin)?$|^/var/cpanel' and $mode == 711 );
                 print_warn('Non-default Permissions: ');
                 print_warning("$resource (mode: $mode | default: $resources_and_perms{$resource})");
             }
@@ -2428,6 +2458,8 @@ sub check_for_usr_local_cpanel_hooks {
       677da3bdd8fbd16d4b8917a9fe0f6f89    /usr/local/cpanel/hooks/addondomain/deladdondomain
       677da3bdd8fbd16d4b8917a9fe0f6f89    /usr/local/cpanel/hooks/subdomain/addsubdomain
       677da3bdd8fbd16d4b8917a9fe0f6f89    /usr/local/cpanel/hooks/subdomain/delsubdomain
+      289b2b4c8b5293103def4557d3538060    /usr/local/cpanel/hooks/mysql/adduser
+      289b2b4c8b5293103def4557d3538060    /usr/local/cpanel/hooks/mysql/deluser
     );
 
     if (@usr_local_cpanel_hooks) {
@@ -4590,15 +4622,6 @@ sub check_for_extra_uid_0_user {
     if ( $uid_0_users == 1 ) {
         print_warn('non root/toor uid 0 user(s): ');
         print_warning('EasyApache failing with "can\'t create [...] all_iplist.db"? See FB 62467. Do *not* escalate as security issue.');
-    }
-}
-
-sub check_for_var_cpanel_conf_apache_local {
-    my $local = '/var/cpanel/conf/apache/local';
-
-    if ( -f $local ) {
-        print_warn('Apache: ');
-        print_warning("file $local exists. This can potentially cause various issues. See ticket 3915299 for an example");
     }
 }
 
