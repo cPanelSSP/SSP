@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.12';
+my $version = '4.99.13';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -242,6 +242,7 @@ check_for_broken_userdatadomains();
 check_ssl_db_perms();
 check_for_nat_plus_mod_evasive();
 check_for_stray_index_php();
+check_for_missing_mysql_version_in_cpanelconfig();
 
 # [3RDP]
 check_for_assp();
@@ -5433,6 +5434,26 @@ sub check_for_stray_index_php {
     if ( -e $indexphp ) {
         print_warn("$indexphp: ");
         print_warning("exists! Errors when logging into cPanel? See ticket 4421775");
+    }
+}
+
+sub check_for_missing_mysql_version_in_cpanelconfig {
+    my $cpanel_config = '/var/cpanel/cpanel.config';
+    return if !-e $cpanel_config;
+
+    my $missing_version = 0;
+
+    open my $file_fh, '<', $cpanel_config or return;
+    while (<$file_fh>) {
+        if ( /^mysql-version=([ \t]+)?$/ ) {
+            $missing_version = 1;
+        }
+    }
+    close $file_fh;
+
+    if ( $missing_version == 1 ) {
+        print_warn("$cpanel_config: ");
+        print_warning('contains an empty "mysql-version=" setting');
     }
 }
 
