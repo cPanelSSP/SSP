@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.13';
+my $version = '4.99.14';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -66,6 +66,9 @@ if ( -x '/usr/local/apache/bin/httpd' ) {
     @apache_version_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-v' );
     @apache_modules_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-M' );
 }
+
+# TODO: use +c 15 so the entire process name is displayed if >9 chars
+my @lsof_80 = split /\n/, run( 'lsof', '-n', '-i', 'tcp:80' );
 
 ######################
 ##  END GLOBALS     ##
@@ -243,6 +246,7 @@ check_ssl_db_perms();
 check_for_nat_plus_mod_evasive();
 check_for_stray_index_php();
 check_for_missing_mysql_version_in_cpanelconfig();
+check_for_port_80_not_apache();
 
 # [3RDP]
 check_for_assp();
@@ -261,6 +265,7 @@ check_for_newrelic();
 check_for_zamfoo();         # Master reseller software
 check_for_whmreseller();    # Master reseller software
 check_for_whmphp();         # Master reseller software
+check_for_cpremote();
 
 check_for_libkeyutils_malware();
 
@@ -1115,14 +1120,11 @@ sub print_apache_info {
     else {
         my $warning = 'Is Apache up/slow to respond? (failed: http://localhost/whm-server-status). ';
 
-        if ( $os eq 'linux' ) {
-            my @lsof_80 = split /\n/, run( 'lsof', '-n', '-i', 'tcp:80' );
-            if (@lsof_80) {
-                $warning .= 'Something is listening on port 80.';
-            }
-            else {
-                $warning .= 'Nothing is listening on port 80';
-            }
+        if (@lsof_80) {
+            $warning .= 'Something is listening on port 80.';
+        }
+        else {
+            $warning .= 'Nothing is listening on port 80';
         }
 
         print_info('Apache: ');
@@ -1421,7 +1423,8 @@ sub print_mysql_version {
 }
 
 sub print_backups_info {
-    my ( $old_backups_enabled, $new_backups_enabled ) = ( 0, 0 );
+    my ( $old_backups_enabled, $new_backups_enabled )   = ( 0, 0 );
+    my ( $old_backup_cron, $new_backup_cron )           = ( 0, 0 );
 
     if ( -f '/etc/cpbackup.conf' ) {
         open my $file_fh, '<', '/etc/cpbackup.conf' or return;
@@ -1445,8 +1448,33 @@ sub print_backups_info {
         close $file_fh;
     }
 
+    if ( $old_backups_enabled == 1 or $new_backups_enabled == 1 ) {
+        open my $file_fh, '<', '/var/spool/cron/root' or return;
+        while (<$file_fh>) {
+            if ( m{ /usr/local/cpanel/scripts/cpbackup }xms ) {
+                $old_backup_cron = 1;
+            }
+            if ( m{ /usr/local/cpanel/bin/backup }xms ) {
+                $new_backup_cron = 1;
+            }
+        }
+        close $file_fh;
+    }
+
+    if ( $new_backups_enabled == 1 and $new_backup_cron != 1 ) {
+        $new_backups_enabled .=  " (MISSING CRON!)";
+    }
+    if ( $old_backups_enabled == 1 and $old_backup_cron != 1 ) {
+        $old_backups_enabled .= " (MISSING CRON!)";
+    }
+
     print_info('Backups: ');
-    print_normal("[New: $new_backups_enabled] [Legacy: $old_backups_enabled]");
+    if ( $new_backups_enabled =~ /MISSING CRON/ or $old_backups_enabled =~ /MISSING CRON/ ) {
+        print_warning("[New: $new_backups_enabled] [Legacy: $old_backups_enabled]");
+    }
+    else {
+        print_normal("[New: $new_backups_enabled] [Legacy: $old_backups_enabled]");
+    }
 }
 
 ##############################
@@ -4261,6 +4289,7 @@ sub check_for_rpm_overrides {
     if ( $md5_easy && $md5_easy =~ m{ \A (
                                   d56abe76c47853eceb706f0855e642a7
                                 | 89d631ef7c1d43475c20d7be7b7290ff
+                                | 600ff436e5939656a5645c6139cc0228
                                 ) \s }xms ) {
         $easy_is_default = 1;
     }
@@ -4669,7 +4698,10 @@ sub check_for_disabled_services {
         '/etc/ftpserverdisable'     => 'ftpd',
         '/etc/sshddisable'          => 'sshd',
         '/etc/eximdisable'          => 'exim',
+        '/etc/apachedisable'        => 'httpd',
+        '/etc/httpdisable'          => 'httpd',
         '/etc/httpddisable'         => 'httpd',
+        '/etc/httpdisevil'          => 'httpd',
         '/etc/imapdisable'          => 'imapd',
         '/etc/imapddisable'         => 'imapd',
         '/etc/nameddisable'         => 'named',
@@ -5457,6 +5489,32 @@ sub check_for_missing_mysql_version_in_cpanelconfig {
     }
 }
 
+sub check_for_port_80_not_apache {
+    my $pid;
+    my $filename;
+    my $exe;
+    my $cmdline;
+    my $cwd;
+
+    return if scalar @lsof_80 < 2;
+
+    if ( $lsof_80[1] =~ m{ \A (\S+) \s+ (\d+) (?:.*) \(LISTEN\) }xms ) {
+        ( $filename, $pid ) = ( $1, $2 );
+        my $exe = readlink "/proc/${pid}/exe";
+        my $cwd = readlink "/proc/${pid}/cwd";
+        if ( $exe ne '/usr/local/apache/bin/httpd' ) {
+            open my $file_fh, '<', "/proc/${pid}/cmdline";
+            $cmdline = readline $file_fh;
+            close $file_fh;
+            $cmdline =~ s/\0/ /g;
+            $cmdline =~ s/(\s+)$//g;
+
+            print_warn('Port 80: ');
+            print_warning("something other than Apache is running [file: $filename] [exe: $exe] [cmd: $cmdline] [cwd: $cwd]");
+        }
+    }
+}
+
 ##############################
 #  END [WARN] CHECKS
 ##############################
@@ -5494,18 +5552,17 @@ sub check_for_assp {
 sub check_for_varnish {
     my @port_80_processes;
 
-    if ( $os eq 'linux' ) {
-        my @lsof_80 = split /\n/, run( 'lsof', '-n', '-i', 'tcp:80' );
-        for my $line (@lsof_80) {
-            if ( $line =~ m{ (\S+) \s+ (?:.*) \s TCP (?:.*):http \s \(LISTEN\) }xms ) {
-                push( @port_80_processes, $1 );
-            }
-        }
+    return if !@lsof_80;
 
-        if ( grep { m{ \A varnish }xms } @port_80_processes ) {
-            print_3rdp('Varnish: ');
-            print_3rdp2('varnish is listening on port 80');
+     for my $line (@lsof_80) {
+        if ( $line =~ m{ (\S+) \s+ (?:.*) \s TCP (?:.*):http \s \(LISTEN\) }xms ) {
+            push( @port_80_processes, $1 );
         }
+    }
+
+    if ( grep { m{ \A varnish }xms } @port_80_processes ) {
+        print_3rdp('Varnish: ');
+        print_3rdp2('varnish is listening on port 80');
     }
 }
 
@@ -5673,7 +5730,7 @@ sub check_for_haproxy {
     my $haproxy = 0;
 
     for my $process (@process_list) {
-        if ( $process =~ m{ \A root (?:.*) haproxy }xms ) {
+        if ( $process =~ m{ \A haproxy (?:.*) haproxy }xms ) {
             $haproxy = 1;
             last;
         }
@@ -5733,6 +5790,26 @@ sub check_for_whmphp {
     if ( -d '/usr/local/cpanel/whostmgr/docroot/cgi/whmphp' ) {
         print_3rdp('WHMPHP: ');
         print_3rdp2('is installed. Multi-level reseller setups are not supported!');
+    }
+}
+
+sub check_for_cpremote {
+    return if !-e '/var/spool/cron/root';
+
+    my $has_cpremote = 0;
+
+    open my $file_fh, '<', '/var/spool/cron/root' or return;
+    while (<$file_fh>) {
+        if ( m#/scripts/cpremotebackup# ) {
+            $has_cpremote = 1;
+            last;
+        }
+    }
+    close $file_fh;
+
+    if ( $has_cpremote == 1 ) {
+        print_3rdp('cpremote: ');
+        print_3rdp2('installed. third party backup software (cron job found for root)');
     }
 }
 
