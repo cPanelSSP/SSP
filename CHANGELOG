@@ -1,0 +1,49 @@
+=============================
+CHANGELOG: 4.99.13 -> 4.99.14
+=============================
+
+[NEW] If the process listening on port 80 is not /usr/local/apache/bin/httpd, print information about the process. For example:
+
+    [WARN] * Port 80: something other than Apache is running [file: notapache] [exe: /usr/bin/perl] [cmd: /usr/bin/perl ./notapache] [cwd: /root]
+
+Note: lsof will only show up to 9 characters of the file name by default. This can be increased to 15 by using "+c 15", and I will make that change in a future release (I didn't want to release it before a holiday since I won't be here tomorrow in case it doesn't work on all platforms).
+
+--
+
+[NEW] Check for the 3rd party backup software "cpremote":
+
+    [3RDP] * cpremote: installed. third party backup software (cron job found for root)
+
+--
+
+[FIXED] Previously the HAProxy check would not return results since it expected there to be an haproxy process running as root. It appears that the process(es) run as the "haproxy" user, so that is what is checked for now.
+
+--
+
+
+[UPDATED] Add the following to the list of disabled service touchfiles to check for:
+
+    /etc/apachedisable
+    /etc/httpdisable
+    /etc/httpdisevil
+
+If found, the output will be the same as before:
+
+    [WARN] * Disabled services: [httpd] 
+
+--
+
+[UPDATED] Ignore this default easy.versions file based on its md5 checksum:
+
+    600ff436e5939656a5645c6139cc0228  /var/cpanel/rpm.versions.d/easy.versions
+
+--
+
+[UPDATED] Recently an informational check was added to SSP which displays which backups are enabled or disabled:
+
+    [INFO] * Backups: [New: 0] [Legacy: 1]
+
+This check has been updated to verify that the cron jobs responsible for the backups actually exist. Note that if a particular backup has been disabled, then no warning about its corresponding cron will be printed if it is missing.
+
+    [INFO] * Backups: [New: 0] [Legacy: 1 (MISSING CRON!)]
+
