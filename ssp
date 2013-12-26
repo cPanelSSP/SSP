@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.14';
+my $version = '4.99.15';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5500,12 +5500,15 @@ sub check_for_port_80_not_apache {
 
     if ( $lsof_80[1] =~ m{ \A (\S+) \s+ (\d+) (?:.*) \(LISTEN\) }xms ) {
         ( $filename, $pid ) = ( $1, $2 );
-        my $exe = readlink "/proc/${pid}/exe";
-        my $cwd = readlink "/proc/${pid}/cwd";
+        my $exe = readlink "/proc/${pid}/exe" or return;
+        my $cwd = readlink "/proc/${pid}/cwd" or return;
+
         if ( $exe ne '/usr/local/apache/bin/httpd' ) {
-            open my $file_fh, '<', "/proc/${pid}/cmdline";
+            open my $file_fh, '<', "/proc/${pid}/cmdline" or return;
             $cmdline = readline $file_fh;
             close $file_fh;
+
+            return if !$cmdline;
             $cmdline =~ s/\0/ /g;
             $cmdline =~ s/(\s+)$//g;
 
