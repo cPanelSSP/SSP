@@ -1,5 +1,10 @@
 =============================
-CHANGELOG: 4.99.14 -> 4.99.15
+4.99.16
+=============================
+[UPDATED] Warn if perms on / are 711.
+
+=============================
+4.99.15
 =============================
 
 [FIXED] Address usage of uninitialized variables in the new check_for_port_80_not_apache() subroutine. That should fix this, which was the result of lazy coding on my part:
@@ -14,7 +19,7 @@ Use of uninitialized value $cwd in concatenation (.) or string at - line 5513.
 something other than Apache is running [file: httpd] [exe: ] [cmd: ] [cwd: ]
 
 =============================
-CHANGELOG: 4.99.13 -> 4.99.14
+4.99.14
 =============================
 
 [NEW] If the process listening on port 80 is not /usr/local/apache/bin/httpd, print information about the process. For example:
