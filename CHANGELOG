@@ -1,4 +1,12 @@
 =============================
+4.99.17
+=============================
+
+[UPDATED] If nothing is found to be listening on port 25, and if /etc/eximdisable does not exist, print a warning that Exim is down:
+
+    [WARN] * Exim: does not appear to be up
+
+=============================
 4.99.16
 =============================
 [UPDATED] Warn if perms on / are 711.
