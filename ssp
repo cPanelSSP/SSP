@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.16';
+my $version = '4.99.17';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5550,6 +5550,12 @@ sub check_for_assp {
             if ( grep { m{ \A perl \z }xms } @port_25_processes ) {
                 print_3rdp('Exim: ');
                 print_3rdp2('something other than Exim found listening on port 25');
+            }
+        }
+        else {
+            if ( !-f '/etc/eximdisable' ) {
+                print_warn('Exim: ');
+                print_warning('does not appear to be up');
             }
         }
     }
