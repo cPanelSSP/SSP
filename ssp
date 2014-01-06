@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.17';
+my $version = '4.99.18';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2766,12 +2766,14 @@ sub check_for_additional_rpms {
     return if !@rpm_list;
 
     my @additional_rpms = grep { /^(php-|kde-|psa-|clamav|clamd|rrdtool-)|(http|apache|pear|sendmail)/ } @rpm_list;
+    @additional_rpms = grep { !/httpd-tools|cpanel-|alt-php/ } @additional_rpms;
     if (@additional_rpms) {
+        print "\n";
+        print_magenta('This is informational only. Unless these rpms directly relate to an issue, they can be ignored:');
         @additional_rpms = sort @additional_rpms;
-        for my $additional_rpm (@additional_rpms) {
-            next if ( $additional_rpm =~ /httpd-tools|cpanel-|alt-php/ );
+        for my $rpm (@additional_rpms) {
             print_start('Additional RPM: ');
-            print_warning($additional_rpm);
+            print_warning($rpm);
         }
     }
 }
