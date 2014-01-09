@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.19';
+my $version = '4.99.20';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -247,6 +247,7 @@ check_for_nat_plus_mod_evasive();
 check_for_stray_index_php();
 check_for_missing_mysql_version_in_cpanelconfig();
 check_for_port_80_not_apache();
+check_for_missing_groups();
 
 # [3RDP]
 check_for_assp();
@@ -5520,6 +5521,47 @@ sub check_for_port_80_not_apache {
             print_warn('Port 80: ');
             print_warning("something other than Apache is running [file: $filename] [exe: $exe] [cmd: $cmdline] [cwd: $cwd]");
         }
+    }
+}
+
+sub check_for_missing_groups {
+    my @groups = qw(
+            cpanel
+            cpaneleximfilter
+            cpaneleximscanner
+            cpanelhorde
+            cpanellogaholic
+            cpanellogin
+            cpanelphpmyadmin
+            cpanelphppgadmin
+            cpanelroundcube
+            cpses
+            dovecot
+            dovenull
+            mail
+            mailman
+            mailnull
+            mailtrap
+            mysql
+            named
+            nobody
+            root
+            saslauth
+            sshd
+            wheel
+);
+
+    my $missing_groups;
+
+    for my $group (@groups) {
+        my $gid = getgrnam($group);
+        next if ( defined $gid and $gid =~ /^\d+$/ );
+        $missing_groups .= "[$group] ";
+    }
+
+    if ($missing_groups) {
+        print_warn('Missing groups: ');
+        print_warning($missing_groups);
     }
 }
 
