@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.20';
+my $version = '4.99.21';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5536,8 +5536,6 @@ sub check_for_missing_groups {
             cpanelphppgadmin
             cpanelroundcube
             cpses
-            dovecot
-            dovenull
             mail
             mailman
             mailnull
@@ -5546,7 +5544,6 @@ sub check_for_missing_groups {
             named
             nobody
             root
-            saslauth
             sshd
             wheel
 );
