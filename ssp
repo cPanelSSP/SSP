@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.18';
+my $version = '4.99.19';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2026,7 +2026,7 @@ sub check_for_non_default_permissions {
                 next if ( $resource =~ '^(/(s?)bin|/usr/(s?)bin|/)$' and $mode == 555 );                  # CentOS 6.2+
                 next if ( $resource =~ '^/(var|sbin|usr/local/sbin|usr|usr/sbin)$|^/var/cpanel' and $mode == 711 );
                 if ( $resource eq '/' and $mode == 711 ) {
-                    $resources_and_perms{$resource} .= " (see ticket 4429843)";
+                    $resources_and_perms{$resource} .= ") (.ftpquota issues? see ticket 4429843";
                 }
                 print_warn('Non-default Permissions: ');
                 print_warning("$resource (mode: $mode | default: $resources_and_perms{$resource})");
