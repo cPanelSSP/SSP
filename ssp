@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.21';
+my $version = '4.99.22';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -248,6 +248,7 @@ check_for_stray_index_php();
 check_for_missing_mysql_version_in_cpanelconfig();
 check_for_port_80_not_apache();
 check_for_missing_groups();
+check_for_cgihidepass();
 
 # [3RDP]
 check_for_assp();
@@ -529,6 +530,7 @@ sub print_tip {
         '[FB 61735] (By design) "/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings" destroys custom proxy subdomain records. Use WHM >> Tweak Settings instead.',
         '[FB 61516] cPanel\'s Java SSH term app may say shell access is disabled, even when it is enabled',
         '[FB 60471] PureFTPd allows FTP users to follow symlinks',
+        '[FB 59450] (By design) Email quotas cannot exceed 2048MB, but they can be unlimited',
         '[FB 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and "PCRE is not compiled with UTF-8 support"',
         '[FB 57237] (By design) Per ISO 3166-1, the country code for the UK is GB (not UK). Look for this in WHM >> Generate an SSL Certificate [...]',
         '[FB 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale',
@@ -5551,6 +5553,7 @@ sub check_for_missing_groups {
     my $missing_groups;
 
     for my $group (@groups) {
+        next if ( $group eq 'cpses' and $cpanel_version_major == 11 and $cpanel_version_minor < 40 ); # was cpses added in 11.40?
         my $gid = getgrnam($group);
         next if ( defined $gid and $gid =~ /^\d+$/ );
         $missing_groups .= "[$group] ";
@@ -5559,6 +5562,27 @@ sub check_for_missing_groups {
     if ($missing_groups) {
         print_warn('Missing groups: ');
         print_warning($missing_groups);
+    }
+}
+
+sub check_for_cgihidepass {
+    my $cpconf = '/var/cpanel/cpanel.config';
+    my $cgihidepass = 0;
+
+    return if !-f $cpconf;
+
+    open my $fh, '<', $cpconf or die $!;
+    while (<$fh>) {
+        if ( /cgihidepass=1/ ) {
+            $cgihidepass = 1;
+            last;
+        }
+    }
+    close $fh;
+
+    if ($cgihidepass == 1) {
+        print_warn('cgihidepass: ');
+        print_warning('Tweak Settings >> "Hide login password from cgi scripts" is enabled. Expired passwords can\'t be changed via WHM. See FB 87581');
     }
 }
 
