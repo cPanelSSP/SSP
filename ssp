@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.22';
+my $version = '4.99.23';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -3381,7 +3381,7 @@ sub check_etc_hosts_sanity {
 
     if ( $localhost_not_127 == 1 ) {
         print_warn('/etc/hosts: ');
-        print_warning('contains an entry for "localhost" that isn\'t 127.0.0.1 ! This can break EA');
+        print_warning('contains an entry for "localhost" that isn\'t 127.0.0.1! This can break EA and webmail logins');
     }
 
     if ( $hostname_entry == 0 ) {
@@ -4642,7 +4642,7 @@ sub check_for_var_cpanel_roundcube_install {
 
 sub check_for_missing_etc_localtime {
     if ( !-f '/etc/localtime' ) {
-        print_warn('/etc/locatime: ');
+        print_warn('/etc/localtime: ');
         print_warning('Missing! upcp may fail with "Error testing if the RPMs will install" (see ticket 3811269)');
     }
 }
