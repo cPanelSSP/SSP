@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.23';
+my $version = '4.99.24';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -567,6 +567,7 @@ sub print_tip {
         'Use custom_vhost_template_ap(1|2) in userdata files to make changes for an individual vhost',
         'File Manager upload size limits can be adjusted at WHM >> Tweak Settings >> Max HTTP submission size',
         '/var/cpanel/conf/apache/local can potentially cause issues. See ticket 3915299 for an example',
+        'System backups are not uploaded via FTP by default, requires manual config. See http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/SystemBackups',
     );
 
     my $num  = int rand scalar @tips;
@@ -4460,12 +4461,14 @@ sub check_for_cpanel_CN_newline {
 
 sub check_for_my_cnf_skip_name_resolve {
     my $skip_name_resolve = 0;
+    my $conf_setting;
 
     my $my_cnf = '/etc/my.cnf';
     if ( open my $my_cnf_fh, '<', $my_cnf ) {
         while (<$my_cnf_fh>) {
             chomp( my $line = $_ );
-            if ( $line =~ m{ \A skip_name_resolve }xms ) {
+            if ( $line =~ m{ \A [ \t]+? (skip[_-]na.*) }xms ) {
+                $conf_setting = $1;
                 $skip_name_resolve = 1;
                 last;
             }
@@ -4475,7 +4478,7 @@ sub check_for_my_cnf_skip_name_resolve {
 
     if ( $skip_name_resolve == 1 ) {
         print_warn('/etc/my.cnf: ');
-        print_warning('skip_name_resolve found. Seeing "Can\'t find any matching row"? That may be why');
+        print_warning("$conf_setting found. Seeing \"Can't find any matching row\"? That may be why");
     }
 }
 
