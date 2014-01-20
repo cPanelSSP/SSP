@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.24';
+my $version = '4.99.25';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -268,6 +268,7 @@ check_for_zamfoo();         # Master reseller software
 check_for_whmreseller();    # Master reseller software
 check_for_whmphp();         # Master reseller software
 check_for_cpremote();
+check_for_els();
 
 check_for_libkeyutils_malware();
 
@@ -2374,6 +2375,7 @@ sub check_for_easyapache_hooks {
     my %hooks_ignore = qw(
       41ec2d3f35d8cd7cb01b60485fb3bdbb    /scripts/before_apache_make
       407df66f28c8822cd4f51fe56160f74e    /scripts/before_apache_make
+      24214790021e1df53a0a6e3741ca74c3    /scripts/before_apache_make
     );
 
     for my $hook (@hooks) {
@@ -5891,6 +5893,14 @@ sub check_for_cpremote {
         print_3rdp('cpremote: ');
         print_3rdp2('installed. third party backup software (cron job found for root)');
     }
+}
+
+sub check_for_els {
+    my $els = '/usr/local/els/els.sh';
+    return if !-e $els;
+
+    print_3rdp('ELS: ');
+    print_3rdp2("$els found. See http://www.servermonkeys.com/els.php");
 }
 
 ##############################
