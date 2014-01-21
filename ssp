@@ -17,6 +17,10 @@ if ( !-d '/usr/local/cpanel' ) {
     die '/usr/local/cpanel not found';
 }
 
+if ( $^O ne 'linux' ) {
+    die "Unknown OS: $^O (only Linux is supported)";
+}
+
 {
     local @INC = ( @INC, "/usr/local/cpanel" );
     eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require Cpanel::CachedCommand; };
@@ -28,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.25';
+my $version = '4.99.26';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -497,12 +501,6 @@ sub get_release_version {
         elsif ( $line =~ /(\d+)/ )                                       { $ver  = $1; }
     }
 
-    if ( $os =~ /freebsd/i ) {
-        if ( ( POSIX::uname() )[2] =~ m/^(\d+\.\d+)/ ) {
-            $ver = $1;
-        }
-    }
-
     if ($ises) {
         return ( $ver, $ises );
     }
@@ -517,20 +515,18 @@ sub print_version {
 
 sub print_tip {
     my @tips = (
+        '[FB 86549] cPHulk may report root logins to Pure-FTPd despite no evidence being found',
         '[FB 78617] (By design) sysup always installs bind',
         '[FB 75793] (By design) Proxy subdomains are not created for addon domains',
         '[FB 73369] Can\'t log into SquirrelMail, but Horde and Roundcube work? Check if webmail pass contains "odd" characters',
         '[FB 72801] (By design) File Manager creates new files with 0600 perms, even when saving an existing file as a new one',
         '[FB 72733] (By design) File Manager\'s "Compress" feature has a hard coded timeout due to using cPanel\'s form upload logic',
-        '[FB 65253] cPHulk may report root logins to Pure-FTPd despite no evidence being found',
         '[FB 63530] When setting up a remote MySQL server, that server must have the openssh-clients package installed',
         '[FB 63283] (By design) In cPanel <= 11.38, bandwidth will process during blackout hours if it was started before the blackout hour',
         '[FB 63193] File Manager showing "Out of memory" in cPanel error_log? Try renaming $HOME/$USER/.cpanel/datastore/SYSTEMMIME',
         '[FB 62819] "License File Expired: LTD: 1334782495 NOW: 1246416504 FUT!" likely just means the server clock is wrong',
         '[FB 62054] (By design) The "Dedicated IP" box can only be modified when creating a package - not when editing',
         '[FB 61735] (By design) "/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings" destroys custom proxy subdomain records. Use WHM >> Tweak Settings instead.',
-        '[FB 61516] cPanel\'s Java SSH term app may say shell access is disabled, even when it is enabled',
-        '[FB 60471] PureFTPd allows FTP users to follow symlinks',
         '[FB 59450] (By design) Email quotas cannot exceed 2048MB, but they can be unlimited',
         '[FB 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and "PCRE is not compiled with UTF-8 support"',
         '[FB 57237] (By design) Per ISO 3166-1, the country code for the UK is GB (not UK). Look for this in WHM >> Generate an SSL Certificate [...]',
@@ -550,7 +546,6 @@ sub print_tip {
         'Seeing "domainadmin" errors (e.g. "domainadmin-domainexistsglobal")? Check the Domainadmin-Errors wiki article',
         'Transfers showing "sshcmdpermissiondeny"? Check for modified openssh-clients package (see ticket 3664533)',
         'Learn how cPanel 11.36+ handles rpms: http://go.cpanel.net/rpmversions',
-        'Learn what\'s new in 11.36: http://docs.cpanel.net/twiki/bin/vief/AllDocumentation/1136ReleaseNotes',
         'Use "rlog <file>" to see a file\'s revision history, and "co -p1.1 <file>" (for example) to see that revision',
         'Files under revision control: fstab, localdomains, named.conf, passwd, shadow, trueuserowners, httpd.conf, php.ini (system and cPanel)',
         'Imagick install issues on PHP 5.4? You may need to run \'pear config-set preferred_state beta\' (see ticket 3754991)',
@@ -602,14 +597,7 @@ sub get_process_list {
     ## used for checking for nginx, litespeed, mailscanner, etc.
     ## better (?) would be to run lsof and check process names on listening ports.
 
-    my @processlist;
-
-    if ( $os eq 'linux' ) {
-        @processlist = split /\n/, run( 'ps', 'axwwwf', '-o', 'user,cmd' );
-    }
-    elsif ( $os eq 'freebsd' ) {
-        @processlist = split /\n/, run( 'ps', 'axwwwf', '-o', 'user,comm' );
-    }
+    my @processlist = split /\n/, run( 'ps', 'axwwwf', '-o', 'user,cmd' );
 
     return @processlist;
 }
@@ -639,34 +627,23 @@ sub get_environment {
 sub get_cpuinfo {
     my %cpuinfos;
 
-    if ( $os eq 'freebsd' ) {
-        my $numcores = run( 'sysctl', 'hw.ncpu' );
-        my $model    = run( 'sysctl', 'hw.model' );
-        $numcores =~ s/^hw.ncpu://g;
-        $model    =~ s/^hw.model://g;
-        $model    =~ s/\s+/ /g;
-        $cpuinfos{'numcores'} = $numcores;
-        $cpuinfos{'model'}    = $model;
-    }
-    else {
-        open my $cpuinfo_fh, '<', '/proc/cpuinfo';
-        for my $line ( readline $cpuinfo_fh ) {
-            if ( $line =~ /^model name/m ) {
-                $line =~ s/^model name\s+:\s+//;
-                $line =~ s/\(R\)//g;
-                $line =~ s/\(tm\)//g;
-                $line =~ s/\s{2,}/ /;
-                $line =~ s/ \@/\@/;
-                $cpuinfos{'model'} = $line;
-                $cpuinfos{'numcores'}++;
-            }
-            if ( $line =~ /^cpu MHz/m ) {
-                $line =~ s/^cpu MHz\s+:\s+//;
-                $cpuinfos{'mhz'} = $line;
-            }
+    open my $cpuinfo_fh, '<', '/proc/cpuinfo';
+    for my $line ( readline $cpuinfo_fh ) {
+        if ( $line =~ /^model name/m ) {
+            $line =~ s/^model name\s+:\s+//;
+            $line =~ s/\(R\)//g;
+            $line =~ s/\(tm\)//g;
+            $line =~ s/\s{2,}/ /;
+            $line =~ s/ \@/\@/;
+            $cpuinfos{'model'} = $line;
+            $cpuinfos{'numcores'}++;
         }
-        close $cpuinfo_fh;
+        if ( $line =~ /^cpu MHz/m ) {
+            $line =~ s/^cpu MHz\s+:\s+//;
+            $cpuinfos{'mhz'} = $line;
+        }
     }
+    close $cpuinfo_fh;
 
     chomp %cpuinfos;
     return %cpuinfos;
@@ -754,11 +731,8 @@ sub print_os {
         }
         $os_info = $release_info . " [$hostinfo{'environment'}]";
     }
-    elsif ( $os eq 'freebsd' ) {
-        $os_info = 'FreeBSD';
-    }
     else {
-        $os_info = 'Unknown (no /etc/redhat-release, and not FreeBSD)';
+        $os_info = 'Unknown (no /etc/redhat-release)';
     }
 
     if ( $release_info and $release_info =~ /cloudlinux/i ) {
@@ -930,12 +904,6 @@ sub check_for_cpanel_update {
     # does the local tier version match the available tier version?
     #
     return if ( $local_tier_version eq $available_tier_version );
-
-    #
-    # FreeBSD won't ever go past 11.30
-    # http://www.cpanel.net/products/cpanelwhm/system-requirements.html
-    #
-    return if ( ( $os eq 'freebsd' ) && substr( $local_tier_version, 0, 5 ) eq '11.30' );
 
     my ( $l1, $l2, $l3, $l4 ) = split /\./, $local_tier_version;
     my ( $r1, $r2, $r3, $r4 ) = split /\./, $available_tier_version;
@@ -1267,20 +1235,17 @@ sub check_sysinfo {
         open my $sysinfo_fh, '<', $sysinfo_config;
         while (<$sysinfo_fh>) {
             chomp;
-            if (m{ \A rpm_arch=(.*) }xms) {
-                if ( $os eq 'freebsd' ) {
-                    $rebuild = 0;
-                }
-                elsif ( $arch ne $1 ) {
+            if ( m{ \A rpm_arch=(.*) }xms ) {
+                if ( $arch ne $1 ) {
                     $rebuild = 1;
                 }
             }
-            if (m{ \A release=(.*) }xms) {
+            if ( m{ \A release=(.*) }xms ) {
                 if ( $release ne $1 ) {
                     $rebuild = 1;
                 }
             }
-            if (m{ \A ises=(.*) }xms) {
+            if ( m{ \A ises=(.*) }xms ) {
                 if ( $ises ne $1 ) {
                     $rebuild = 1;
                 }
@@ -1523,12 +1488,7 @@ sub check_runlevel {
 
 sub check_for_missing_root_cron {
     my $cron;
-    if ( $os eq 'linux' ) {
-        $cron = '/var/spool/cron/root';
-    }
-    elsif ( $os eq 'freebsd' ) {
-        $cron = '/var/cron/tabs/root';
-    }
+    $cron = '/var/spool/cron/root';
 
     if ( !-f $cron ) {
         print_warn('Missing cron: ');
@@ -1638,18 +1598,10 @@ sub check_for_sandy_bridge {
 sub check_interface_lo {
     my $is_up = 0;
 
-    if ( $os eq 'freebsd' ) {
-        my $iconfig_lo = run( 'ifconfig', 'lo0' );
-        if ( $iconfig_lo =~ /UP,/ ) {
-            $is_up = 1;
-        }
-    }
-    else {
-        my $ifconfig_lo = run( 'ifconfig', 'lo' );
+    my $ifconfig_lo = run( 'ifconfig', 'lo' );
 
-        if ( $ifconfig_lo =~ /UP LOOPBACK/ ) {
-            $is_up = 1;
-        }
+    if ( $ifconfig_lo =~ /UP LOOPBACK/ ) {
+        $is_up = 1;
     }
 
     if ( !$is_up ) {
@@ -2251,11 +2203,10 @@ sub check_for_hooks_in_scripts_directory {
     if (@hooks) {
         for my $hook (@hooks) {
             $hook = '/scripts/' . $hook;
-            unless ( $os eq 'freebsd' ) {
-                chomp( my $checksum = run( 'md5sum', $hook ) );
-                $checksum =~ s/\s.*//g;
-                next if exists $hooks_ignore{$checksum};
-            }
+            chomp( my $checksum = run( 'md5sum', $hook ) );
+            $checksum =~ s/\s.*//g;
+            next if exists $hooks_ignore{$checksum};
+
             if ( !-z $hook ) {
                 $hooks_output .= " $hook ";
             }
@@ -2380,11 +2331,9 @@ sub check_for_easyapache_hooks {
 
     for my $hook (@hooks) {
         if ( -f $hook and !-z $hook ) {
-            unless ( $os eq 'freebsd' ) {
-                chomp( my $checksum = run( 'md5sum', $hook ) );
-                $checksum =~ s/\s.*//g;
-                next if exists $hooks_ignore{$checksum};
-            }
+            chomp( my $checksum = run( 'md5sum', $hook ) );
+            $checksum =~ s/\s.*//g;
+            next if exists $hooks_ignore{$checksum};
             $hooks .= " $hook";
         }
     }
@@ -2507,12 +2456,10 @@ sub check_for_usr_local_cpanel_hooks {
         for my $hook (@usr_local_cpanel_hooks) {
             my $tmp_hook = '/usr/local/cpanel/hooks/' . $hook;
             if ( -f $tmp_hook and !-z $tmp_hook ) {
-                unless ( $os eq 'freebsd' ) {
-                    chomp( my $checksum = run( 'md5sum', $tmp_hook ) );
-                    $checksum =~ s/\s.*//g;
-                    next if exists $hooks_ignore{$checksum};
-                    $hooks .= "$hook ";
-                }
+                chomp( my $checksum = run( 'md5sum', $tmp_hook ) );
+                $checksum =~ s/\s.*//g;
+                next if exists $hooks_ignore{$checksum};
+                $hooks .= "$hook ";
             }
         }
     }
@@ -2902,21 +2849,6 @@ sub check_php_libmysqlclient_mismatch {
 }
 
 sub check_for_system_mem_below_512M {
-    if ( $os eq 'freebsd' ) {
-        my $memtotal = run( 'sysctl', 'hw.realmem' );
-
-        if ( $memtotal =~ m{ \A hw\.realmem: \s (\d+) }xms ) {
-            $memtotal = $1 / 1024 / 1024;
-        }
-
-        if ( $memtotal < 512 ) {
-            print_warn('Memory: ');
-            print_warning("Server has less than 512M physical memory! [$memtotal MB]");
-        }
-
-        return;
-    }
-
     my $meminfo = '/proc/meminfo';
     my $memtotal;
 
@@ -2980,8 +2912,6 @@ sub check_pecl_phpini_location {
 }
 
 sub check_for_empty_yumconf {
-    return if ( $os eq 'freebsd' );
-
     my $yumconf = '/etc/yum.conf';
 
     if ( !-e $yumconf ) {
@@ -3077,14 +3007,7 @@ sub check_wwwacctconf_for_incorrect_minuid {
 }
 
 sub check_roots_cron_for_certain_commands {
-    my $cron;
-
-    if ( $os eq 'linux' ) {
-        $cron = '/var/spool/cron/root';
-    }
-    elsif ( $os eq 'freebsd' ) {
-        $cron = '/var/cron/tabs/root';
-    }
+    my $cron = '/var/spool/cron/root';
 
     return if !-e $cron;
 
@@ -3264,17 +3187,9 @@ sub check_cron_processes {
     my $number_of_cron_processes = 0;
 
     for my $process (@process_list) {
-        if ( $os eq 'linux' ) {
-            if ( $process =~ m{ \A root (?:.*) crond }xms ) {
-                $crond_is_running = 1;
-                $number_of_cron_processes += 1;
-            }
-        }
-        elsif ( $os eq 'freebsd' ) {
-            if ( $process =~ m{ \A root (?:.*) cron }xms ) {
-                $crond_is_running = 1;
-                $number_of_cron_processes += 1;
-            }
+        if ( $process =~ m{ \A root (?:.*) crond }xms ) {
+            $crond_is_running = 1;
+            $number_of_cron_processes += 1;
         }
     }
 
@@ -3525,22 +3440,17 @@ sub check_for_cpanel_not_updating {
       debian_version
     );
 
-    if ( $^O =~ /freebsd/i ) {
-        $os_vendor = 'freebsd';
-    }
-    else {
-        for my $release_file (@release_files) {
-            if ( -e '/etc/' . $release_file ) {
-                if ( ( ($os_vendor) = $release_file =~ m/^([^\-_]+)/ )[0] ) {
-                    $os_vendor = lc $os_vendor;
-                    last;
-                }
+    for my $release_file (@release_files) {
+        if ( -e '/etc/' . $release_file ) {
+            if ( ( ($os_vendor) = $release_file =~ m/^([^\-_]+)/ )[0] ) {
+                $os_vendor = lc $os_vendor;
+                last;
             }
         }
     }
 
-    ## Ignore FBSD, Fedora, RHEL 3-4, Redhat 7-9
-    return if ( $os_vendor =~ /(freebsd|fedora)/ );
+    ## Ignore Fedora, RHEL 3-4, Redhat 7-9
+    return if ( $os_vendor =~ /fedora/ );
 
     if ( -f '/etc/redhat-release' ) {
         if ( open my $rr_fh, '<', '/etc/redhat-release' ) {
@@ -3849,8 +3759,6 @@ sub check_for_multiple_imagemagick_installs {
 }
 
 sub check_for_kernel_headers_rpm {
-    return if ( $os eq 'freebsd' );
-
     if ( !-f '/usr/include/linux/limits.h' ) {
         print_warn('Missing file: /usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
     }
@@ -4010,19 +3918,11 @@ sub check_for_clock_skew {
       Jul 6   Aug 7   Sep 8   Oct 9   Nov 10  Dec 11
     );
 
-    if ( $os eq 'linux' ) {
-        $rdate_time = run( 'rdate', '-p', '-t', '1', 'rdate.cpanel.net' );
+    $rdate_time = run( 'rdate', '-p', '-t', '1', 'rdate.cpanel.net' );
 
-        # fall back to UDP if necessary
-        if ( !$rdate_time ) {
-            $rdate_time = run( 'rdate', '-p', '-t', '1', '-u', 'rdate.cpanel.net' );
-        }
-    }
-    elsif ( $os eq 'freebsd' ) {
-        local $SIG{'ALRM'} = sub { return (); };
-        alarm 1;
-        $rdate_time = run( 'rdate', '-p', 'rdate.cpanel.net' );
-        alarm 0;
+    # fall back to UDP if necessary
+    if ( !$rdate_time ) {
+        $rdate_time = run( 'rdate', '-p', '-t', '1', '-u', 'rdate.cpanel.net' );
     }
 
     return if !$rdate_time;
@@ -4241,8 +4141,6 @@ sub check_for_mainip_newline {
 }
 
 sub check_for_custom_postgres_repo {
-    return if ( $os eq 'freebsd' );
-
     my $yum_repos_dir = '/etc/yum.repos.d/';
     my @dir_contents;
     my $has_postgres_repo = 0;
@@ -4267,8 +4165,6 @@ sub check_for_custom_postgres_repo {
 }
 
 sub check_for_rpm_overrides {
-    return if ( $os eq 'freebsd' );
-
     my $rpm_override_dir = '/var/cpanel/rpm.versions.d/';
     my $local_versions   = '/var/cpanel/rpm.versions.d/local.versions';
     my $easy_versions    = '/var/cpanel/rpm.versions.d/easy.versions';
@@ -4346,8 +4242,6 @@ sub check_for_rpm_overrides {
 }
 
 sub check_for_odd_yum_conf {
-    return if ( $os eq 'freebsd' );
-
     my $yum_conf = '/etc/yum.conf';
 
     return if !$yum_conf;
@@ -4546,8 +4440,6 @@ sub check_for_homeloader_php_extension {
 }
 
 sub check_for_libkeyutils_malware {
-    return if ( $os eq 'freebsd' );
-
     my $bad_libs;
 
     ## check for the existence of known illegitimate files
@@ -4901,8 +4793,6 @@ sub check_for_stale_upgrade_in_progress_txt {
 }
 
 sub check_for_bad_permissions_on_named_ca {
-    return if ( $os eq 'freebsd' );
-
     my $namedca = '/var/named/named.ca';
     if ( !-e $namedca ) {   
         print_warn("${namedca}: ");
@@ -5017,8 +4907,6 @@ sub check_for_mysql_root_pass_with_single_quote {
 }
 
 sub check_for_jailshell_additional_mounts_trailing_slash {
-    return if ( $os eq 'freebsd' );
-
     my $mounts_file = '/var/cpanel/jailshell-additional-mounts';
     return if ( !-f $mounts_file );
 
@@ -5908,8 +5796,6 @@ sub check_for_els {
 ##############################
 
 sub build_rpm_list {
-    return if ( $os eq 'freebsd' );
-
     my $timeout = 15;
 
     print_info2("RPM check (running \"rpm -qa ...\"). This will timeout after $timeout seconds.");
