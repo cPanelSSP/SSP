@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.26';
+my $version = '4.99.27';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -1940,6 +1940,7 @@ sub check_for_non_default_permissions {
         '/bin'                         => '755',
         '/bin/bash'                    => '755',
         '/dev/null'                    => '666',
+        '/etc'                         => '755',
         '/etc/group'                   => '644',
         '/etc/hosts'                   => '644',
         '/etc/nsswitch.conf'           => '644',
