@@ -832,7 +832,7 @@ sub check_for_cpanel_update {
     # get local tier name (e.g., edge)
     #
     my $cpupdate_conf = '/etc/cpupdate.conf';
-    return if !-e $cpupdate_conf;
+    return if !-f $cpupdate_conf;
 
     if ( open my $file_fh, '<', $cpupdate_conf ) {
         while (<$file_fh>) {
