@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.28';
+my $version = '4.99.29';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -832,7 +832,7 @@ sub check_for_cpanel_update {
     # get local tier name (e.g., edge)
     #
     my $cpupdate_conf = '/etc/cpupdate.conf';
-    return if !$cpupdate_conf;
+    return if !-e $cpupdate_conf;
 
     if ( open my $file_fh, '<', $cpupdate_conf ) {
         while (<$file_fh>) {
@@ -1825,7 +1825,7 @@ sub check_for_local_makecpphp_template {
 sub check_for_custom_apache_includes {
     my $include_dir = '/usr/local/apache/conf/includes';
 
-    return if !$include_dir;
+    return if !-d $include_dir;
 
     my @includes = qw(
       post_virtualhost_1.conf
@@ -3334,7 +3334,7 @@ sub check_for_apache_listen_host_is_localhost {
     my $cpanel_config = '/var/cpanel/cpanel.config';
     my $localhost_80;
 
-    return if !$cpanel_config;
+    return if !-f $cpanel_config;
 
     if ( open my $cpanel_config_fh, '<', $cpanel_config ) {
         while (<$cpanel_config_fh>) {
@@ -3783,8 +3783,8 @@ sub check_for_custom_locales {
     my $locale_dir = '/var/cpanel/locale.local';
     my $users_dir  = '/var/cpanel/users';
 
-    return if !$locale_dir;
-    return if !$users_dir;
+    return if !-d $locale_dir;
+    return if !-d $users_dir;
 
     my ( @locale_dir_contents_tmp, @locale_dir_contents, @cpanel_users );
     my ( @users_locales, @users_with_custom_locales );
@@ -3846,7 +3846,7 @@ sub check_for_custom_locales {
 }
 
 sub check_eximstats_size {
-    return if !$mysql_datadir;
+    return if !-d $mysql_datadir;
 
     my $eximstats_dir = $mysql_datadir . 'eximstats/';
     my @dir_contents;
@@ -4043,7 +4043,7 @@ sub check_if_httpdconf_ipaddrs_exist {
     my @vhost_ipaddrs;
     my @unbound_ipaddrs;
 
-    return if !$httpdconf;
+    return if !-f $httpdconf;
 
     if ( open my $httpdconf_fh, '<', $httpdconf ) {
         local $/ = undef;
@@ -4246,7 +4246,7 @@ sub check_for_rpm_overrides {
 sub check_for_odd_yum_conf {
     my $yum_conf = '/etc/yum.conf';
 
-    return if !$yum_conf;
+    return if !-f $yum_conf;
 
     my $exclude_line_count = 0;
     my $exclude_kernel     = 0;
@@ -4313,7 +4313,7 @@ sub check_for_noxsave_in_grub_conf {
     my $grub_conf   = '/boot/grub/grub.conf';
     my $has_noxsave = 0;
 
-    return if !$grub_conf;
+    return if !-f $grub_conf;
 
     if ( open my $grub_fh, '<', $grub_conf ) {
         while (<$grub_fh>) {
@@ -4405,7 +4405,7 @@ sub check_for_rpm_dist_ver_unknown {
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
     my $is_broken      = 0;
 
-    return if !$sysinfo_config;
+    return if !-f $sysinfo_config;
 
     if ( open my $file_fh, '<', $sysinfo_config ) {
         while (<$file_fh>) {
