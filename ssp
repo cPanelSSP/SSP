@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.29';
+my $version = '4.99.30';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -253,6 +253,8 @@ check_for_missing_mysql_version_in_cpanelconfig();
 check_for_port_80_not_apache();
 check_for_missing_groups();
 check_for_cgihidepass();
+check_for_noquotafs();
+check_for_mod_rpaf();
 
 # [3RDP]
 check_for_assp();
@@ -5393,31 +5395,34 @@ sub check_for_missing_mysql_version_in_cpanelconfig {
 }
 
 sub check_for_port_80_not_apache {
-    my $pid;
-    my $filename;
-    my $exe;
-    my $cmdline;
-    my $cwd;
+    my ( $filename, $pid );
 
+    return if !@lsof_80;
     return if scalar @lsof_80 < 2;
 
-    if ( $lsof_80[1] =~ m{ \A (\S+) \s+ (\d+) (?:.*) \(LISTEN\) }xms ) {
-        ( $filename, $pid ) = ( $1, $2 );
-        my $exe = readlink "/proc/${pid}/exe" or return;
-        my $cwd = readlink "/proc/${pid}/cwd" or return;
-
-        if ( $exe ne '/usr/local/apache/bin/httpd' ) {
-            open my $file_fh, '<', "/proc/${pid}/cmdline" or return;
-            $cmdline = readline $file_fh;
-            close $file_fh;
-
-            return if !$cmdline;
-            $cmdline =~ s/\0/ /g;
-            $cmdline =~ s/(\s+)$//g;
-
-            print_warn('Port 80: ');
-            print_warning("something other than Apache is running [file: $filename] [exe: $exe] [cmd: $cmdline] [cwd: $cwd]");
+    for my $line (@lsof_80) {
+        if ( $line =~ m{ \A (\S+) \s+ (\d+) (?:.*) \(LISTEN\) }xms ) {
+            ( $filename, $pid ) = ( $1, $2 );
+            last;
         }
+    }
+
+    return if !$filename or !$pid;
+
+    my $exe = readlink "/proc/${pid}/exe" or return;
+    my $cwd = readlink "/proc/${pid}/cwd" or return;
+
+    if ( $exe ne '/usr/local/apache/bin/httpd' ) {
+        open my $file_fh, '<', "/proc/${pid}/cmdline" or return;
+        my $cmdline = readline $file_fh;
+        close $file_fh;
+
+        return if !$cmdline;
+        $cmdline =~ s/\0/ /g;
+        $cmdline =~ s/(\s+)$//g;
+    
+        print_warn('Port 80: ');
+        print_warning("something other than Apache is running [file: $filename] [exe: $exe] [cmd: $cmdline] [cwd: $cwd]");
     }
 }
 
@@ -5478,6 +5483,21 @@ sub check_for_cgihidepass {
     if ($cgihidepass == 1) {
         print_warn('cgihidepass: ');
         print_warning('Tweak Settings >> "Hide login password from cgi scripts" is enabled. Expired passwords can\'t be changed via WHM. See FB 87581');
+    }
+}
+
+sub check_for_noquotafs {
+    my $noquotafs = '/var/cpanel/noquotafs';
+    return if !-f $noquotafs or -z $noquotafs;
+
+    print_warn("$noquotafs: ");
+    print_warning('exists. quota issues? See http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/QuotaFSConfig');
+}
+
+sub check_for_mod_rpaf {
+    if ( grep { /rpaf_module/ } @apache_modules_output ) {
+        print_warn('mod_rpaf: ');
+        print_warning('loaded. May prevent .htaccess from denying access. See 4422297');
     }
 }
 
