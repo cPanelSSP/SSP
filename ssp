@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.30';
+my $version = '4.99.31';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -65,6 +65,7 @@ my %pureftpdconf;              # /etc/pure-ftpd.conf
 my @apache_version_output;     # httpd -v
 my @apache_modules_output;     # httpd -M
 my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexec );
+my $ten_MB = 10_485_760;
 
 if ( -x '/usr/local/apache/bin/httpd' ) {
     @apache_version_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-v' );
@@ -73,6 +74,8 @@ if ( -x '/usr/local/apache/bin/httpd' ) {
 
 # TODO: use +c 15 so the entire process name is displayed if >9 chars
 my @lsof_80 = split /\n/, run( 'lsof', '-n', '-i', 'tcp:80' );
+my @phpini  = get_phpini();
+
 
 ######################
 ##  END GLOBALS     ##
@@ -373,6 +376,23 @@ sub check_for_dnsonly {
         exit;
     }
 }
+
+sub get_phpini {
+    my $phpini = '/usr/local/lib/php.ini';
+    return if !-f $phpini;
+
+    if ( open my $fh, '<', $phpini ) {
+        while (<$fh>) {
+            next if (/^(?:;|$|\[)/);
+            chomp;
+            push @phpini, $_;
+        }
+        close $fh;
+    }
+
+    return @phpini;
+}
+
 
 sub get_cpanel_version {
     my $cpanel_version_file = '/usr/local/cpanel/version';
@@ -2483,19 +2503,9 @@ sub find_usr_local_cpanel_hooks {
 }
 
 sub check_for_sql_safe_mode {
-    my @phpinis = qw( /usr/local/lib/php.ini /usr/local/php4/lib/php.ini );
-
-    for my $phpini (@phpinis) {
-        if ( open my $file_fh, '<', $phpini ) {
-            while (<$file_fh>) {
-                chomp( my $line = $_ );
-                if ( $line =~ m{ \A sql\.safe_mode \s* = \s* on }ixms ) {
-                    print_warn("$phpini: ");
-                    print_warning('sql.safe_mode is enabled!');
-                }
-            }
-            close $file_fh;
-        }
+    if ( grep { m# \A (?:[ \t]+)? sql\.safe_mode \s* = \s* on #ixms } @phpini ) {
+        print_warn('/usr/local/lib/php.ini: ');
+        print_warning('sql.safe_mode is enabled!');
     }
 }
 
@@ -2612,22 +2622,13 @@ sub find_easyapache_templates {
 }
 
 sub check_for_missing_timezone_from_phpini {
-    my $phpini = '/usr/local/lib/php.ini';
-
-    return if !-f $phpini;
-
     my $timezone;
 
-    if ( open my $phpini_fh, '<', $phpini ) {
-        while (<$phpini_fh>) {
-            my $line = $_;
-            chomp $line;
-            if ( $line =~ m{ \A date\.timezone (?:\s+)? = (?:\s+)? (?:["'])? ([^/"']+) / ([^/"']+) (?:["'])? (?:\s+)? \z }xms ) {
-                $timezone = $1 . '/' . $2;
-                last;
-            }
+    for my $line (@phpini) {
+        if ( $line =~ m{ \A date\.timezone (?:\s+)? = (?:\s+)? (?:["'])? ([^/"']+) / ([^/"']+) (?:["'])? (?:\s+)? \z }xms ) {
+            $timezone = $1 . '/' . $2;
+            last;
         }
-        close $phpini_fh;
     }
 
     if ($timezone) {
@@ -2635,10 +2636,10 @@ sub check_for_missing_timezone_from_phpini {
         my $path = '/usr/share/zoneinfo/' . $tz1 . '/' . $tz2;
 
         if ( !-f $path ) {
-            print_warn("date.timezone from $phpini: ");
+            print_warn("date.timezone from /usr/local/lib/php.ini: ");
             print_warning("$path not found!");
-        }
-    }
+        }    
+    }    
 }
 
 sub check_for_proc_mdstat_recovery {
@@ -2679,25 +2680,10 @@ sub check_usr_local_cpanel_path_for_symlinks {
 sub populate_mysql_rpm_versions_array {
     return if !@rpm_list;
 
-    for my $rpm (@rpm_list) {
-        if ( $rpm =~ m{ \A MySQL-server-(.*) \z }xms ) {
-            push @mysql_rpm_versions, $1;
-        }
-        elsif ( $rpm =~ m{ \A MySQL-shared-(.*) \z }xms ) {
-            push @mysql_rpm_versions, $1;
-        }
-        elsif ( $rpm =~ m{ \A MySQL-devel-(.*) \z }xms ) {
-            push @mysql_rpm_versions, $1;
-        }
-        elsif ( $rpm =~ m{ \A MySQL-client-(.*) \z }xms ) {
-            push @mysql_rpm_versions, $1;
-        }
-        elsif ( $rpm =~ m{ \A MySQL-test-(.*) \z }xms ) {
-            push @mysql_rpm_versions, $1;
-        }
-        elsif ( $rpm =~ m{ \A MySQL-embedded-(.*) \z }xms ) {
-            push @mysql_rpm_versions, $1;
-        }
+    my @tmp  = grep { /^MySQL(?:55)?-(server|shared|devel|client|test|embedded)-(.*)$/ } @rpm_list;
+    for my $rpm (@tmp) {
+        $rpm =~ s/.*-(server|shared|devel|client|test|embedded)-//g;
+        push @mysql_rpm_versions, $rpm;
     }
 }
 
@@ -3912,6 +3898,39 @@ sub check_eximstats_corrupt {
 }
 
 sub check_for_clock_skew {
+    ## last updated 2/14/14
+    ## we do this to avoid having to do the DNS lookup
+    my @rdate_servers = qw(
+        64.50.161.11
+        66.23.237.210
+        67.159.2.2
+        67.205.110.4
+        67.222.0.10
+        67.227.128.74
+        69.50.192.73
+        69.72.212.10
+        69.72.212.11
+        70.87.220.252
+        72.233.42.250
+        74.200.212.130
+        74.200.65.162
+        74.50.120.123
+        75.126.236.226
+        75.127.84.226
+        208.109.109.239
+        208.74.123.21
+        208.74.125.42
+        208.78.42.4
+        208.82.118.100
+        209.188.92.54
+        209.85.80.214
+        216.104.43.138
+        216.38.56.98
+    );
+
+    my $num = int rand scalar @rdate_servers;
+    my $rdate_server = $rdate_servers[$num];
+
     my $localtime = time();
     my $rdate_time;
     my $clock_skew;
@@ -3922,11 +3941,12 @@ sub check_for_clock_skew {
       Jul 6   Aug 7   Sep 8   Oct 9   Nov 10  Dec 11
     );
 
-    $rdate_time = run( 'rdate', '-p', '-t', '1', 'rdate.cpanel.net' );
+    $rdate_time = run( 'rdate', '-p', '-t', '1', $rdate_server );
 
-    # fall back to UDP if necessary
+    ## fall back to UDP if necessary
+    ## we don't use UDP first because many of the rdate servers don't reply when using it
     if ( !$rdate_time ) {
-        $rdate_time = run( 'rdate', '-p', '-t', '1', '-u', 'rdate.cpanel.net' );
+        $rdate_time = run( 'rdate', '-p', '-t', '1', '-u', $rdate_server );
     }
 
     return if !$rdate_time;
@@ -4428,18 +4448,9 @@ sub check_for_rpm_dist_ver_unknown {
 sub check_for_homeloader_php_extension {
     return if ( $php5handler ne 'dso' );
 
-    my $php_ini        = '/usr/local/lib/php.ini';
-    my $has_homeloader = 0;
-
-    if ( open my $file_fh, '<', $php_ini ) {
-        while (<$file_fh>) {
-            if (m{ \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? homeloader\.so ['"]? }xms) {
-                print_warn('php module: ');
-                print_warning("homeloader.so found in ${php_ini}. This can cause errors. See FB 4471 and 63838");
-                last;
-            }
-        }
-        close $php_ini;
+    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? homeloader\.so ['"]? #xms } @phpini ) {
+        print_warn('/usr/local/lib/php.ini: ');
+        print_warning("homeloader.so extension found. This can cause errors. See FB 4471 and 63838");
     }
 }
 
@@ -4579,18 +4590,25 @@ sub check_for_PERL5LIB_env_var {
 sub check_for_cdorked {
     my $apache_bin = '/usr/local/apache/bin/httpd';
     return if ( !-f $apache_bin );
+    return if ((stat($apache_bin))[7] > $ten_MB ); # avoid slurping too much mem
 
     my $has_cdorked = 0; 
+    my $httpd;
 
-    if ( open my $file_fh, '<', $apache_bin ) {
-        while ( <$file_fh> ) {
-            if ( /open_tty/ ) {
-                $has_cdorked = 1; 
-                last;
-            }    
-        }    
-        close $file_fh;
-    }    
+    if ( open my $fh, '<', $apache_bin ) {
+        local $/;
+        $httpd = <$fh>;
+        close $fh;
+    }
+    else {
+        return;
+    }
+
+    return if !$httpd;
+
+    if ( $httpd =~ /open_tty/ ) {
+        $has_cdorked = 1;
+    }
 
     if ( $has_cdorked == 1 ) {
         print_warn('!! [ Linux/Cdorked ] !! ');
@@ -4970,58 +4988,17 @@ sub check_for_nocloudlinux_touchfile {
 }
 
 sub check_for_phphandler_and_opcode_caching_incompatibility {
-    my $php_conf_yaml = '/usr/local/apache/conf/php.conf.yaml';
-    return if !-e $php_conf_yaml;
-
-    my $using_suphp = 0;
-
-    if ( open my $file_fh, '<', $php_conf_yaml ) {
-        while ( <$file_fh> ) {
-            if ( /^php5:[ \t]+['"]?suphp/ ) {
-                $using_suphp = 1;
-            }
-        }
-        close $file_fh;
-    }
-    else {
-        return;
-    }
-
-    my $has_eaccelerator    = 0;
-    my $has_xcache          = 0;
-    my $has_apc             = 0;
-
-    if ( $using_suphp == 1 ) {
-        if ( open my $phpconf_fh, '<', '/usr/local/lib/php.ini' ) {
-            while ( <$phpconf_fh> ) {
-                if ( m{ \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? eaccelerator\.so ['"]? }xms) {
-                    $has_eaccelerator = 1;
-                }
-                elsif ( m{ \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? xcache\.so ['"]? }xms) {
-                    $has_xcache = 1;
-                }
-                elsif ( m{ \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? apc\.so ['"]? }xms) {
-                    $has_apc = 1;
-                }
-            }
-            close $phpconf_fh;
-        }
-        else {
-            return;
-        }
-    }
-    else {
-        return;
-    }
+    return if ( $php5handler ne 'suphp' );
 
     my $message;
-    if ( $has_eaccelerator == 1 ) {
-        $message = '[eAccelerator] ';
+
+    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? eaccelerator\.so ['"]? #xms } @phpini ) {
+        $message .= '[eAccelerator] ';
     }
-    if ( $has_xcache == 1 ) {
+    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? xcache\.so ['"]? #xms } @phpini ) {
         $message .= '[XCache] ';
     }
-    if ( $has_apc == 1 ) {
+    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? apc\.so ['"]? #xms } @phpini ) {
         $message .= '[APC] ';
     }
 
@@ -5061,36 +5038,29 @@ sub check_for_invalid_HOMEDIR {
 }
 
 sub check_for_unsupported_options_in_phpini { # case 75397
-    my $phpini = '/usr/local/lib/php.ini';
-    return if ( !-f $phpini );
+    return if !$php5version;
+
+    my ( undef, $php5minor ) = split /\./, $php5version;
+    return if ($php5minor <= 3);
 
     my $unsupported_options;
-    if ($php5version) {
-        my ( undef, $php5minor ) = split /\./, $php5version;
 
-        return if ($php5minor <= 3);
-
-        if ( open my $file_fh, '<', $phpini ) {
-            while ( <$file_fh> ) {
-                # http://www.php.net/manual/en/migration54.ini.php
-                # apparently "safe_mode = off" won't trigger 75397, but "safe_mode = on" will
-                # some items like "y2k_compliance = On" don't appear to trigger the issue
-                if ( m{ \A (?:[\s\t]+)? (register_globals|safe_mode) (?:[\s\t]+)? = (?:[\s\t]+)? ["']? on ['"]? }ixms ) {
-                    $unsupported_options .= "[$1] ";
-                }
-            }
-            close $file_fh;
-        }
-        else {
-            return;
-        }
+    ## http://www.php.net/manual/en/migration54.ini.php
+    ## apparently "safe_mode = off" won't trigger 75397, but "safe_mode = on" will.
+    ## some items like "y2k_compliance = On" don't appear to trigger the issue
+    if ( grep { m# \A (?:[\s\t]+)? register_globals (?:[\s\t]+)? = (?:[\s\t]+)? ["']? on ['"]? #ixms } @phpini ) {
+        $unsupported_options .= "[register_globals] ";
     }
+
+    if ( grep { m# \A (?:[\s\t]+)? safe_mode (?:[\s\t]+)? = (?:[\s\t]+)? ["']? on ['"]? #ixms } @phpini ) {
+        $unsupported_options .= "[safe_mode] ";
+    }    
 
     if ( $unsupported_options ) {
         $unsupported_options =~ s/\s$//g;
-        print_warn("$phpini: ");
+        print_warn('/usr/local/lib/php.ini: ');
         print_warning("PHP $php5version does not support $unsupported_options, but found enabled in php.ini. See FB 75397");
-    }
+    }    
 }
 
 sub check_for_suphp_but_no_fileprotect {
