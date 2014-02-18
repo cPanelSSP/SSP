@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.31';
+my $version = '4.99.32';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -258,6 +258,10 @@ check_for_missing_groups();
 check_for_cgihidepass();
 check_for_noquotafs();
 check_for_mod_rpaf();
+check_for_roundcube_overlay();
+check_for_hostname_park_zoneexists();
+check_for_pgpass_colon_in_password_field();
+check_for_dirs_that_break_ea();
 
 # [3RDP]
 check_for_assp();
@@ -557,6 +561,7 @@ sub print_tip {
         '[FB 44884] upcp resets Mailman lists\' hostnames. pre/postupcp hooks workaround in ticket 3541643',
         '[FB 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net',
         '[FB 42027] "Recently Uploaded Cgi Script Mail" scans and sends email alerts about downloaded files too',
+        '[FB 21774] Pure-FTPd is not linked against libwrap. As such, Host Access Control does nothing for it',
         'The cpanel-postgresql* packages are for phpPgAdmin. The postgresql-* packages are for PostgreSQL',
         'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)',
         'For a list of obscure issues, see the RareIssues wiki article',
@@ -576,7 +581,7 @@ sub print_tip {
         'Issues with MySQL for a single user? Check for /home/${USER}/.my.cnf',
         'Services reported as failing while backups are running? chksrvd may be simply timing out due to excessive disk I/O',
         'Blank page in File Manager\'s HTML Editor and iconv "illegal input sequence" in cPanel error_log? Try windows-1251 encoding (see ticket 4088633)',
-        'CentOS 5.x and CloudLinux 5.x do not support SNI. See the "SNI" wiki article for more info',
+        'Older CentOS 5.x and CloudLinux 5.x do not support SNI. See the "SNI" wiki article for more info',
         'domlogs are created 0644 by default. cpanellogd changes permissions on them to 0640 a few minutes later',
         'cPanel >> Error Log only searches "recent" logs in Apache\'s error_log . Showing as blank? Maybe there are no recent errors',
         'Horde showing "server configuration did not allow file to be uploaded"? Check disk/inode usage on /tmp',
@@ -586,6 +591,7 @@ sub print_tip {
         'File Manager upload size limits can be adjusted at WHM >> Tweak Settings >> Max HTTP submission size',
         '/var/cpanel/conf/apache/local can potentially cause issues. See ticket 3915299 for an example',
         'System backups are not uploaded via FTP by default, requires manual config. See http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/SystemBackups',
+        '$PATH may differ when executing something via cron rather than the command line. See ticket 4419531',
     );
 
     my $num  = int rand scalar @tips;
@@ -4387,7 +4393,7 @@ sub check_for_my_cnf_skip_name_resolve {
     if ( open my $my_cnf_fh, '<', $my_cnf ) {
         while (<$my_cnf_fh>) {
             chomp( my $line = $_ );
-            if ( $line =~ m{ \A [ \t]+? (skip[_-]na.*) }xms ) {
+            if ( $line =~ m{ \A (?:[ \t]+)? (skip[_-]na.*) }xms ) {
                 $conf_setting = $1;
                 $skip_name_resolve = 1;
                 last;
@@ -4565,7 +4571,7 @@ sub check_for_extra_uid_0_user {
     open my $file_fh, '<', '/etc/passwd' or die $!;
     while (<$file_fh>) {
         if (m{ \A ([^:]+) :x:0: }xms) {
-            next if $1 =~ m{ \A root | toor \z }xms;
+            next if $1 =~ m{ \A root \z }xms;
             $uid_0_users = 1;
             last;
         }
@@ -4573,7 +4579,7 @@ sub check_for_extra_uid_0_user {
     close $file_fh;
 
     if ( $uid_0_users == 1 ) {
-        print_warn('non root/toor uid 0 user(s): ');
+        print_warn('non root uid 0 user(s): ');
         print_warning('EasyApache failing with "can\'t create [...] all_iplist.db"? See FB 62467. Do *not* escalate as security issue.');
     }
 }
@@ -4656,6 +4662,7 @@ sub check_for_disabled_services {
         '/etc/disablehackcheck'     => 'hackcheck',
         '/etc/rrdtooldisable'       => 'bandwidth stats',
         '/etc/tomcatdisable'        => 'tomcat',
+        '/var/run/chkservd.suspend' => 'chksrvd',
     );
 
     while ( my ( $touchfile, $service ) = each ( %touchfiles ) ) {
@@ -5365,7 +5372,8 @@ sub check_for_missing_mysql_version_in_cpanelconfig {
 }
 
 sub check_for_port_80_not_apache {
-    my ( $filename, $pid );
+    my ( $filename, $pid, $cmdline );
+    my $unknown_httpd = 0;
 
     return if !@lsof_80;
     return if scalar @lsof_80 < 2;
@@ -5383,16 +5391,30 @@ sub check_for_port_80_not_apache {
     my $cwd = readlink "/proc/${pid}/cwd" or return;
 
     if ( $exe ne '/usr/local/apache/bin/httpd' ) {
+        $unknown_httpd = 1;
         open my $file_fh, '<', "/proc/${pid}/cmdline" or return;
-        my $cmdline = readline $file_fh;
+        $cmdline = readline $file_fh;
         close $file_fh;
 
         return if !$cmdline;
         $cmdline =~ s/\0/ /g;
         $cmdline =~ s/(\s+)$//g;
-    
-        print_warn('Port 80: ');
-        print_warning("something other than Apache is running [file: $filename] [exe: $exe] [cmd: $cmdline] [cwd: $cwd]");
+    }
+
+    return if !$unknown_httpd;
+
+    my $ipcs = run( 'ipcs', '-m' );
+
+    print_warn('Port 80: ');
+
+    print_warning("something other than Apache is running:");
+    print_magenta("\t \\_ file [$filename]");
+    print_magenta("\t \\_ exe  [$exe]");
+    print_magenta("\t \\_ cmd  [$cmdline]");
+    print_magenta("\t \\_ cwd  [$cwd]");
+
+    if ( $ipcs =~ /nobody/ ) {
+        print_magenta($ipcs);
     }
 }
 
@@ -5468,6 +5490,65 @@ sub check_for_mod_rpaf {
     if ( grep { /rpaf_module/ } @apache_modules_output ) {
         print_warn('mod_rpaf: ');
         print_warning('loaded. May prevent .htaccess from denying access. See 4422297');
+    }
+}
+
+sub check_for_roundcube_overlay {
+    my $rcdir = '/var/cpanel/roundcube';
+    return if !-d $rcdir;
+
+    opendir( my $dh, $rcdir );
+    my @contents = grep { !/^\.\.?$/ } readdir $dh;
+    close $dh;
+
+    if ( grep { /^overlay/ } @contents ) {
+        print_warn('Roundcube overlay: ');
+        print_warning("found an overlay file in $rcdir . Login issues? See ticket 4542785.");
+    }
+}
+
+sub check_for_hostname_park_zoneexists {
+    if ( -f "/var/named/${hostname}.db" and $cpconf{'allowparkonothers'} == 1 ) {
+        print_warn('Parking: ');
+        print_warning('since zone of hostname exists, "Allow domain parking across accounts" must be ON to park on the hostname');
+    }
+}
+
+sub check_for_pgpass_colon_in_password_field {
+    my $pgpass = '/root/.pgpass';
+    return if !-f $pgpass;
+
+    my $has_colon = 0;
+
+    if ( open my $fh, '<', $pgpass ) {
+        while (<$fh>) {
+            if ( /^\*:\*:\*:postgres:(.*)/ ) {
+                if ( $1 =~ /:/ ) {
+                    $has_colon = 1;
+                    last;
+                }
+            }
+        }
+        close $fh;
+    }
+
+    if ( $has_colon == 1 ) {
+        print_warn("$pgpass: ");
+        print_warning('password field contains a colon. Seeing Postgres auth issues? See FB 89093' );
+    }
+}
+
+sub check_for_dirs_that_break_ea {
+    my @dirs = qw(
+        /usr/local/cpanel/cgi-sys/php5
+        /var/cpanel/conf/apache/wrappers/php5
+    );
+
+    for my $dir (@dirs) {
+        if ( -d $dir ) {
+            print_warn("$dir: ");
+            print_warning('is a directory! This can cause EA issues. See ticket 4537779.');
+        }
     }
 }
 
