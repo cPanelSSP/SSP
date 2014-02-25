@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.33';
+my $version = '4.99.34';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -76,6 +76,16 @@ if ( -x '/usr/local/apache/bin/httpd' ) {
 my @lsof_80 = split /\n/, run( 'lsof', '-n', '-i', 'tcp:80' );
 my @phpini  = get_phpini();
 
+{
+    if ( open( my $cpconf_fh, '<', '/var/cpanel/cpanel.config' ) ) {
+        local $/ = undef;
+        %cpconf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($cpconf_fh) );
+    }
+    else {
+        die "/var/cpanel/cpanel.config could not be opened. Unable to proceed.\n";
+    }
+}
+
 
 ######################
 ##  END GLOBALS     ##
@@ -105,7 +115,6 @@ check_sysinfo();
 check_for_remote_mysql();
 print_if_using_mydns_or_nsd();
 print_if_using_modruid2();
-print_which_php_is_used_internally();
 print_mysql_version();
 print_backups_info();
 
@@ -115,7 +124,6 @@ check_runlevel();
 check_for_missing_root_cron();
 check_if_upcp_is_running();
 check_valid_upcp();
-check_for_sandy_bridge();
 check_interface_lo();
 check_cpanelconfig_filetype();
 check_cpanelsync_exclude();
@@ -159,9 +167,7 @@ check_for_missing_timezone_from_phpini();
 check_for_proc_mdstat_recovery();
 check_usr_local_cpanel_path_for_symlinks();
 check_for_system_mem_below_512M();
-check_for_options_rotate_redhat_centos_63();
-check_pecl_phpini_location();
-check_for_empty_yumconf();
+check_yumconf_sanity();
 check_for_cpanel_files();
 check_bash_history_for_certain_commands();
 check_wwwacctconf_for_incorrect_minuid();
@@ -169,7 +175,6 @@ check_roots_cron_for_certain_commands();
 check_for_missing_or_commented_customlog();
 check_for_cpsources_conf();
 check_for_apache_rlimits();
-check_cron_processes();
 check_for_usr_local_lib_libz_so();
 check_for_non_default_modsec_rules();
 check_etc_hosts_sanity();
@@ -177,9 +182,7 @@ check_for_empty_or_missing_files();
 check_for_apache_listen_host_is_localhost();
 check_roundcube_mysql_pass_mismatch();
 check_for_kernel_headers_rpm();
-check_for_extra_uid0_pwcache_file();
 check_for_11_30_scripts_not_a_symlink();
-check_for_cpanel_not_updating();
 check_for_hooks_from_var_cpanel_hooks_yaml();
 check_for_non_default_mysql_error_log_location();
 check_for_C_compiler_optimization();
@@ -200,14 +203,11 @@ check_for_clock_skew();
 check_for_zlib_h();
 check_if_httpdconf_ipaddrs_exist();
 check_distcache_and_libapr();
-check_for_mainip_newline();
 check_for_custom_postgres_repo();
 check_for_rpm_overrides();
 check_for_odd_yum_conf();
 check_var_cpanel_immutable_files();
-check_for_hordepass_newline();
 check_for_noxsave_in_grub_conf();
-check_for_cpanel_CN_newline();
 check_for_my_cnf_skip_name_resolve();
 check_for_my_cnf_sql_mode();
 check_for_rpm_dist_ver_unknown();
@@ -221,9 +221,8 @@ check_for_rpmsave_conf();
 check_for_cloudlinux_mysql_gov();
 check_cpanel_config_for_low_maxmem();
 check_pure_ftpd_conf_for_upload_script_and_dead();    #must come after check_cpanel_config_for_low_maxmem
-check_for_extra_uid_0_user();                         # this is NOT a security check, but for FB 62467
 check_for_PERL5LIB_env_var();
-check_for_cdorked();
+check_for_cdorked_A();
 check_for_disabled_services();
 check_for_cpbackup_exclude_everything();
 check_for_usr_local_include_jpeglib_h();
@@ -231,7 +230,6 @@ check_for_bw_module_and_more_than_1024_vhosts();
 check_for_uppercase_chars_in_hostname();
 check_for_stale_upgrade_in_progress_txt();
 check_for_bad_permissions_on_named_ca();
-check_for_skiphttpauth_disabled();
 check_for_use_compiled_dnsadmin();
 check_for_mysql_root_pass_with_single_quote();
 check_for_jailshell_additional_mounts_trailing_slash();
@@ -262,6 +260,7 @@ check_for_roundcube_overlay();
 check_for_hostname_park_zoneexists();
 check_for_pgpass_colon_in_password_field();
 check_for_dirs_that_break_ea();
+check_for_cdorked_B();
 
 # [3RDP]
 check_for_assp();
@@ -322,7 +321,6 @@ sub check_for_dnsonly {
         check_runlevel();
         check_for_missing_root_cron();
         check_if_upcp_is_running();
-        check_for_sandy_bridge();
         check_interface_lo();
         check_cpanelconfig_filetype();
         check_cpanelsync_exclude();
@@ -340,15 +338,13 @@ sub check_for_dnsonly {
         check_for_proc_mdstat_recovery();
         check_usr_local_cpanel_path_for_symlinks();
         check_for_system_mem_below_512M();
-        check_for_options_rotate_redhat_centos_63();
-        check_for_empty_yumconf();
+        check_yumconf_sanity();
         check_for_cpanel_files();
         check_bash_history_for_certain_commands();
         check_roots_cron_for_certain_commands();
         check_for_PERL5LIB_env_var();
 
         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
-        check_cron_processes();
         check_etc_hosts_sanity();
         check_for_C_compiler_optimization();
         check_perl_version_less_than_588();
@@ -358,12 +354,9 @@ sub check_for_dnsonly {
         check_for_clock_skew();
         check_for_percona_rpms();
         check_for_duplicate_rpms();
-        check_for_mainip_newline();
         check_for_rpm_overrides();
         check_var_cpanel_immutable_files();
-        check_for_hordepass_newline();
         check_for_noxsave_in_grub_conf();
-        check_for_cpanel_CN_newline();
         check_for_networkmanager();
         check_for_disabled_services();
         check_for_harmful_php_mode_600_cron();
@@ -999,7 +992,7 @@ sub check_for_clustering {
 
     if ( -d $cluster_dir ) {
         opendir( my $dir_fh, $cluster_dir );
-        @dir_contents = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+        @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
         closedir $dir_fh;
     }
 
@@ -1347,70 +1340,6 @@ sub print_if_using_modruid2 {
     }
 }
 
-sub print_which_php_is_used_internally {
-    my ( $v1, $v2 ) = split /\./, $cpanel_version;
-
-    # /var/cpanel/usecpphp is no longer used in cPanel 11.36+
-    if ( ( $v1 > 11 ) || ( $v1 == 11 ) and ( $v2 >= 36 ) ) {
-        return;
-    }
-
-    # http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/CpsrvdAndPhp
-
-    my $whm_php;
-    my $cpanel_php;
-
-    # WHM, Webmail, phpMyAdmin, phpPgAdmin
-    if ( -f '/var/cpanel/usecpphp' ) {
-        if ( -x '/var/cpanel/3rdparty/bin/php-cgi' ) {
-            $whm_php = '/var/cpanel/3rdparty/bin/php-cgi';
-        }
-        else {
-            if ( -x '/var/cpanel/3rdparty/bin/php' ) {
-                $whm_php = '/var/cpanel/3rdparty/bin/php';
-            }
-            else {
-                if ( -x '/usr/local/cpanel/3rdparty/bin/php-cgi' ) {
-                    $whm_php = '/usr/local/cpanel/3rdparty/bin/php-cgi';
-                }
-                else {
-                    $whm_php = '/usr/local/cpanel/3rdparty/bin/php';
-                }
-            }
-        }
-    }
-    else {
-        if ( -x '/usr/local/cpanel/3rdparty/bin/php-cgi' ) {
-            $whm_php = '/usr/local/cpanel/3rdparty/bin/php-cgi';
-        }
-        else {
-            $whm_php = '/usr/local/cpanel/3rdparty/bin/php';
-        }
-    }
-
-    # cPanel
-    if ( -f '/var/cpanel/usecpphp' ) {
-        $cpanel_php = $whm_php;
-    }
-    else {
-        if ( -x '/usr/bin/php-cgi' ) {
-            $cpanel_php = '/usr/bin/php-cgi';
-        }
-        else {
-            $cpanel_php = '/usr/bin/php';
-        }
-    }
-
-    if ( $whm_php eq $cpanel_php ) {
-        print_info('Internal PHP: ');
-        print_normal("$whm_php (used by WHM, cPanel, webmail, phpMyAdmin, phpPgAdmin)");
-    }
-    else {
-        print_info('Internal PHP: ');
-        print_normal("$whm_php (used by WHM, webmail, phpMyAdmin, phpPgAdmin) $cpanel_php (used by cPanel)");
-    }
-}
-
 sub print_mysql_version {
     my $mysql_output = run( 'mysql', '-V' );
     if ( $mysql_output ) {
@@ -1563,66 +1492,6 @@ sub check_valid_upcp {
     }
 }
 
-sub check_for_sandy_bridge {
-    return if !-e '/proc/cpuinfo';
-
-    my $sandy_bridge = 0;
-
-    my ( $release_version, undef ) = get_release_version();
-    $release_version =~ s/\.//g;
-
-    # CentOS/RHEL 5 is not affected
-    return if ( $release_version < 60 );
-
-    # QEMU + CentOS 6.3 could be affected if using Sandy Bridge.
-    # No way to determine if using Sandy Bridge, however.
-    if ( $release_version == 63 and $cpuinfo{'model'} =~ m{ QEMU }ixms ) {
-        print_warn('QEMU + CentOS 6.3: ');
-        print_warning('if server is using Sandy Bridge CPU, could be affected by the AVX issue');
-        return;
-    }
-
-    # If we make it here, only check CentOS/RHEL 6.0 - 6.2
-    if ( $release_version !~ m{ \A 6[0-2] \z }xms ) {
-        return;
-    }
-
-    if ( open my $cpuinfo_fh, '<', '/proc/cpuinfo' ) {
-        while (<$cpuinfo_fh>) {
-            chomp;
-
-            # http://en.wikipedia.org/wiki/Sandy_Bridge#Server_platform
-            if (
-                   /^model name/
-                && /Xeon/
-                && m{    46(\d{2})
-                                                | 12(2|6)0L
-                                                | 24(3|5)0L
-                                                | 26(3|5)0L
-                                                | 12([2-4]|7)5
-                                                | 12([2-4]|[7-9])0
-                                                | 16(2|[5-6])0
-                                                | 240(3|7)
-                                                | 24([2-5]|7)0
-                                                | 260(3|9)
-                                                | 26([2-9])0
-                                                | 26(37|43)
-                                                | 266(5|7)
-                                                | 2687W
-                                            }xms && !/E(\d{5})/
-              ) {
-                $sandy_bridge = 1;
-            }
-        }
-        close $cpuinfo_fh;
-    }
-
-    if ( $sandy_bridge == 1 ) {
-        print_warn('AVX / Sandy Bridge: ');
-        print_warning('detected! compile ssp.cpanel.net/glibc_avx.tar.gz and run ./exe (check for "Illegal instruction")');
-    }
-}
-
 sub check_interface_lo {
     my $is_up = 0;
 
@@ -1668,16 +1537,10 @@ sub check_loopback_connection {
 }
 
 sub check_cpanelconfig_filetype {
-    if ( !-e '/var/cpanel/cpanel.config' ) {
+    chomp( my $file = run( 'file', '/var/cpanel/cpanel.config' ) );
+    if ( $file !~ m{ \A /var/cpanel/cpanel.config: \s ASCII \s text \z }xms ) {
         print_warn('/var/cpanel/cpanel.config: ');
-        print_warning('missing!');
-    }
-    else {
-        chomp( my $file = run( 'file', '/var/cpanel/cpanel.config' ) );
-        if ( $file !~ m{ \A /var/cpanel/cpanel.config: \s ASCII \s text \z }xms ) {
-            print_warn('/var/cpanel/cpanel.config: ');
-            print_warning("filetype is something other than 'ASCII text'! ($file)");
-        }
+        print_warning("filetype is something other than 'ASCII text'! ($file)");
     }
 }
 
@@ -1750,7 +1613,7 @@ sub check_for_rawopts {
 
     if ( -d $rawopts_dir ) {
         opendir( my $dir_fh, $rawopts_dir );
-        @dir_contents = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+        @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
         closedir $dir_fh;
     }
 
@@ -1766,7 +1629,7 @@ sub check_for_rawenv {
 
     if ( -d $rawenv_dir ) {
         opendir( my $dir_fh, $rawenv_dir );
-        @dir_contents = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+        @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
         closedir $dir_fh;
     }
 
@@ -1917,13 +1780,9 @@ sub check_perl_sanity {
     my $usr_bin_perl       = '/usr/bin/perl';
     my $usr_local_bin_perl = '/usr/local/bin/perl';
 
-    if ( !$usr_bin_perl ) {
+    if ( !-e $usr_bin_perl ) {
         print_warn('perl: ');
         print_warning("$usr_bin_perl does not exist!");
-    }
-    if ( !$usr_local_bin_perl ) {
-        print_warn('perl: ');
-        print_warning("$usr_local_bin_perl does not exist!");
     }
 
     if ( -l $usr_bin_perl and -l $usr_local_bin_perl ) {
@@ -2086,29 +1945,17 @@ sub check_for_non_default_permissions {
 }
 
 sub check_awstats_permissions {
-    my $cpanel_config = '/var/cpanel/cpanel.config';
-    my $awstats       = '/usr/local/cpanel/3rdparty/bin/awstats.pl';
-    my $skipawstats   = 0;
+    ## if skipawstats doesn't exist, awstats is OFF
+    return if ( ( exists $cpconf{'skipawstats'} and $cpconf{'skipawstats'} == 1 ) or ( not exists $cpconf{'skipawstats'} ));
 
-    return if !-e $cpanel_config;
+    my $awstats = '/usr/local/cpanel/3rdparty/bin/awstats.pl';
 
-    if ( open my $cpanel_config_fh, '<', $cpanel_config ) {
-        while (<$cpanel_config_fh>) {
-            if (/^skipawstats=(\d)/) {
-                $skipawstats = $1;
-            }
-        }
-        close $cpanel_config_fh;
-    }
-
-    if ( $skipawstats == 0 ) {
-        if ( -e $awstats ) {
-            my $mode = ( stat($awstats) )[2] & 07777;
-            $mode = sprintf "%lo", $mode;
-            if ( $mode != 755 ) {
-                print_warn('Awstats: ');
-                print_warning(" enabled, but $awstats isn't 755 !");
-            }
+    if ( -e $awstats ) {
+        my $mode = ( stat($awstats) )[2] & 07777;
+        $mode = sprintf "%lo", $mode;
+        if ( $mode != 755 ) {
+            print_warn('Awstats: ');
+            print_warning(" enabled, but $awstats isn't 755 !");
         }
     }
 }
@@ -2119,7 +1966,7 @@ sub check_var_cpanel_users_files_ownership {
     my @files;
     if ( -d $var_cpanel_users ) {
         opendir( my $dir_fh, $var_cpanel_users );
-        @files = grep { !m/^(?:\.(\.?)|root|system|nobody)$/ } readdir $dir_fh;
+        @files = grep { !m/^(?:\.\.?|root|system|nobody)$/ } readdir $dir_fh;
         closedir $dir_fh;
     }
 
@@ -2574,7 +2421,7 @@ sub check_for_empty_apache_templates {
 
     if ( -d $apache2_template_dir ) {
         opendir( my $dir_fh, $apache2_template_dir );
-        @dir_contents = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+        @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
         closedir $dir_fh;
     }
 
@@ -2852,6 +2699,7 @@ sub check_for_system_mem_below_512M {
         while (<$meminfo_fh>) {
             if (m{ \A MemTotal: \s+ (\d+) \s+ kB \s+ \z }xms) {
                 $memtotal = $1 / 1024;
+                last;
             }
         }
         close $meminfo_fh;
@@ -2863,51 +2711,7 @@ sub check_for_system_mem_below_512M {
     }
 }
 
-## This is already fixed: http://rhn.redhat.com/errata/RHBA-2012-1158.html
-sub check_for_options_rotate_redhat_centos_63 {
-    my $sysinfo_config = '/var/cpanel/sysinfo.config';
-    my $os_release;
-    my $resolv_conf    = '/etc/resolv.conf';
-    my $options_rotate = 0;
-
-    if ( open my $sysinfo_config_fh, '<', $sysinfo_config ) {
-        while ( my $line = <$sysinfo_config_fh> ) {
-            if ( $line =~ m{ \A release=(\d\.\d) }xms ) {
-                $os_release = $1;
-                last;
-            }
-        }
-        close $sysinfo_config_fh;
-    }
-
-    if ( $os_release and $os_release eq '6.3' ) {
-        if ( open my $resolv_conf_fh, '<', $resolv_conf ) {
-            while ( my $line = <$resolv_conf_fh> ) {
-                if ( $line =~ m{ options \s+ rotate }xms ) {
-                    $options_rotate = 1;
-                    last;
-                }
-            }
-            close $resolv_conf_fh;
-        }
-    }
-
-    if ( $options_rotate == 1 ) {
-        print_warn('RH/CentOS 6.3 resolv.conf: ');
-        print_warning('contains "options rotate", can break lookups. See FB 60347. Already fixed upstream.');
-    }
-}
-
-sub check_pecl_phpini_location {
-    my $pecl_phpini = run( 'pecl', 'config-get', 'php_ini' );
-    chomp $pecl_phpini;
-    if ( $pecl_phpini and $pecl_phpini =~ /cpanel/ ) {
-        print_warn('pecl php.ini: ');
-        print_warning("'pecl config-get php_ini' shows php.ini path of $pecl_phpini . See FB 59764 for more info");
-    }
-}
-
-sub check_for_empty_yumconf {
+sub check_yumconf_sanity {
     my $yumconf = '/etc/yum.conf';
 
     if ( !-e $yumconf ) {
@@ -2918,6 +2722,7 @@ sub check_for_empty_yumconf {
         print_warn('YUM: ');
         print_warning("$yumconf is empty!");
     }
+
     if ( open( my $yum_conf_fh, '<', '/etc/yum.conf' ) ) {
         local $/ = undef;
         my $yum_conf_text = readline($yum_conf_fh);
@@ -2926,7 +2731,6 @@ sub check_for_empty_yumconf {
             print_warning("$yumconf has wget excluded!");
         }
     }
-
 }
 
 sub check_for_cpanel_files {
@@ -2989,6 +2793,7 @@ sub check_wwwacctconf_for_incorrect_minuid {
         while (<$wwwacctconf_fh>) {
             if (/^MINUID\s(\d+)$/) {
                 $minuid = $1;
+                last;
             }
         }
         close $wwwacctconf_fh;
@@ -3178,27 +2983,6 @@ sub check_for_apache_rlimits {
     }
 }
 
-sub check_cron_processes {
-    my $crond_is_running         = 0;
-    my $number_of_cron_processes = 0;
-
-    for my $process (@process_list) {
-        if ( $process =~ m{ \A root (?:.*) crond }xms ) {
-            $crond_is_running = 1;
-            $number_of_cron_processes += 1;
-        }
-    }
-
-    if ( $crond_is_running == 0 ) {
-        print_warn('crond: ');
-        print_warning('not found in the process list!');
-    }
-    elsif ( $number_of_cron_processes > 1 ) {
-        print_warn('crond: ');
-        print_warning('multiple cron processes found. This can cause "Cpanel update hanging" emails');
-    }
-}
-
 sub check_for_usr_local_lib_libz_so {
     if ( -f '/usr/local/lib/libz.so' ) {
         print_warn('/usr/local/lib/libz.so: ');
@@ -3259,28 +3043,27 @@ sub check_etc_hosts_sanity {
         print_warning('missing!');
         return;
     }
-    else {
-        if ( open my $hosts_fh, '<', $hosts ) {
-            while ( my $line = <$hosts_fh> ) {
-                chomp $line;
 
-                next if ( $line =~ /^(\s+)?#/ );
+    if ( open my $hosts_fh, '<', $hosts ) {
+        while ( my $line = <$hosts_fh> ) {
+            chomp $line;
 
-                if ( $line =~ m{  127\.0\.0\.1 (.*) localhost }xms ) {
-                    $localhost = 1;
-                }
-                if ( ( $line =~ m{ \s localhost (\s|\z) }xmsi ) and ( $line !~ m{ 127\.0\.0\.1 | ::1 }xms ) ) {
-                    $localhost_not_127 = 1;
-                }
-                if ( $line =~ m{ httpupdate\.cpanel\.net }xmsi ) {
-                    $httpupdate = 1;
-                }
-                if ( $line =~ m{ $hostname }xmsi ) {
-                    $hostname_entry = 1;
-                }
+            next if ( $line =~ /^(\s+)?#/ );
+
+            if ( $line =~ m{  127\.0\.0\.1 (.*) localhost }xms ) {
+                $localhost = 1;
             }
-            close $hosts_fh;
+            if ( ( $line =~ m{ \s localhost (\s|\z) }xmsi ) and ( $line !~ m{ 127\.0\.0\.1 | ::1 }xms ) ) {
+                $localhost_not_127 = 1;
+            }
+            if ( $line =~ m{ httpupdate\.cpanel\.net }xmsi ) {
+                $httpupdate = 1;
+            }
+            if ( $line =~ m{ $hostname }xmsi ) {
+                $hostname_entry = 1;
+            }
         }
+        close $hosts_fh;
     }
 
     if ( $localhost == 0 ) {
@@ -3306,7 +3089,7 @@ sub check_etc_hosts_sanity {
 
 sub check_for_empty_or_missing_files {
     opendir( my $dir_fh, '/var/cpanel/users' );
-    my @dir_contents = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+    my @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
     closedir $dir_fh;
 
     # if there are no users on the box, don't warn about userdatadomains
@@ -3325,44 +3108,22 @@ sub check_for_empty_or_missing_files {
 }
 
 sub check_for_apache_listen_host_is_localhost {
-    my $cpanel_config = '/var/cpanel/cpanel.config';
-    my $localhost_80;
+    return if not exists $cpconf{'apache_port'};
 
-    return if !-f $cpanel_config;
+    my $apache_setting = $cpconf{'apache_port'};
+    $apache_setting =~ s/:.*//g;
 
-    if ( open my $cpanel_config_fh, '<', $cpanel_config ) {
-        while (<$cpanel_config_fh>) {
-            if (/^apache_port=(\d+\.\d+\.\d+\.\d+):(?:\d+)/) {
-                if ( $1 eq '127.0.0.1' ) {
-                    $localhost_80 = 1;
-                }
-            }
-        }
-        close $cpanel_config_fh;
-    }
-
-    if ($localhost_80) {
+    if ( $apache_setting eq '127.0.0.1' ) {
         print_warn('Apache listen host: ');
         print_warning('Apache may only be listening on 127.0.0.1');
     }
 }
 
 sub check_roundcube_mysql_pass_mismatch {
-    my $roundcube_mysql = 0;
+    return if ( exists $cpconf{'roundcube_db'} and $cpconf{'roundcube_db'} ne 'mysql' );
+
     my $roundcubepass;
     my $rc_mysql_pass;
-
-    if ( open my $cpanelconf_fh, '<', '/var/cpanel/cpanel.config' ) {
-        while (<$cpanelconf_fh>) {
-            if (/roundcube_db=mysql/) {
-                $roundcube_mysql = 1;
-                last;
-            }
-        }
-        close $cpanelconf_fh;
-    }
-
-    return if ( $roundcube_mysql == 0 );
 
     if ( open my $rc_pass_fh, '<', '/var/cpanel/roundcubepass' ) {
         while (<$rc_pass_fh>) {
@@ -3396,16 +3157,6 @@ sub check_roundcube_mysql_pass_mismatch {
     }
 }
 
-
-# Fixed in 11.36.1.3, case 62467
-sub check_for_extra_uid0_pwcache_file {
-    return if ($cpanel_version_major <= 11 and $cpanel_version_minor > 36);
-    if ( -f '/var/cpanel/pw.cache/2:0' ) {
-        print_warn('MySQL: ');
-        print_warning('/var/cpanel/pw.cache/2:0 exists. If MySQL shows as offline in cPanel, please update FB 59670');
-    }
-}
-
 sub check_for_11_30_scripts_not_a_symlink {
     my ( $v1, $v2 ) = split /\./, $cpanel_version;
 
@@ -3415,77 +3166,6 @@ sub check_for_11_30_scripts_not_a_symlink {
             print_warning("cPanel is >= 11.30 [$cpanel_version] and /scripts is not a symlink");
         }
     }
-}
-
-# ripped some of Cpanel::Sys::GetOS::getos() for this
-sub check_for_cpanel_not_updating {
-    my ( $v1, $v2 ) = split /\./, $cpanel_version;
-    my $os_vendor;
-    my $release_string;
-    my $updates;
-    my @release_files = qw(
-      fedora-release
-      whitebox-release
-      trustix-release
-      caos-release
-      gentoo-release
-      SuSE-release
-      mandrake-release
-      CentOS-release
-      redhat-release
-      debian_version
-    );
-
-    for my $release_file (@release_files) {
-        if ( -e '/etc/' . $release_file ) {
-            if ( ( ($os_vendor) = $release_file =~ m/^([^\-_]+)/ )[0] ) {
-                $os_vendor = lc $os_vendor;
-                last;
-            }
-        }
-    }
-
-    ## Ignore Fedora, RHEL 3-4, Redhat 7-9
-    return if ( $os_vendor =~ /fedora/ );
-
-    if ( -f '/etc/redhat-release' ) {
-        if ( open my $rr_fh, '<', '/etc/redhat-release' ) {
-            $release_string = readline $rr_fh;
-            close $rr_fh;
-        }
-        else {
-            $release_string = 'unknown';
-        }
-    }
-
-    return if ( $release_string =~ /Red Hat Enterprise Linux (?:.*) release (3|4)/ );
-    return if ( $release_string =~ /Red Hat Linux release ([7-9])/ );
-
-    if ( open my $cpupdate_conf_fh, '<', '/etc/cpupdate.conf' ) {
-        while (<$cpupdate_conf_fh>) {
-            if (/UPDATES=(.*)/) {
-                $updates = lc $1;
-                last;
-            }
-        }
-        close $cpupdate_conf_fh;
-    }
-
-    $updates = 'unknown' if !$updates;
-
-    ## TEST 1: cPanel < 11.29, updates set to daily
-    if ( ( $v1 < 11 ) || ( $v1 == 11 ) and ( $v2 < 29 ) ) {
-        if ( $updates eq 'daily' ) {
-            print "\n!! cPanel may not be updating on this server !!\n";
-            print_warn('L1/L2: ');
-            print_warning('escalate the ticket to L3 now');
-            print_warn('L3: ');
-            print_warning('check cP updatelogs, see why cPanel isn\'t updated, try to update if needed. Escalate to L4 if it can\'t update');
-            print "\n\n";
-        }
-    }
-    ## TEST 2: cPanel >= 11.29, updates set to daily, not updated in >= 24 hours
-    ## Check removed for now due to false positives
 }
 
 sub check_for_hooks_from_var_cpanel_hooks_yaml {
@@ -3557,22 +3237,10 @@ sub check_for_non_default_mysql_error_log_location {
 }
 
 sub check_for_C_compiler_optimization {
-    my $enablecompileroptimizations = 0;
+    return if ( not exists $cpconf{'enablecompileroptimizations'} or $cpconf{'enablecompileroptimizations'} == 0 );
 
-    if ( open my $file_fh, '<', '/var/cpanel/cpanel.config' ) {
-        while (<$file_fh>) {
-            if (m{ \A enablecompileroptimizations=(\d) }xms) {
-                $enablecompileroptimizations = $1;
-                last;
-            }
-        }
-        close $file_fh;
-    }
-
-    if ( $enablecompileroptimizations == 1 ) {
-        print_warn('Tweak Setting: ');
-        print_warning('"Enable optimizations for the C compiler" enabled. If Sandy Bridge CPU, problems MAY occur (see ticket 3355885)');
-    }
+    print_warn('Tweak Setting: ');
+    print_warning('"Enable optimizations for the C compiler" enabled. If Sandy Bridge CPU, problems MAY occur (see ticket 3355885)');
 }
 
 sub check_for_low_ulimit_for_root {
@@ -3784,7 +3452,7 @@ sub check_for_custom_locales {
     my ( @users_locales, @users_with_custom_locales );
 
     opendir( my $locale_dir_fh, $locale_dir );
-    @locale_dir_contents_tmp = grep { !/^\.(\.?)$/ } readdir $locale_dir_fh;
+    @locale_dir_contents_tmp = grep { !/^\.\.?$/ } readdir $locale_dir_fh;
     closedir $locale_dir_fh;
 
     return if !@locale_dir_contents_tmp;
@@ -3798,7 +3466,7 @@ sub check_for_custom_locales {
     return if !@locale_dir_contents;
 
     opendir( my $users_dir_fh, $users_dir );
-    @cpanel_users = grep { !/^(\.(\.?)|root)$/ } readdir $users_dir_fh;
+    @cpanel_users = grep { !/^(\.\.?|root)$/ } readdir $users_dir_fh;
     closedir $users_dir_fh;
 
     return if !@cpanel_users;
@@ -4144,32 +3812,6 @@ sub check_distcache_and_libapr {
     }
 }
 
-sub check_for_mainip_newline {
-    my $mainip      = '/var/cpanel/mainip';
-    my $has_newline = 0;
-
-    if ( !-e $mainip ) {
-        print_warn("$mainip: ");
-        print_warning('missing!');
-    }
-    else {
-        if ( open my $mainip_fh, '<', $mainip ) {
-            while (<$mainip_fh>) {
-                if (/\n/) {
-                    $has_newline = 1;
-                    last;
-                }
-            }
-            close $mainip_fh;
-        }
-    }
-
-    if ( $has_newline == 1 ) {
-        print_warn("$mainip: ");
-        print_warning('contains a newline. /scripts/ipcheck may send incorrect "hostname [..] should resolve to" emails. See FB 54844');
-    }
-}
-
 sub check_for_custom_postgres_repo {
     my $yum_repos_dir = '/etc/yum.repos.d/';
     my @dir_contents;
@@ -4178,7 +3820,7 @@ sub check_for_custom_postgres_repo {
     return if !-d $yum_repos_dir;
 
     opendir( my $dir_fh, $yum_repos_dir );
-    @dir_contents = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+    @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
     closedir $dir_fh;
 
     for my $repos (@dir_contents) {
@@ -4232,7 +3874,7 @@ sub check_for_rpm_overrides {
     }
 
     opendir( my $dir_fh, $rpm_override_dir );
-    my @dir_contents = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+    my @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
     closedir $dir_fh;
 
     if ( $local_is_default == 1 ) {
@@ -4311,32 +3953,6 @@ sub check_var_cpanel_immutable_files {
     }
 }
 
-sub check_for_hordepass_newline {
-    my $hordepass   = '/var/cpanel/hordepass';
-    my $has_newline = 0;
-
-    if ( !-e $hordepass ) {
-        print_warn("$hordepass: ");
-        print_warning('missing!');
-    }
-    else {
-        if ( open my $hordepass_fh, '<', $hordepass ) {
-            while (<$hordepass_fh>) {
-                if (/\n/) {
-                    $has_newline = 1;
-                    last;
-                }
-            }
-            close $hordepass_fh;
-        }
-    }
-
-    if ( $has_newline == 1 ) {
-        print_warn("$hordepass: ");
-        print_warning('contains a newline. This can cause leftover cptmpdb_* MySQL dbs. See FB 63364');
-    }
-}
-
 sub check_for_noxsave_in_grub_conf {
     my $grub_conf   = '/boot/grub/grub.conf';
     my $has_noxsave = 0;
@@ -4356,32 +3972,6 @@ sub check_for_noxsave_in_grub_conf {
     if ( $has_noxsave == 1 ) {
         print_warn('noxsave: ');
         print_warning("found in ${grub_conf}. kernel panics? segfaults? see ticket 3689211");
-    }
-}
-
-sub check_for_cpanel_CN_newline {
-    my $cpanel_CN   = '/var/cpanel/ssl/cpanel-CN';
-    my $has_newline = 0;
-
-    if ( !-e $cpanel_CN ) {
-        print_warn("$cpanel_CN: ");
-        print_warning('missing!');
-    }
-    else {
-        if ( open my $cpanel_CN_fh, '<', $cpanel_CN ) {
-            while (<$cpanel_CN_fh>) {
-                if (/\n/) {
-                    $has_newline = 1;
-                    last;
-                }
-            }
-            close $cpanel_CN_fh;
-        }
-    }
-
-    if ( $has_newline == 1 ) {
-        print_warn("$cpanel_CN: ");
-        print_warning('contains a newline. This can cause "Access Web Disk" menus to not work. See FB 63425');
     }
 }
 
@@ -4565,25 +4155,6 @@ sub check_for_missing_etc_localtime {
     }
 }
 
-sub check_for_extra_uid_0_user {
-    my $uid_0_users = 0;
-
-    open my $file_fh, '<', '/etc/passwd' or die $!;
-    while (<$file_fh>) {
-        if (m{ \A ([^:]+) :x:0: }xms) {
-            next if $1 =~ m{ \A root \z }xms;
-            $uid_0_users = 1;
-            last;
-        }
-    }
-    close $file_fh;
-
-    if ( $uid_0_users == 1 ) {
-        print_warn('non root uid 0 user(s): ');
-        print_warning('EasyApache failing with "can\'t create [...] all_iplist.db"? See FB 62467. Do *not* escalate as security issue.');
-    }
-}
-
 sub check_for_PERL5LIB_env_var {
     my $PERL5LIB = $ENV{'PERL5LIB'};
 
@@ -4593,7 +4164,7 @@ sub check_for_PERL5LIB_env_var {
     }
 }
 
-sub check_for_cdorked {
+sub check_for_cdorked_A {
     my $apache_bin = '/usr/local/apache/bin/httpd';
     return if ( !-f $apache_bin );
     return if ((stat($apache_bin))[7] > $ten_MB ); # avoid slurping too much mem
@@ -4783,7 +4354,7 @@ sub check_for_harmful_php_mode_600_cron {
     my $cron_file;
 
     opendir( my $dir_fh, '/etc/cron.daily' ) or return;
-    @dir_contents = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+    @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
     closedir $dir_fh;
 
     for my $file ( @dir_contents ) {
@@ -4840,49 +4411,25 @@ sub check_for_bad_permissions_on_named_ca {
     }
 }
 
-sub check_for_skiphttpauth_disabled {
-    my $cpanel_config = '/var/cpanel/cpanel.config';
-    my $skiphttpauth_setting; # should be 0 or 1 in cpanel.config
-
-    if ( open my $config_fh, '<', $cpanel_config ) {
-        while ( <$config_fh> ) {
-            if ( /^skiphttpauth=(\d)$/ ) {
-                $skiphttpauth_setting = $1;
-                last;
-            }
-        }
-        close $config_fh;
-    }
-    else {
-        return;
-    }
-
-    if ( defined $skiphttpauth_setting && $skiphttpauth_setting == 0 ) {
-        print_warn('skiphttpauth: ');
-        print_warning('not set to \'1\' in cpanel.config. Compatibility problems with security tokens possible. Can be toggled at Tweak Settings >> Enable HTTP Authentication');
-    }
-}
-
 sub check_for_use_compiled_dnsadmin {
-    my $cpanel_config = '/var/cpanel/cpanel.config';
+    return if ( exists $cpconf{'disable_compiled_dnsadmin'} and $cpconf{'disable_compiled_dnsadmin'} == 1 );
+
     my $has_custom_dnsadmin_modules;
     my ( @setup_modules, @remote_modules );
     my $setup_modules_dir = '/usr/local/cpanel/Cpanel/NameServer/Remote';
     my $remote_modules_dir = '/usr/local/cpanel/Cpanel/NameServer/Setup/Remote';
 
-    my $disable_compiled_dnsadmin_setting; # should be 0 or 1
-
     # http://docs.cpanel.net/twiki/bin/view/SoftwareDevelopmentKit/WritingSetupModules
     if ( -d $setup_modules_dir ) {
         opendir( my $dir_fh, $setup_modules_dir );
-        @setup_modules = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+        @setup_modules = grep { !/^\.\.?$/ } readdir $dir_fh;
         closedir $dir_fh;
     }
 
     # http://docs.cpanel.net/twiki/bin/view/SoftwareDevelopmentKit/WritingRemoteModules
     if ( -d $remote_modules_dir ) {
         opendir( my $dir_fh, $remote_modules_dir );
-        @remote_modules = grep { !/^\.(\.?)$/ } readdir $dir_fh;
+        @remote_modules = grep { !/^\.\.?$/ } readdir $dir_fh;
         closedir $dir_fh;
     }
 
@@ -4892,23 +4439,8 @@ sub check_for_use_compiled_dnsadmin {
     # return if there are no custom dnsadmin modules being used
     return if ( scalar @setup_modules == 0 and scalar @remote_modules == 0 );
 
-    if ( open my $config_fh, '<', $cpanel_config ) {
-        while ( <$config_fh> ) {
-            if ( /^disable_compiled_dnsadmin=(\d)$/ ) {
-                $disable_compiled_dnsadmin_setting = $1;
-                last;
-            }    
-        }    
-        close $config_fh;
-    }    
-    else {
-        return;
-    }    
-
-    if ( defined $disable_compiled_dnsadmin_setting && $disable_compiled_dnsadmin_setting == 0 ) {
-        print_warn('dnsadmin: ');
-        print_warning('Tweak Settings >> Use compiled dnsadmin: On. If problems with custom dnsadmin modules, see if disabling helps (see ticket 4279965)');
-    }    
+    print_warn('dnsadmin: ');
+    print_warning('Tweak Settings >> Use compiled dnsadmin: On. If problems with custom dnsadmin modules, see if disabling helps (see ticket 4279965)');
 }
 
 sub check_for_mysql_root_pass_with_single_quote {
@@ -5352,21 +4884,8 @@ sub check_for_stray_index_php {
 }
 
 sub check_for_missing_mysql_version_in_cpanelconfig {
-    my $cpanel_config = '/var/cpanel/cpanel.config';
-    return if !-e $cpanel_config;
-
-    my $missing_version = 0;
-
-    open my $file_fh, '<', $cpanel_config or return;
-    while (<$file_fh>) {
-        if ( /^mysql-version=([ \t]+)?$/ ) {
-            $missing_version = 1;
-        }
-    }
-    close $file_fh;
-
-    if ( $missing_version == 1 ) {
-        print_warn("$cpanel_config: ");
+    if ( not exists $cpconf{'mysql-version'} or $cpconf{'mysql-version'} =~ /^(?:[ \t]+|$)/ ) {
+        print_warn('/var/cpanel/cpanel.config: ');
         print_warning('contains an empty "mysql-version=" setting');
     }
 }
@@ -5458,21 +4977,7 @@ sub check_for_missing_groups {
 }
 
 sub check_for_cgihidepass {
-    my $cpconf = '/var/cpanel/cpanel.config';
-    my $cgihidepass = 0;
-
-    return if !-f $cpconf;
-
-    open my $fh, '<', $cpconf or die $!;
-    while (<$fh>) {
-        if ( /cgihidepass=1/ ) {
-            $cgihidepass = 1;
-            last;
-        }
-    }
-    close $fh;
-
-    if ($cgihidepass == 1) {
+    if ( exists $cpconf{'cgihidepass'} and $cpconf{'cgihidepass'} == 1 ) {
         print_warn('cgihidepass: ');
         print_warning('Tweak Settings >> "Hide login password from cgi scripts" is enabled. Expired passwords can\'t be changed via WHM. See FB 87581');
     }
@@ -5508,7 +5013,7 @@ sub check_for_roundcube_overlay {
 }
 
 sub check_for_hostname_park_zoneexists {
-    if ( -f "/var/named/${hostname}.db" and $cpconf{'allowparkonothers'} == 1 ) {
+    if ( -f "/var/named/${hostname}.db" and ( not exists $cpconf{'allowparkonothers'} or $cpconf{'allowparkonothers'} != 1 )) {
         print_warn('Parking: ');
         print_warning('since zone of hostname exists, "Allow domain parking across accounts" must be ON to park on the hostname');
     }
@@ -5549,6 +5054,26 @@ sub check_for_dirs_that_break_ea {
             print_warn("$dir: ");
             print_warning('is a directory! This can cause EA issues. See ticket 4537779.');
         }
+    }
+}
+
+sub check_for_cdorked_B {
+    my $has_cdorked_b = 0;
+    my @files = ( '/usr/sbin/arpd ', '/usr/sbin/tunelp ', '/usr/bin/s2p ' );
+    my $cdorked_files;
+
+    for my $file (@files) {
+        if ( -e $file ) {
+            $has_cdorked_b = 1;
+            $cdorked_files .= "[$file] ";
+        }
+    }
+
+    if ( $has_cdorked_b == 1 ) {
+        print_warn('!! [ Linux/Cdorked ] !! ');
+        print_warning('L1/L2: escalate this ticket to L3. L3 use 00 - Cdorked.B premade');
+        print_warning("\tThe following files were found (note the spaces at the end of the files):");
+        print_warning("\t$cdorked_files");
     }
 }
 
@@ -5944,11 +5469,6 @@ sub check_for_cloudlinux_mysql_gov {
 }
 
 sub check_cpanel_config_for_low_maxmem {
-    if ( open( my $cpconf_fh, '<', '/var/cpanel/cpanel.config' ) ) {
-        local $/ = undef;
-        %cpconf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($cpconf_fh) );
-    }
-
     if ( $cpconf{'maxmem'} && $cpconf{'maxmem'} < 512 ) {
         print_warn("/var/cpanel/cpanel.config: ");
         print_warning("maxmem < 512M, value=$cpconf{'maxmem'} phpmyadmin may fail");
