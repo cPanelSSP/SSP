@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.34';
+my $version = '4.99.35';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -3729,8 +3729,9 @@ sub check_for_percona_rpms {
     }
 
     if ( $has_percona == 1 ) {
-        print_warn('Percona: ');
-        print_warning('rpms found. If Exim is segfaulting after STARTTLS, this may be why. See ticket 3658929');
+        print_warn("Percona RPMs found:\n");
+        print_magenta("\t \\_ EA failing with \"Cannot find libmysqlclient\"? libmysqlclient.so missing? see FB 93349");
+        print_magenta("\t \\_ If Exim is segfaulting after STARTTLS, this may be why. See ticket 3658929");
     }
 }
 
