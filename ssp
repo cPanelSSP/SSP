@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.35';
+my $version = '4.99.36';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -360,6 +360,8 @@ sub check_for_dnsonly {
         check_for_networkmanager();
         check_for_disabled_services();
         check_for_harmful_php_mode_600_cron();
+
+        check_for_libkeyutils_malware();
 
         ## [3RDP]
         check_for_apf();
