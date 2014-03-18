@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.36';
+my $version = '4.99.37';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -261,6 +261,7 @@ check_for_hostname_park_zoneexists();
 check_for_pgpass_colon_in_password_field();
 check_for_dirs_that_break_ea();
 check_for_cdorked_B();
+check_for_extra_uid_0_user();
 
 # [3RDP]
 check_for_assp();
@@ -554,7 +555,6 @@ sub print_tip {
         '[FB 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale',
         '[FB 46853] Customer complaining that they can\'t log into cPanel as root? Update FB 46853',
         '[FB 44884] upcp resets Mailman lists\' hostnames. pre/postupcp hooks workaround in ticket 3541643',
-        '[FB 43944] layer1/layer2.cpanel.net is deprecated. The correct location is httpupdate.cpanel.net',
         '[FB 42027] "Recently Uploaded Cgi Script Mail" scans and sends email alerts about downloaded files too',
         '[FB 21774] Pure-FTPd is not linked against libwrap. As such, Host Access Control does nothing for it',
         'The cpanel-postgresql* packages are for phpPgAdmin. The postgresql-* packages are for PostgreSQL',
@@ -2008,7 +2008,7 @@ sub check_limitsconf {
 
     if (@limitsconf) {
         print_warn('limits.conf: ');
-        print_warning('custom limits defined in /etc/security/limits.conf!');
+        print_warning('custom limits defined in /etc/security/limits.conf. Do *NOT* move this file!');
     }
 }
 
@@ -5077,6 +5077,26 @@ sub check_for_cdorked_B {
         print_warning('L1/L2: escalate this ticket to L3. L3 use 00 - Cdorked.B premade');
         print_warning("\tThe following files were found (note the spaces at the end of the files):");
         print_warning("\t$cdorked_files");
+    }
+}
+
+sub check_for_extra_uid_0_user {
+    my $uid_0_users = 0;
+
+    open my $file_fh, '<', '/etc/passwd' or die $!;
+    while (<$file_fh>) {
+        if (m{ \A ([^:]+) :x:0: }xms) {
+            next if $1 =~ m{ \A root \z }xms;
+            $uid_0_users = 1;
+            last;
+        }
+    }
+    close $file_fh;
+
+    if ( $uid_0_users == 1 ) {
+        print_warn("non-root uid 0 user(s): \n");
+        print_magenta("\t \\_ This can cause a variety of issues. See FB 92065 and the tickets listed there for some examples.");
+        print_magenta("\t \\_ EasyApache failing with \"can't create [...] all_iplist.db\"? See FB 62467. Do *not* escalate as security issue.");
     }
 }
 
