@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.37';
+my $version = '4.99.38';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -210,6 +210,7 @@ check_var_cpanel_immutable_files();
 check_for_noxsave_in_grub_conf();
 check_for_my_cnf_skip_name_resolve();
 check_for_my_cnf_sql_mode();
+check_for_my_cnf_skip_networking();
 check_for_rpm_dist_ver_unknown();
 check_for_homeloader_php_extension();
 check_for_networkmanager();
@@ -262,6 +263,7 @@ check_for_pgpass_colon_in_password_field();
 check_for_dirs_that_break_ea();
 check_for_cdorked_B();
 check_for_extra_uid_0_user();
+check_for_easyparams_attributes();
 
 # [3RDP]
 check_for_assp();
@@ -282,6 +284,7 @@ check_for_whmreseller();    # Master reseller software
 check_for_whmphp();         # Master reseller software
 check_for_cpremote();
 check_for_els();
+check_for_whmxtra();
 
 check_for_libkeyutils_malware();
 
@@ -1352,14 +1355,14 @@ sub print_mysql_version {
 }
 
 sub print_backups_info {
-    my ( $old_backups_enabled, $new_backups_enabled )   = ( 0, 0 );
+    my ( $old_backups_enabled, $new_backups_enabled )   = ( 'Disabled', 'Disabled' );
     my ( $old_backup_cron, $new_backup_cron )           = ( 0, 0 );
 
     if ( -f '/etc/cpbackup.conf' ) {
         open my $file_fh, '<', '/etc/cpbackup.conf' or return;
         while (<$file_fh>) {
             if ( /BACKUPENABLE\s+yes/i ) {
-                $old_backups_enabled = 1;
+                $old_backups_enabled = 'Enabled';
                 last;
             }
         }
@@ -1370,14 +1373,14 @@ sub print_backups_info {
         open my $file_fh, '<', '/var/cpanel/backups/config' or return;
         while (<$file_fh> ) {
             if ( /BACKUPENABLE:\s+'yes'/ ) {
-                $new_backups_enabled = 1;
+                $new_backups_enabled = 'Enabled';
                 last;
             }
         }
         close $file_fh;
     }
 
-    if ( $old_backups_enabled == 1 or $new_backups_enabled == 1 ) {
+    if ( $old_backups_enabled eq 'Enabled' or $new_backups_enabled eq 'Enabled' ) {
         open my $file_fh, '<', '/var/spool/cron/root' or return;
         while (<$file_fh>) {
             if ( m{ /usr/local/cpanel/scripts/cpbackup }xms ) {
@@ -1390,10 +1393,10 @@ sub print_backups_info {
         close $file_fh;
     }
 
-    if ( $new_backups_enabled == 1 and $new_backup_cron != 1 ) {
+    if ( $new_backups_enabled eq 'Enabled' and $new_backup_cron != 1 ) {
         $new_backups_enabled .=  " (MISSING CRON!)";
     }
-    if ( $old_backups_enabled == 1 and $old_backup_cron != 1 ) {
+    if ( $old_backups_enabled eq 'Enabled' and $old_backup_cron != 1 ) {
         $old_backups_enabled .= " (MISSING CRON!)";
     }
 
@@ -4022,6 +4025,29 @@ sub check_for_my_cnf_sql_mode {
     }
 }
 
+sub check_for_my_cnf_skip_networking {
+    my $skip_networking = 0;
+    my $conf_setting;
+
+    my $my_cnf = '/etc/my.cnf';
+    if ( open my $my_cnf_fh, '<', $my_cnf ) {
+        while (<$my_cnf_fh>) {
+            chomp( my $line = $_ );
+            if ( $line =~ m{ \A (?:[ \t]+)? (skip[_-]net.*) }xms ) {
+                $conf_setting = $1;
+                $skip_networking = 1; 
+                last;
+            }    
+        }    
+        close $my_cnf;
+    }    
+
+    if ( $skip_networking == 1 ) {
+        print_warn('/etc/my.cnf: ');
+        print_warning("$conf_setting found. Webmail or other MySQL related items not functioning properly? That may be why.");
+    }    
+}
+
 sub check_for_rpm_dist_ver_unknown {
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
     my $is_broken      = 0;
@@ -4054,7 +4080,9 @@ sub check_for_homeloader_php_extension {
 }
 
 sub check_for_libkeyutils_malware {
+    my $infected = 0; # 0 means "unknown" here, and never "not infected"
     my $bad_libs;
+    my $trojaned_lib;
 
     ## check for the existence of known illegitimate files
     my @dirs  = qw( /lib /lib64 );
@@ -4075,10 +4103,78 @@ sub check_for_libkeyutils_malware {
     }
 
     if ($bad_libs) {
+        $infected = 1;
         print "\n\n";
         print_warn('!! [ LIBKEYUTILS ] !! ');
         print_warning('L1/L2 escalate this ticket to L3');
         print "The following file(s) were found:\n$bad_libs\n";
+    }
+
+    return if $infected == 1;
+
+    # http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/
+    my @checksums = qw(
+        09c8af3be4327c83d4a7124a678bbc81e12a1de4
+        2e571993e30742ee04500fbe4a40ee1b14fa64d7
+        39ec9e03edb25f1c316822605fe4df7a7b1ad94a
+        3c5ec2ab2c34ab57cba69bb2dee70c980f26b1bf
+        471ee431030332dd636b8af24a428556ee72df37
+        5d3ec6c11c6b5e241df1cc19aa16d50652d6fac0
+        74aa801c89d07fa5a9692f8b41cb8dd07e77e407
+        7adb38bf14e6bf0d5b24fa3f3c9abed78c061ad1
+        9bb6a2157c6a3df16c8d2ad107f957153cba4236
+        9e2af0910676ec2d92a1cad1ab89029bc036f599
+        adfcd3e591330b8d84ab2ab1f7814d36e7b7e89f
+        bf1466936e3bd882b47210c12bf06cb63f7624c0
+        d552cbadee27423772a37c59cb830703b757f35e
+        e14da493d70ea4dd43e772117a61f9dbcff2c41c
+        f1ada064941f77929c49c8d773cbad9c15eba322
+    );
+
+    my @lib;
+    my @lib64;
+
+    if ( -d '/lib' ) {
+        opendir( my $dir_fh, '/lib' );
+        @lib = grep { /^libkeyutils\.so(?:[\.\d]+)?$/ } readdir $dir_fh;
+        closedir $dir_fh;
+    }
+    if ( -d '/lib64' ) {
+        opendir( my $dir_fh, '/lib64' );
+        @lib64 = grep { /^libkeyutils\.so(?:[\.\d]+)?$/ } readdir $dir_fh;
+        closedir $dir_fh;
+    }
+
+    if (@lib) {
+        for my $lib (@lib) {
+            my $checksum = run( 'md5sum', "/lib/$lib" );
+            chomp $checksum;
+            $checksum =~ s/\s.*//g;
+            if ( grep { /$checksum/ } @checksums ) {
+                $trojaned_lib = "/lib/$lib\n\tmd5 checksum: $checksum";
+                last;
+            }
+        }
+    }
+
+    if (@lib64) {
+        for my $lib (@lib64) {
+            my $checksum = run( 'md5sum', "/lib64/$lib" );
+            chomp $checksum;
+            $checksum =~ s/\s.*//g;
+            if ( grep { /$checksum/ } @checksums ) {
+                $trojaned_lib = "/lib64/$lib\n\tmd5 checksum: $checksum";
+                last;
+            }
+        }
+    }
+
+    if ( $trojaned_lib ) {
+        print "\n\n";
+        print_warn('!! [ LIBKEYUTILS ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "The following file(s) were found:\n\t$trojaned_lib\n";
+        print "\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/\n";
     }
 }
 
@@ -5100,6 +5196,17 @@ sub check_for_extra_uid_0_user {
     }
 }
 
+sub check_for_easyparams_attributes {
+    my $easyparams = '/scripts/easyparams';
+    return if !-e $easyparams;
+
+    my $attributes = run( 'lsattr', $easyparams );
+    if ( $attributes =~ m/^-[-]*(?:a|i)/ ) {
+        print_warn("$easyparams: ");
+        print_warning('is immutable or append only. This should never be done, and can break EasyApache!');
+    }
+}
+
 ##############################
 #  END [WARN] CHECKS
 ##############################
@@ -5410,6 +5517,14 @@ sub check_for_els {
 
     print_3rdp('ELS: ');
     print_3rdp2("$els found. See http://www.servermonkeys.com/els.php");
+}
+
+sub check_for_whmxtra {
+    my $ionsh = '/usr/local/cpanel/whostmgr/docroot/themes/x/xtra/functions/ion.sh';
+    return if !-f $ionsh;
+
+    print_3rdp('WHMXtra: ');
+    print_3rdp2("$ionsh exists. 'cPanel PHP loader' Tweak Settings or php.ini settings reverted? See 4622167, 4628203");
 }
 
 ##############################
