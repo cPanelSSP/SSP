@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.38';
+my $version = '4.99.39';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -4147,11 +4147,11 @@ sub check_for_libkeyutils_malware {
 
     if (@lib) {
         for my $lib (@lib) {
-            my $checksum = run( 'md5sum', "/lib/$lib" );
+            my $checksum = run( 'sha1sum', "/lib/$lib" );
             chomp $checksum;
             $checksum =~ s/\s.*//g;
             if ( grep { /$checksum/ } @checksums ) {
-                $trojaned_lib = "/lib/$lib\n\tmd5 checksum: $checksum";
+                $trojaned_lib = "/lib/$lib\n\tSHA-1 checksum: $checksum";
                 last;
             }
         }
@@ -4159,11 +4159,11 @@ sub check_for_libkeyutils_malware {
 
     if (@lib64) {
         for my $lib (@lib64) {
-            my $checksum = run( 'md5sum', "/lib64/$lib" );
+            my $checksum = run( 'sha1sum', "/lib64/$lib" );
             chomp $checksum;
             $checksum =~ s/\s.*//g;
             if ( grep { /$checksum/ } @checksums ) {
-                $trojaned_lib = "/lib64/$lib\n\tmd5 checksum: $checksum";
+                $trojaned_lib = "/lib64/$lib\n\tSHA-1 checksum: $checksum";
                 last;
             }
         }
