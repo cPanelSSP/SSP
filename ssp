@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.39';
+my $version = '4.99.40';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -65,7 +65,6 @@ my %pureftpdconf;              # /etc/pure-ftpd.conf
 my @apache_version_output;     # httpd -v
 my @apache_modules_output;     # httpd -M
 my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexec );
-my $ten_MB = 10_485_760;
 
 if ( -x '/usr/local/apache/bin/httpd' ) {
     @apache_version_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-v' );
@@ -86,6 +85,8 @@ my @phpini  = get_phpini();
     }
 }
 
+chomp( my @libkeyutils_files = build_libkeyutils_file_list());          # must come before the malware checks
+my $libkeyutils_files_ref = \@libkeyutils_files;
 
 ######################
 ##  END GLOBALS     ##
@@ -223,7 +224,6 @@ check_for_cloudlinux_mysql_gov();
 check_cpanel_config_for_low_maxmem();
 check_pure_ftpd_conf_for_upload_script_and_dead();    #must come after check_cpanel_config_for_low_maxmem
 check_for_PERL5LIB_env_var();
-check_for_cdorked_A();
 check_for_disabled_services();
 check_for_cpbackup_exclude_everything();
 check_for_usr_local_include_jpeglib_h();
@@ -261,7 +261,6 @@ check_for_roundcube_overlay();
 check_for_hostname_park_zoneexists();
 check_for_pgpass_colon_in_password_field();
 check_for_dirs_that_break_ea();
-check_for_cdorked_B();
 check_for_extra_uid_0_user();
 check_for_easyparams_attributes();
 
@@ -286,13 +285,25 @@ check_for_cpremote();
 check_for_els();
 check_for_whmxtra();
 
-check_for_libkeyutils_malware();
+check_for_cdorked_A();                                          # malware
+check_for_cdorked_B();                                          # malware
+check_for_libkeyutils_filenames();                              # malware
+check_for_unowned_libkeyutils_files($libkeyutils_files_ref);    # malware
+check_sha1_sigs_libkeyutils($libkeyutils_files_ref);            # malware
+check_sha1_sigs_httpd();                                        # malware
+check_sha1_sigs_named();                                        # malware
+check_sha1_sigs_ssh();                                          # malware
+check_sha1_sigs_ssh_add();                                      # malware
+check_sha1_sigs_sshd();                                         # malware
+check_for_ebury_ssh_G();                                        # malware
+check_for_ebury_ssh_banner();                                   # malware
+check_for_ebury_root_file();                                    # malware
 
 # This is run closer to the end since it has the potential to take the longest
 build_rpm_list();
 
 # These require build_rpm_list() to have been run, so that @rpm_list is populated
-check_for_ebury_malware();
+check_for_ebury_3_digit_rpms();          # malware
 populate_mysql_rpm_versions_array();
 check_for_mysql_4();
 check_for_additional_rpms();
@@ -365,8 +376,6 @@ sub check_for_dnsonly {
         check_for_disabled_services();
         check_for_harmful_php_mode_600_cron();
 
-        check_for_libkeyutils_malware();
-
         ## [3RDP]
         check_for_apf();
         check_for_csf();
@@ -375,6 +384,18 @@ sub check_for_dnsonly {
         check_for_1h();
         check_for_webmin();
         check_for_symantec();
+
+        check_for_libkeyutils_filenames();                              # malware
+        check_for_unowned_libkeyutils_files($libkeyutils_files_ref);    # malware
+        check_sha1_sigs_libkeyutils($libkeyutils_files_ref);            # malware
+        check_sha1_sigs_httpd();                                        # malware
+        check_sha1_sigs_named();                                        # malware
+        check_sha1_sigs_ssh();                                          # malware
+        check_sha1_sigs_ssh_add();                                      # malware
+        check_sha1_sigs_sshd();                                         # malware
+        check_for_ebury_ssh_G();                                        # malware
+        check_for_ebury_ssh_banner();                                   # malware
+        check_for_ebury_root_file();                                    # malware
 
         exit;
     }
@@ -4079,133 +4100,6 @@ sub check_for_homeloader_php_extension {
     }
 }
 
-sub check_for_libkeyutils_malware {
-    my $infected = 0; # 0 means "unknown" here, and never "not infected"
-    my $bad_libs;
-    my $trojaned_lib;
-
-    ## check for the existence of known illegitimate files
-    my @dirs  = qw( /lib /lib64 );
-    my @files = qw(
-                    libkeyutils.so.1.9
-                    libkeyutils-1.2.so.0
-                    libkeyutils-1.2.so.2
-                    libkeyutils.so.1.3.0
-                    libkeyutils.so.1.3.2
-                );
-
-    for my $dir (@dirs) {
-        for my $file (@files) {
-            if ( -f "${dir}/${file}" and !-z "${dir}/${file}" ) {
-                $bad_libs .= "\t${dir}/${file}\n";
-            }
-        }
-    }
-
-    if ($bad_libs) {
-        $infected = 1;
-        print "\n\n";
-        print_warn('!! [ LIBKEYUTILS ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "The following file(s) were found:\n$bad_libs\n";
-    }
-
-    return if $infected == 1;
-
-    # http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/
-    my @checksums = qw(
-        09c8af3be4327c83d4a7124a678bbc81e12a1de4
-        2e571993e30742ee04500fbe4a40ee1b14fa64d7
-        39ec9e03edb25f1c316822605fe4df7a7b1ad94a
-        3c5ec2ab2c34ab57cba69bb2dee70c980f26b1bf
-        471ee431030332dd636b8af24a428556ee72df37
-        5d3ec6c11c6b5e241df1cc19aa16d50652d6fac0
-        74aa801c89d07fa5a9692f8b41cb8dd07e77e407
-        7adb38bf14e6bf0d5b24fa3f3c9abed78c061ad1
-        9bb6a2157c6a3df16c8d2ad107f957153cba4236
-        9e2af0910676ec2d92a1cad1ab89029bc036f599
-        adfcd3e591330b8d84ab2ab1f7814d36e7b7e89f
-        bf1466936e3bd882b47210c12bf06cb63f7624c0
-        d552cbadee27423772a37c59cb830703b757f35e
-        e14da493d70ea4dd43e772117a61f9dbcff2c41c
-        f1ada064941f77929c49c8d773cbad9c15eba322
-    );
-
-    my @lib;
-    my @lib64;
-
-    if ( -d '/lib' ) {
-        opendir( my $dir_fh, '/lib' );
-        @lib = grep { /^libkeyutils\.so(?:[\.\d]+)?$/ } readdir $dir_fh;
-        closedir $dir_fh;
-    }
-    if ( -d '/lib64' ) {
-        opendir( my $dir_fh, '/lib64' );
-        @lib64 = grep { /^libkeyutils\.so(?:[\.\d]+)?$/ } readdir $dir_fh;
-        closedir $dir_fh;
-    }
-
-    if (@lib) {
-        for my $lib (@lib) {
-            my $checksum = run( 'sha1sum', "/lib/$lib" );
-            chomp $checksum;
-            $checksum =~ s/\s.*//g;
-            if ( grep { /$checksum/ } @checksums ) {
-                $trojaned_lib = "/lib/$lib\n\tSHA-1 checksum: $checksum";
-                last;
-            }
-        }
-    }
-
-    if (@lib64) {
-        for my $lib (@lib64) {
-            my $checksum = run( 'sha1sum', "/lib64/$lib" );
-            chomp $checksum;
-            $checksum =~ s/\s.*//g;
-            if ( grep { /$checksum/ } @checksums ) {
-                $trojaned_lib = "/lib64/$lib\n\tSHA-1 checksum: $checksum";
-                last;
-            }
-        }
-    }
-
-    if ( $trojaned_lib ) {
-        print "\n\n";
-        print_warn('!! [ LIBKEYUTILS ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "The following file(s) were found:\n\t$trojaned_lib\n";
-        print "\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/\n";
-    }
-}
-
-sub check_for_ebury_malware {
-    #### check for the existence if illegitimate rpms, like these:
-    #
-    #  openssh-4.3p2-721.el5_61.65
-    #  openssh-5.3p1-209.el6_10.41.x86_64
-    #
-    #  openssh-clients-4.3p2-721.el5_61.65
-    #  openssh-clients-5.3p1-209.el6_10.41.x86_64
-    #
-    #  openssh-server-4.3p2-721.el5_61.65
-    #  openssh-server-5.3p1-209.el6_10.41.x86_64
-
-    my $bad_rpms;
-
-    for my $rpm (@rpm_list) {
-        if ( $rpm =~ m{ \A openssh-(clients|server|\d)(.*)-(\d){3}\. }xms ) {
-            $bad_rpms .= "\t$rpm\n";
-        }
-    }
-
-    if ($bad_rpms) {
-        print "\n\n";
-        print_warn('!! [ EBURY ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "The following rpm(s) were found:\n$bad_rpms\n";
-    }
-}
-
 sub check_for_networkmanager {
     my $networkmanager_running;
 
@@ -4261,35 +4155,6 @@ sub check_for_PERL5LIB_env_var {
         print_warn('PERL5LIB env var: ');
         print_warning('exists! This can break cPanel\'s perl. See FB 64265');
     }
-}
-
-sub check_for_cdorked_A {
-    my $apache_bin = '/usr/local/apache/bin/httpd';
-    return if ( !-f $apache_bin );
-    return if ((stat($apache_bin))[7] > $ten_MB ); # avoid slurping too much mem
-
-    my $has_cdorked = 0; 
-    my $httpd;
-
-    if ( open my $fh, '<', $apache_bin ) {
-        local $/;
-        $httpd = <$fh>;
-        close $fh;
-    }
-    else {
-        return;
-    }
-
-    return if !$httpd;
-
-    if ( $httpd =~ /open_tty/ ) {
-        $has_cdorked = 1;
-    }
-
-    if ( $has_cdorked == 1 ) {
-        print_warn('!! [ Linux/Cdorked ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3. L3 use 00 - Cdorked premade');
-    }    
 }
 
 sub check_for_disabled_services {
@@ -5156,26 +5021,6 @@ sub check_for_dirs_that_break_ea {
     }
 }
 
-sub check_for_cdorked_B {
-    my $has_cdorked_b = 0;
-    my @files = ( '/usr/sbin/arpd ', '/usr/sbin/tunelp ', '/usr/bin/s2p ' );
-    my $cdorked_files;
-
-    for my $file (@files) {
-        if ( -e $file ) {
-            $has_cdorked_b = 1;
-            $cdorked_files .= "[$file] ";
-        }
-    }
-
-    if ( $has_cdorked_b == 1 ) {
-        print_warn('!! [ Linux/Cdorked ] !! ');
-        print_warning('L1/L2: escalate this ticket to L3. L3 use 00 - Cdorked.B premade');
-        print_warning("\tThe following files were found (note the spaces at the end of the files):");
-        print_warning("\t$cdorked_files");
-    }
-}
-
 sub check_for_extra_uid_0_user {
     my $uid_0_users = 0;
 
@@ -5530,6 +5375,444 @@ sub check_for_whmxtra {
 ##############################
 #  END [3RDP] CHECKS
 ##############################
+
+sub build_libkeyutils_file_list {
+    my @dirs = qw( /lib /lib64 );
+    my @libkeyutils_files;
+
+    for my $dir (@dirs) {
+        opendir( my $dir_fh, $dir );
+        while ( my $file = readdir($dir_fh)) {
+            if ( $file =~ /^libkeyutils\.so\.(?:[\.\d]+)?$/ ) {
+                if ( $dir eq '/lib' ) {
+                    push @libkeyutils_files, "/lib/$file\n";
+                }    
+                elsif ( $dir eq '/lib64' ) {
+                    push @libkeyutils_files, "/lib64/$file\n";
+                }    
+            }    
+        }    
+        closedir $dir_fh;
+    }
+
+    return @libkeyutils_files;
+}
+
+## BEGIN malware checks
+
+sub check_for_cdorked_A {
+    my $apache_bin = '/usr/local/apache/bin/httpd';
+    return if ( !-f $apache_bin );
+    return if ((stat($apache_bin))[7] > 10_485_760 ); # avoid slurping too much mem
+
+    my $has_cdorked = 0; 
+    my $httpd;
+
+    if ( open my $fh, '<', $apache_bin ) {
+        local $/;
+        $httpd = <$fh>;
+        close $fh; 
+    }    
+    else {
+        return;
+    }    
+
+    return if !$httpd;
+
+    if ( $httpd =~ /open_tty/ ) {
+        $has_cdorked = 1; 
+    }    
+
+    if ( $has_cdorked == 1 ) {
+        print_warn('!! [ Linux/Cdorked ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3. L3 use 00 - Cdorked premade');
+    }    
+}
+
+sub check_for_cdorked_B {
+    my $has_cdorked_b = 0;
+    my @files = ( '/usr/sbin/arpd ', '/usr/sbin/tunelp ', '/usr/bin/s2p ' );
+    my $cdorked_files;
+
+    for my $file (@files) {
+        if ( -e $file ) {
+            $has_cdorked_b = 1;
+            $cdorked_files .= "[$file] ";
+        }
+    }
+
+    if ( $has_cdorked_b == 1 ) {
+        print_warn('!! [ Linux/Cdorked ] !! ');
+        print_warning('L1/L2: escalate this ticket to L3. L3 use 00 - Cdorked.B premade');
+        print_warning("\tThe following files were found (note the spaces at the end of the files):");
+        print_warning("\t$cdorked_files");
+    }
+}
+
+sub check_for_libkeyutils_filenames {
+    my $bad_libs;
+    my @dirs  = qw( /lib /lib64 );
+    my @files = qw(
+                    libkeyutils.so.1.9
+                    libkeyutils-1.2.so.0
+                    libkeyutils-1.2.so.2
+                    libkeyutils.so.1.3.0
+                    libkeyutils.so.1.3.2
+                );
+
+    for my $dir (@dirs) {
+        for my $file (@files) {
+            if ( -f "${dir}/${file}" and !-z "${dir}/${file}" ) {
+                $bad_libs .= "\t${dir}/${file}\n";
+            }
+        }
+    }
+
+    if ($bad_libs) {
+        print "\n\n";
+        print_warn('!! [ LIBKEYUTILS ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "The following file(s) were found:\n$bad_libs\n";
+    }
+}
+
+sub check_sha1_sigs_libkeyutils {
+    my $libs = shift;
+    return if !$libs;
+
+    my $trojaned_lib;
+
+    # p67 http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf
+    my @checksums = qw(
+        09c8af3be4327c83d4a7124a678bbc81e12a1de4
+        1a9aff1c382a3b139b33eeccae954c2d65b64b90
+        267d010201c9ff53f8dc3fb0a48145dc49f9de1e
+        2e571993e30742ee04500fbe4a40ee1b14fa64d7
+        2fc132440bafdbc72f4d4e8dcb2563cc0a6e096b
+        39ec9e03edb25f1c316822605fe4df7a7b1ad94a
+        3c5ec2ab2c34ab57cba69bb2dee70c980f26b1bf
+        471ee431030332dd636b8af24a428556ee72df37
+        58f185c3fe9ce0fb7cac9e433fb881effad31421
+        5d3ec6c11c6b5e241df1cc19aa16d50652d6fac0
+        74aa801c89d07fa5a9692f8b41cb8dd07e77e407
+        7adb38bf14e6bf0d5b24fa3f3c9abed78c061ad1
+        899b860ef9d23095edb6b941866ea841d64d1b26
+        8daad0a043237c5e3c760133754528b97efad459
+        8f75993437c7983ac35759fe9c5245295d411d35
+        9bb6a2157c6a3df16c8d2ad107f957153cba4236
+        9e2af0910676ec2d92a1cad1ab89029bc036f599
+        a7b8d06e2c0124e6a0f9021c911b36166a8b62c5
+        adfcd3e591330b8d84ab2ab1f7814d36e7b7e89f
+        b8508fc2090ddee19a19659ea794f60f0c2c23ff
+        bbce62fb1fc8bbed9b40cfb998822c266b95d148
+        bf1466936e3bd882b47210c12bf06cb63f7624c0
+        d552cbadee27423772a37c59cb830703b757f35e
+        e14da493d70ea4dd43e772117a61f9dbcff2c41c
+        e2a204636bda486c43d7929880eba6cb8e9de068
+        f1ada064941f77929c49c8d773cbad9c15eba322
+    );
+
+    for my $lib (@$libs) {
+        my $checksum = run( 'sha1sum', "$lib" );
+        chomp $checksum;
+        $checksum =~ s/\s.*//g;
+        if ( grep { /$checksum/ } @checksums ) {
+            $trojaned_lib = "$lib\n\tSHA-1 checksum: $checksum";
+            last;
+        }
+    }
+
+    if ( $trojaned_lib ) {
+        print "\n\n";
+        print_warn('!! [ LIBKEYUTILS ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "The following file(s) were found:\n\t$trojaned_lib\n";
+        print "\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/\n";
+    }
+}
+
+sub check_for_unowned_libkeyutils_files {
+    my $libs = shift;
+    return if !$libs;
+
+    my @unowned_libs;
+
+    for my $lib (@$libs) {
+        chomp( my $rpm_check = run( 'rpm', '-qf', "$lib" ));
+        if ( $rpm_check =~ /owned/ ) {
+            push @unowned_libs, $lib;
+        }
+    }
+
+    return if !@unowned_libs;
+
+    print "\n\n";
+    print_warn('!! [ EBURY ] !! ');
+    print_warning('L1/L2 escalate this ticket to L3');
+    print "\tThe following libkeyutils files do not belong to a package (checked via 'rpm -qf'):\n";
+    for my $file (@unowned_libs) {
+        print "\t$file\n";
+    }
+}
+
+sub check_sha1_sigs_httpd {
+    my $httpd = '/usr/local/apache/bin/httpd';
+    return if !-e $httpd;
+    my $infected = 0;
+    my $sha1sum = run( 'sha1sum', $httpd );
+    if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
+        $sha1sum = $1;
+    }
+
+    my @sigs = qw(
+        0004b44d110ad9bc48864da3aea9d80edfceed3f
+        03592b8147e2c84233da47f6e957acd192b3796a
+        0eb1108a9d2c9fe1af4f031c84e30dcb43610302
+        10c6ce8ee3e5a7cb5eccf3dffd8f580e4fb49089
+        149cf77d2c6db226e172390a9b80bc949149e1dc
+        1972616a731c9e8a3dbda8ece1072bd16c44aa35
+        24e3ebc0c5a28ba433dfa69c169a8dd90e05c429
+        4f40bb464526964ba49ed3a3b2b2b74491ea89a4
+        5b87807b4a1796cfb1843df03b3dca7b17995d20
+        62c4b65e0c4f52c744b498b555c20f0e76363147
+        78c63e9111a6701a8308ad7db193c6abb17c65c4
+        858c612fe020fd5089a05a3ec24a6577cbeaf7eb
+        9018377c0190392cc95631170efb7d688c4fd393
+        a51b1835abee79959e1f8e9293a9dcd8d8e18977
+        a53a30f8cdf116de1b41224763c243dae16417e4
+        ac96adbe1b4e73c95c28d87fa46dcf55d4f8eea2
+        dd7846b3ec2e88083cae353c02c559e79124a745
+        ddb9a74cd91217cfcf8d4ecb77ae2ae11b707cd7
+        ee679661829405d4a57dbea7f39efeb526681a7f
+        fc39009542c62a93d472c32891b3811a4900628a
+        fdf91a8c0ff72c9d02467881b7f3c44a8a3c707a
+    );
+
+    for my $sig (@sigs) {
+        if ( $sha1sum eq $sig ) {
+            $infected = 1;
+            last;
+        }
+    }
+
+    if ( $infected == 1 ) {
+        print "\n\n";
+        print_warn('!! [ EBURY ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "\t$httpd has a SHA-1 signature of $sha1sum\n";
+        print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
+    }
+}
+
+sub check_sha1_sigs_named {
+    my $named = '/usr/sbin/named';
+    return if !-e $named;
+    my $infected = 0;
+    my $sha1sum = run( 'sha1sum', $named );
+    if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
+        $sha1sum = $1;
+    }    
+
+    my @sigs = qw(
+        42123cbf9d51fb3dea312290920b57bd5646cefb
+        ebc45dd1723178f50b6d6f1abfb0b5a728c01968
+    );
+
+    for my $sig (@sigs) {
+        if ( $sha1sum eq $sig ) {
+            $infected = 1;
+            last;
+        }
+    }
+    
+    if ( $infected == 1 ) {
+        print "\n\n";
+        print_warn('!! [ EBURY ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "\t$named has a SHA-1 signature of $sha1sum\n";
+        print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
+    }    
+}
+
+sub check_sha1_sigs_ssh {
+    my $ssh = '/usr/bin/ssh';
+    return if !-e $ssh;
+    my $infected = 0; 
+    my $sha1sum = run( 'sha1sum', $ssh );
+    if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
+        $sha1sum = $1;
+    }    
+
+    my @sigs = qw(
+        c4c28d0372aee7001c44a1659097c948df91985d
+        fa6707c7ef12ce9b0f7152ca300ebb2bc026ce0b
+    );
+
+    for my $sig (@sigs) {
+        if ( $sha1sum eq $sig ) {
+            $infected = 1; 
+            last;
+        }    
+    }    
+
+    if ( $infected == 1 ) {
+        print "\n\n";
+        print_warn('!! [ EBURY ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "\t$ssh has a SHA-1 signature of $sha1sum\n";
+        print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
+    }    
+}
+
+sub check_sha1_sigs_ssh_add {
+    my $ssh_add = '/usr/bin/ssh-add';
+    return if !-e $ssh_add;
+    my $infected = 0; 
+    my $sha1sum = run( 'sha1sum', $ssh_add );
+    if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
+        $sha1sum = $1;
+    }    
+
+    my @sigs = qw(
+        575bb6e681b5f1e1b774fee0fa5c4fe538308814
+    );
+
+    for my $sig (@sigs) {
+        if ( $sha1sum eq $sig ) {
+            $infected = 1; 
+            last;
+        }    
+    }    
+
+    if ( $infected == 1 ) {
+        print "\n\n";
+        print_warn('!! [ EBURY ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "\t$ssh_add has a SHA-1 signature of $sha1sum\n";
+        print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
+    }    
+}
+
+sub check_sha1_sigs_sshd {
+    my $sshd = '/usr/sbin/sshd';
+    return if !-e $sshd;
+    my $infected = 0; 
+    my $sha1sum = run( 'sha1sum', $sshd );
+    if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
+        $sha1sum = $1;
+    }    
+
+    my @sigs = qw(
+        0daa51519797cefedd52864be0da7fa1a93ca30b
+        4d12f98fd49e58e0635c6adce292cc56a31da2a2
+        7314eadbdf18da424c4d8510afcc9fe5fcb56b39
+        98cdbf1e0d202f5948552cebaa9f0315b7a3731d
+    );
+
+    for my $sig (@sigs) {
+        if ( $sha1sum eq $sig ) {
+            $infected = 1; 
+            last;
+        }    
+    }    
+
+    if ( $infected == 1 ) {
+        print "\n\n";
+        print_warn('!! [ EBURY ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "\t$sshd has a SHA-1 signature of $sha1sum\n";
+        print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
+    }    
+}
+
+sub check_for_ebury_ssh_G {
+    my $ssh = '/usr/bin/ssh';
+    return if !-e $ssh;
+    return if !-f $ssh;
+    return if !-x $ssh;
+    return if -z $ssh;
+
+    my $ssh_G = run_trap_stderr( $ssh, '-G' );
+    if ( $ssh_G !~ /illegal|unknown/ ) {
+        print "\n\n";
+        print_warn('!! [ EBURY ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "\t'$ssh -G' did not return either 'illegal' or 'unknown'\n";
+        print "\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/\n";
+    }
+}
+
+sub check_for_ebury_ssh_banner {
+    my ( $host, $port );
+    my $ssh_connection = $ENV{'SSH_CONNECTION'};
+
+    if ( $ssh_connection =~ m{ \s (\d+\.\d+\.\d+\.\d+) \s (\d+) \z }xms ) {
+        ( $host, $port ) = ( $1, $2 );
+    }
+
+    return if !$host;
+    return if !$port;
+
+    my $sock = IO::Socket::INET->new(
+        PeerAddr    => $host,
+        PeerPort    => $port,
+        Proto       => 'tcp',
+        Timeout     => 5,
+    ) or return;
+
+    chomp( my $ssh_banner = readline $sock );
+    close $sock;
+
+    if ( $ssh_banner =~ m{ \A SSH-2\.0-[0-9a-f]{22,46} }xms ) {
+        print "\n\n";
+        print_warn('!! [ EBURY ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "\tsshd banner matches known signature from ebury infected machines: $ssh_banner\n";
+        print "\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/\n";
+    }
+}
+
+sub check_for_ebury_root_file {
+    my $file = '/home/ ./root';
+
+    if ( -e $file ) {
+        print "\n\n";
+        print_warn('!! [ EBURY ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "\tFound file: $file\n";
+        print "\tReference: p24 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
+    }
+}
+
+sub check_for_ebury_3_digit_rpms {
+    #### check for the existence if illegitimate rpms, like these:
+    #
+    #  openssh-4.3p2-721.el5_61.65
+    #  openssh-5.3p1-209.el6_10.41.x86_64
+    #
+    #  openssh-clients-4.3p2-721.el5_61.65
+    #  openssh-clients-5.3p1-209.el6_10.41.x86_64
+    #
+    #  openssh-server-4.3p2-721.el5_61.65
+    #  openssh-server-5.3p1-209.el6_10.41.x86_64
+
+    my $bad_rpms;
+
+    for my $rpm (@rpm_list) {
+        if ( $rpm =~ m{ \A openssh-(clients|server|\d)(.*)-(\d){3}\. }xms ) {
+            $bad_rpms .= "\t$rpm\n";
+        }
+    }
+
+    if ($bad_rpms) {
+        print "\n\n";
+        print_warn('!! [ EBURY ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "The following rpm(s) were found:\n$bad_rpms\n";
+    }
+}
+
+## END malware checks
 
 sub build_rpm_list {
     my $timeout = 15;
