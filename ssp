@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.40';
+my $version = '4.99.41';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5745,6 +5745,7 @@ sub check_for_ebury_ssh_G {
 sub check_for_ebury_ssh_banner {
     my ( $host, $port );
     my $ssh_connection = $ENV{'SSH_CONNECTION'};
+    return if !$ssh_connection;
 
     if ( $ssh_connection =~ m{ \s (\d+\.\d+\.\d+\.\d+) \s (\d+) \z }xms ) {
         ( $host, $port ) = ( $1, $2 );
