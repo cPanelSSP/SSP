@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.41';
+my $version = '4.99.42';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -288,7 +288,7 @@ check_for_whmxtra();
 check_for_cdorked_A();                                          # malware
 check_for_cdorked_B();                                          # malware
 check_for_libkeyutils_filenames();                              # malware
-check_for_unowned_libkeyutils_files($libkeyutils_files_ref);    # malware
+#check_for_unowned_libkeyutils_files($libkeyutils_files_ref);    # malware
 check_sha1_sigs_libkeyutils($libkeyutils_files_ref);            # malware
 check_sha1_sigs_httpd();                                        # malware
 check_sha1_sigs_named();                                        # malware
@@ -386,7 +386,7 @@ sub check_for_dnsonly {
         check_for_symantec();
 
         check_for_libkeyutils_filenames();                              # malware
-        check_for_unowned_libkeyutils_files($libkeyutils_files_ref);    # malware
+#        check_for_unowned_libkeyutils_files($libkeyutils_files_ref);    # malware
         check_sha1_sigs_libkeyutils($libkeyutils_files_ref);            # malware
         check_sha1_sigs_httpd();                                        # malware
         check_sha1_sigs_named();                                        # malware
