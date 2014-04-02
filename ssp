@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.43';
+my $version = '4.99.44';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5139,6 +5139,8 @@ sub check_for_mailman_low_uid {
     else {
         return;
     }
+
+    return if !$minuid;
 
     my $mailman_uid = getpwnam('mailman');
     if ( defined $mailman_uid and $mailman_uid < $minuid ) {
