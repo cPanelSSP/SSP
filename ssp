@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.42';
+my $version = '4.99.43';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -263,6 +263,10 @@ check_for_pgpass_colon_in_password_field();
 check_for_dirs_that_break_ea();
 check_for_extra_uid_0_user();
 check_for_easyparams_attributes();
+check_for_stale_backup_pidfile();
+check_for_allow_update_in_named_conf();
+check_for_mailman_low_uid();
+check_for_missing_skiphttpauth();
 
 # [3RDP]
 check_for_assp();
@@ -644,7 +648,7 @@ sub get_process_list {
     ## used for checking for nginx, litespeed, mailscanner, etc.
     ## better (?) would be to run lsof and check process names on listening ports.
 
-    my @processlist = split /\n/, run( 'ps', 'axwwwf', '-o', 'user,cmd' );
+    my @processlist = split /\n/, run( 'ps', 'axwwwf', '-o', 'user,pid,cmd' );
 
     return @processlist;
 }
@@ -4220,6 +4224,7 @@ sub check_for_disabled_services {
 
 sub check_for_cloudlinux_not_licensed_through_cpanel {
     return if ( $is_cloudlinux == 0 );
+    return if !$external_ip_address;
 
     my $host = 'verify.cpanel.net';
     my $url  = '/index.cgi?ip=' . $external_ip_address;
@@ -5052,6 +5057,103 @@ sub check_for_easyparams_attributes {
     }
 }
 
+sub check_for_stale_backup_pidfile {
+    my @pidfiles = qw(
+        /var/cpanel/backuprunning
+        /var/cpanel/new_backuprunning
+    );
+
+    my $found_pid = 0;
+    my $found_process = 0;
+
+    for my $pidfile (@pidfiles) {
+        my $pid;
+
+        if ( -e $pidfile ) {
+            open my $fh, '<', $pidfile or return;
+            chomp( $pid = readline $fh );
+            close $fh;
+
+            for my $process (@process_list) {
+                if ( $process =~ / \A [^ ]+ \s+ $pid \s+ (.*) /xms ) {
+                    $found_pid = 1;
+                    if (( $pidfile eq '/var/cpanel/backuprunning' ) && ( $process =~ m# /scripts/cpbackup$# )) {
+                        $found_process = 1;
+                        last;
+                    }
+                    if (( $pidfile eq '/var/cpanel/new_backuprunning' ) && ( $process =~ m# /usr/local/cpanel/bin/backup$# )) {
+                        $found_process = 1;
+                        last;
+                    }
+                }
+            }
+
+            if ( $found_pid == 0 ) {
+                print_warn('Backups: ');
+                print_warning("$pidfile exists, but pid $pid not found in process list");
+            }
+            elsif ( $found_pid == 1 and $found_process == 0 ) {
+                print_warn('Backups: ');
+                print_warning("pid $pid from $pidfile does not match a valid backup process");
+            }
+        }
+    }
+}
+
+sub check_for_allow_update_in_named_conf {
+    my $namedconf = '/etc/named.conf';
+    return if !-e $namedconf;
+
+    my $has_allow_update = 0;
+
+    if ( open my $fh, '<', $namedconf ) {
+        while (<$fh>) {
+            if ( /allow-update/i ) {
+                $has_allow_update = 1;
+                last;
+            }
+        }
+        close $fh;
+    }
+
+    if ($has_allow_update == 1) {
+        print_warn('named.conf: ');
+        print_warning('allow-update found. This can possibly prevent rndc from reloading. See ticket 4717591');
+    }
+}
+
+sub check_for_mailman_low_uid {
+    my $wwwacctconf = '/etc/wwwacct.conf';
+    return if !-e $wwwacctconf;
+    my $minuid;
+
+    if ( open my $fh, '<', $wwwacctconf ) {
+        while (<$fh>) {
+            if ( /^MINUID\s(\d+)$/ ) {
+                $minuid = $1;
+                last;
+            }
+        }
+        close $fh;
+    }
+    else {
+        return;
+    }
+
+    my $mailman_uid = getpwnam('mailman');
+    if ( defined $mailman_uid and $mailman_uid < $minuid ) {
+        print_warn('Mailman: ');
+        print_warning('user mailman has uid lower than MINUID from wwwacct.conf. Is mailman rpm installed? See ticket 4717977');
+    }
+}
+
+sub check_for_missing_skiphttpauth {
+    return if defined $cpconf{'skiphttpauth'};
+
+    print_warn('skiphttpauth: ');
+    print_warning('not found in cpanel.config. HTTP auth will be enabled by default. See FB 95681');
+}
+
 ##############################
 #  END [WARN] CHECKS
 ##############################
@@ -5381,6 +5483,7 @@ sub build_libkeyutils_file_list {
     my @libkeyutils_files;
 
     for my $dir (@dirs) {
+        next if !-e $dir;
         opendir( my $dir_fh, $dir );
         while ( my $file = readdir($dir_fh)) {
             if ( $file =~ /^libkeyutils\.so\.(?:[\.\d]+)?$/ ) {
@@ -5461,6 +5564,7 @@ sub check_for_libkeyutils_filenames {
                 );
 
     for my $dir (@dirs) {
+        next if !-e $dir;
         for my $file (@files) {
             if ( -f "${dir}/${file}" and !-z "${dir}/${file}" ) {
                 $bad_libs .= "\t${dir}/${file}\n";
@@ -5743,7 +5847,7 @@ sub check_for_ebury_ssh_G {
 }
 
 sub check_for_ebury_ssh_banner {
-    my ( $host, $port );
+    my ( $host, $port, $ssh_banner );
     my $ssh_connection = $ENV{'SSH_CONNECTION'};
     return if !$ssh_connection;
 
@@ -5761,8 +5865,10 @@ sub check_for_ebury_ssh_banner {
         Timeout     => 5,
     ) or return;
 
-    chomp( my $ssh_banner = readline $sock );
+    $ssh_banner = readline $sock;
     close $sock;
+    return if !$ssh_banner;
+    chomp $ssh_banner;
 
     if ( $ssh_banner =~ m{ \A SSH-2\.0-[0-9a-f]{22,46} }xms ) {
         print "\n\n";
