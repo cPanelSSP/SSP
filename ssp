@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.44';
+my $version = '4.99.45';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -267,6 +267,7 @@ check_for_stale_backup_pidfile();
 check_for_allow_update_in_named_conf();
 check_for_mailman_low_uid();
 check_for_missing_skiphttpauth();
+check_for_MPM_ITK_and_suexec();
 
 # [3RDP]
 check_for_assp();
@@ -565,14 +566,13 @@ sub print_version {
 
 sub print_tip {
     my @tips = (
-        '[FB 86549] cPHulk may report root logins to Pure-FTPd despite no evidence being found',
+        '[FB 86549] (Fixed in 11.42.1.1) cPHulk may report root logins to Pure-FTPd despite no evidence being found',
         '[FB 78617] (By design) sysup always installs bind',
         '[FB 75793] (By design) Proxy subdomains are not created for addon domains',
         '[FB 73369] Can\'t log into SquirrelMail, but Horde and Roundcube work? Check if webmail pass contains "odd" characters',
         '[FB 72801] (By design) File Manager creates new files with 0600 perms, even when saving an existing file as a new one',
         '[FB 72733] (By design) File Manager\'s "Compress" feature has a hard coded timeout due to using cPanel\'s form upload logic',
         '[FB 63530] When setting up a remote MySQL server, that server must have the openssh-clients package installed',
-        '[FB 63283] (By design) In cPanel <= 11.38, bandwidth will process during blackout hours if it was started before the blackout hour',
         '[FB 63193] File Manager showing "Out of memory" in cPanel error_log? Try renaming $HOME/$USER/.cpanel/datastore/SYSTEMMIME',
         '[FB 62819] "License File Expired: LTD: 1334782495 NOW: 1246416504 FUT!" likely just means the server clock is wrong',
         '[FB 62054] (By design) The "Dedicated IP" box can only be modified when creating a package - not when editing',
@@ -615,6 +615,7 @@ sub print_tip {
         '/var/cpanel/conf/apache/local can potentially cause issues. See ticket 3915299 for an example',
         'System backups are not uploaded via FTP by default, requires manual config. See http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/SystemBackups',
         '$PATH may differ when executing something via cron rather than the command line. See ticket 4419531',
+        '"failed to open scan directory /var/spool/exim/scan/[...]: Too many links" could mean a directory has reached limit of 32,000 files/dirs'
     );
 
     my $num  = int rand scalar @tips;
@@ -2077,6 +2078,7 @@ sub check_for_hooks_in_scripts_directory {
       e5e13640299ec439fb4c7f79a054e42b    /scripts/posteasyapache
       16d94b5426681a977e2beedd0ad871e9    /scripts/posteasyapache
       42a624c843f34085f1532b0b4e17fe8c    /scripts/postmodifyacct
+      05b7f8b4f2c83f033d124479a1c3eca0    /scripts/postupcp
       22cf7db1c069fd9672cd9dad3a3d371d    /scripts/postupcp
       57f8ea2d494e299827cc365c86a357ac    /scripts/postupcp
       e464adf0531fea2af4fe57361d9a43fb    /scripts/postupcp
@@ -2733,6 +2735,10 @@ sub check_for_system_mem_below_512M {
             }
         }
         close $meminfo_fh;
+    }
+
+    if ( $memtotal =~ /^(\d+)\./ ) {
+        $memtotal = $1;
     }
 
     if ( $memtotal < 512 ) {
@@ -4780,7 +4786,7 @@ sub check_for_processes_killed_by_lfd {
 
     if (@killed_by_lfd) {
         chomp @killed_by_lfd;
-        print_warn("Processes killed by 3rd party software \"LFD\" (\"grep Kill:1 /var/log/lfd.log\"):\n");
+        print_warn("Last 10 processes killed by 3rd party software \"LFD\" (\"grep Kill:1 /var/log/lfd.log\"):\n");
         for my $killed_process (@killed_by_lfd) {
             print_magenta("\t \\_ $killed_process");
         }
@@ -5154,6 +5160,39 @@ sub check_for_missing_skiphttpauth {
 
     print_warn('skiphttpauth: ');
     print_warning('not found in cpanel.config. HTTP auth will be enabled by default. See FB 95681');
+}
+
+sub check_for_MPM_ITK_and_suexec {
+    my $has_itk = 0;
+    my $suexec_disabled = 0;
+
+    my @httpd_V = split /\n/, run( '/usr/local/apache/bin/httpd', '-V' );
+
+    for my $line (@httpd_V) {
+        if ( $line =~ /^Server MPM:\s+(.*)/ ) {
+            if ( $1 eq 'ITK' ) {
+                $has_itk = 1;
+                last;
+            }
+        }
+    }
+
+    return if !$has_itk;
+    return if !-f '/usr/local/apache/conf/php.conf';
+
+    open my $fh, '<', '/usr/local/apache/conf/php.conf' or return;
+    while (<$fh>) {
+        if ( /^LoadModule disable_suexec_module modules\/mod_disable_suexec.so$/ ) {
+            $suexec_disabled = 1;
+            last;
+        }
+    }
+    close $fh;
+
+    return if $suexec_disabled;
+
+    print_warn('MPM ITK: ');
+    print_warning('enabled, but suexec is also enabled. This can break redirects like /cpanel. See FB 83405.');
 }
 
 ##############################
