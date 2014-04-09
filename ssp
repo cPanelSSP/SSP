@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.45';
+my $version = '4.99.46';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -97,6 +97,8 @@ print "\n";
 for ( 1 .. 3 ) {
     print BOLD GREEN ON_RED "\tPlease DO NOT paste output from SSP into tickets unless it is relevant to an issue" . RESET . "\n";
 }
+
+check_for_hacked_server_touchfile();
 
 ## [INFO]
 print "\n";
@@ -750,6 +752,32 @@ sub print_info2 {
 sub print_magenta {
     my $text = shift;
     print BOLD MAGENTA ON_BLACK "$text\n";
+}
+
+sub check_for_hacked_server_touchfile {
+    my $docdir = '/usr/share/doc';
+    return if !-d $docdir;
+
+    opendir( my $fh, $docdir ) or return;
+    my @touchfiles = grep { /^\.cp\.([^\d]+)\.(\d{2}-\d{2}-\d{2})_([^_]+)_(\d+)$/ } readdir $fh;
+    closedir $fh;
+
+    return if scalar @touchfiles == 0;
+
+    print "\n" x 10;
+    print_warn('HACKED SERVER! ');
+    print_warning('[L1/L2 ESCALATE TO L3 NOW]. The following touchfiles were found:');
+    for my $touchfile (@touchfiles) {
+        if ( $touchfile =~ /^\.cp\.([^\d]+)\.(\d{2}-\d{2}-\d{2})_([^_]+)_(\d+)$/ ) {
+            my ( $cptech, $date, $ipaddr, $ticket ) = ( $1, $2, $3, $4 );
+            $date =~ s#-#/#g;
+            $cptech = ucfirst $cptech;
+            print_magenta("\t => $docdir/$touchfile");
+            print_magenta("\t\t $cptech reported this server at $ipaddr as compromised on $date local server time in ticket $ticket");
+        }
+    }
+
+    print "\n" x 10;
 }
 
 ##############################
