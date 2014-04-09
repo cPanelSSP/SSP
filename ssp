@@ -754,12 +754,18 @@ sub print_magenta {
     print BOLD MAGENTA ON_BLACK "$text\n";
 }
 
+sub print_red {
+    my $text = shift;
+    print BOLD RED ON_BLACK "$text\n";
+}
+
 sub check_for_hacked_server_touchfile {
     my $docdir = '/usr/share/doc';
     return if !-d $docdir;
 
     opendir( my $fh, $docdir ) or return;
-    my @touchfiles = grep { /^\.cp\.([^\d]+)\.(\d{2}-\d{2}-\d{2})_([^_]+)_(\d+)$/ } readdir $fh;
+    # .cp.jeff.2014-04-09_10.5.40.209_1234567
+    my @touchfiles = grep { /^\.cp\.([^\d]+)\.(\d{4}-\d{2}-\d{2})_([^_]+)_(\d+)$/ } readdir $fh;
     closedir $fh;
 
     return if scalar @touchfiles == 0;
@@ -768,12 +774,15 @@ sub check_for_hacked_server_touchfile {
     print_warn('HACKED SERVER! ');
     print_warning('[L1/L2 ESCALATE TO L3 NOW]. The following touchfiles were found:');
     for my $touchfile (@touchfiles) {
-        if ( $touchfile =~ /^\.cp\.([^\d]+)\.(\d{2}-\d{2}-\d{2})_([^_]+)_(\d+)$/ ) {
+        if ( $touchfile =~ /^\.cp\.([^\d]+)\.(\d{4}-\d{2}-\d{2})_([^_]+)_(\d+)$/ ) {
             my ( $cptech, $date, $ipaddr, $ticket ) = ( $1, $2, $3, $4 );
             $date =~ s#-#/#g;
             $cptech = ucfirst $cptech;
             print_magenta("\t => $docdir/$touchfile");
             print_magenta("\t\t $cptech reported this server at $ipaddr as compromised on $date local server time in ticket $ticket");
+            if ( !grep { /^$ipaddr$/ } @local_ipaddrs_list ) {
+                print_red("\t\t NOTE: IP addr $ipaddr not found on the server!");
+            }
         }
     }
 
