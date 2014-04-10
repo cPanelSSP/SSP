@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.49';
+my $version = '4.99.50';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -270,6 +270,7 @@ check_for_allow_update_in_named_conf();
 check_for_mailman_low_uid();
 check_for_missing_skiphttpauth();
 check_for_MPM_ITK_and_suexec();
+check_for_openssl_heartbleed_bug();     # added per Chris
 
 # [3RDP]
 check_for_assp();
@@ -382,6 +383,7 @@ sub check_for_dnsonly {
         check_for_networkmanager();
         check_for_disabled_services();
         check_for_harmful_php_mode_600_cron();
+        check_for_openssl_heartbleed_bug();     # per Chris
 
         ## [3RDP]
         check_for_apf();
@@ -5230,6 +5232,44 @@ sub check_for_MPM_ITK_and_suexec {
 
     print_warn('MPM ITK: ');
     print_warning('enabled, but suexec is also enabled. This can break redirects like /cpanel. See FB 83405.');
+}
+
+sub check_for_openssl_heartbleed_bug {
+    my $sysinfo_config = '/var/cpanel/sysinfo.config';
+    return if !-f $sysinfo_config;
+
+    my $rpm_dist_ver;
+
+    open my $fh, '<', $sysinfo_config or return;
+    while (<$fh>) {
+        if ( /^rpm_dist_ver=(\d+)$/ ) {
+            $rpm_dist_ver = $1;
+            last;
+        }
+    }
+    close $fh or return;
+
+    return if !$rpm_dist_ver;
+    return if ( $rpm_dist_ver <= 5 ); # RHEL/CentOS 5 not vuln: http://cpanel.net/heartbleed-vulnerability-information/
+
+    my $patched;
+
+    my $openssl_changelog = run( 'rpm', '-q', '--changelog', 'openssl');
+
+    if ( $openssl_changelog && $openssl_changelog =~ /\sCVE-2014-0160\s/ ) {
+        $patched = 1;
+    }
+
+    return if $patched;
+
+    print "\n";
+    print_warn('Heartbleed: ');
+    print_warning('Send customer this premade: OpenSSL Heartbleed Vulnerability - Discovery');
+    print_red('The following check was used: rpm -q --changelog openssl | grep \' CVE-2014-0160 \'');
+    print_red('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
+    print_red('This check does NOT take corrupt rpm dbs into account, and WILL false positive if corrupt');
+    print "\n";
+
 }
 
 ##############################
