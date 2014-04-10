@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.46';
+my $version = '4.99.47';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5624,7 +5624,7 @@ sub check_for_cdorked_B {
 
     if ( $has_cdorked_b == 1 ) {
         print_warn('!! [ Linux/Cdorked ] !! ');
-        print_warning('L1/L2: escalate this ticket to L3. L3 use 00 - Cdorked.B premade');
+        print_warning('L1/L2: escalate this ticket to L3. L3 use 00 - eBury / CDorked - Free Migration [L3 only]');
         print_warning("\tThe following files were found (note the spaces at the end of the files):");
         print_warning("\t$cdorked_files");
     }
