@@ -32,7 +32,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.47';
+my $version = '4.99.49';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -1525,7 +1525,7 @@ sub check_if_upcp_is_running {
     my $upcp_running = 0;
 
     for my $line (@process_list) {
-        if ( $line =~ m{ \A root (?:.*) upcp }xms ) {
+        if ( $line =~ m{ \A root (?:.*) cPanel \s Update \s \(upcp\) }xms ) {
             $upcp_running = 1;
             last;
         }
