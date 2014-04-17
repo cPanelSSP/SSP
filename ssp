@@ -12,6 +12,7 @@ use Term::ANSIColor qw(:constants);
 use Storable;
 use POSIX;
 use Time::Local;
+use IPC::Open3;
 
 if ( !-d '/usr/local/cpanel' ) {
     die '/usr/local/cpanel not found';
@@ -32,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.50';
+my $version = '4.99.51';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -271,6 +272,7 @@ check_for_mailman_low_uid();
 check_for_missing_skiphttpauth();
 check_for_MPM_ITK_and_suexec();
 check_for_openssl_heartbleed_bug();     # added per Chris
+check_for_broken_mysqldump();
 
 # [3RDP]
 check_for_assp();
@@ -5252,6 +5254,20 @@ sub check_for_openssl_heartbleed_bug {
     return if !$rpm_dist_ver;
     return if ( $rpm_dist_ver <= 5 ); # RHEL/CentOS 5 not vuln: http://cpanel.net/heartbleed-vulnerability-information/
 
+    chomp( my $openssl_ver = run( 'openssl', 'version' ) );
+    return if !$openssl_ver;
+
+    # don't check if OpenSSL >= 1.0.1 (any patch level) is installed
+    if ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)/ ) {
+        my ( $maj, $min, $patch ) = ( $1, $2, $3 );
+        return if $maj > 1;
+        if ( ( $maj == 1 ) && ( $min == 0 ) && ( $patch >= 1 ) ) {
+            return;
+        }
+    }
+
+    print "here\n";
+
     my $patched;
 
     my $openssl_changelog = run( 'rpm', '-q', '--changelog', 'openssl');
@@ -5270,6 +5286,33 @@ sub check_for_openssl_heartbleed_bug {
     print_red('This check does NOT take corrupt rpm dbs into account, and WILL false positive if corrupt');
     print "\n";
 
+}
+
+sub check_for_broken_mysqldump {
+    my $md = '/usr/bin/mysqldump';
+
+    if ( !-f $md ) {
+        print_warn("$md: ");
+        print_warning('not found!');
+        return;
+    }
+
+    my $pid = IPC::Open3::open3( '</dev/null', '>/dev/null', my $stderr, $md, );
+    waitpid( $pid, 0 );
+    my $exit_status = $? >> 8;
+
+    # when running mysqldump with no args, the exit status is 1. anything other than 1 should indicate unexpected behavior.
+    #
+    # $ mysqldump
+    # [...]
+    # $ echo $?
+    # 1
+    #
+    # tested via MySQL55-client
+    if ( $exit_status && $exit_status != 1 ) {
+        print_warn("$md: ");
+        print_warning('may be broken (exit status != 1). This can cause eximstats and other issues. See FB 98477');
+    }
 }
 
 ##############################
