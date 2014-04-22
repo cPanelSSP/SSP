@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.52';
+my $version = '4.99.53';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5257,13 +5257,12 @@ sub check_for_openssl_heartbleed_bug {
     chomp( my $openssl_ver = run( 'openssl', 'version' ) );
     return if !$openssl_ver;
 
-    # don't check if OpenSSL >= 1.0.1 (any patch level) is installed
+    # only 1.0.1(x) is vuln
     if ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)/ ) {
         my ( $maj, $min, $patch ) = ( $1, $2, $3 );
-        return if $maj > 1;
-        if ( ( $maj == 1 ) && ( $min == 0 ) && ( $patch >= 1 ) ) {
-            return;
-        }
+        return if $maj != 1;
+        return if $min != 0;
+        return if $patch != 1;
     }
 
     my $patched;
