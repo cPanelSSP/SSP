@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.53';
+my $version = '4.99.54';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -273,6 +273,7 @@ check_for_missing_skiphttpauth();
 check_for_MPM_ITK_and_suexec();
 check_for_openssl_heartbleed_bug();     # added per Chris
 check_for_broken_mysqldump();
+check_exim_log_sanity();
 
 # [3RDP]
 check_for_assp();
@@ -1926,6 +1927,9 @@ sub check_for_non_default_permissions {
         '/var/lib'                     => '755',
         '/var/lib/mysql'               => '751',
         '/var/lib/mysql/mysql.sock'    => '777',
+        '/var/log/exim_mainlog'        => '0640',
+        '/var/log/exim_paniclog'       => '0640',
+        '/var/log/exim/rejectlog'      => '0640',
         '/var/tmp'                     => '1777',
         '/usr/local/cpanel/php/cpanel.php'  => '644',
         '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => '644',
@@ -5312,6 +5316,25 @@ sub check_for_broken_mysqldump {
     }
 }
 
+sub check_exim_log_sanity {
+    my @logs = qw( /var/log/exim_mainlog /var/log/exim_paniclog /var/log/exim_rejectlog );
+
+    for my $log (@logs) {
+        if ( !-f $log ) {
+            print_warn("$log: ");
+            print_warning('is missing!');
+        }
+        else {
+            my $uid = (stat($log))[4];
+            my $user = getpwuid($uid);
+            if ( $user ne 'mailnull' ) {
+                print_warn("$log: ");
+                print_warning('is not owned by "mailnull"');
+            }
+        }
+    }
+}
+
 ##############################
 #  END [WARN] CHECKS
 ##############################
@@ -5365,7 +5388,7 @@ sub check_for_varnish {
 
     if ( grep { m{ \A varnish }xms } @port_80_processes ) {
         print_3rdp('Varnish: ');
-        print_3rdp2('varnish is listening on port 80');
+        print_3rdp2('varnish is listening on port 80, known to break proxy subdomains. See "RareIssues" wiki article');
     }
 }
 
