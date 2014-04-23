@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.55';
+my $version = '4.99.56';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -1407,7 +1407,7 @@ sub print_if_using_modruid2 {
     for (@apache_modules_output) {
         if (/ruid2_module/) {
             print_info('mod_ruid2: ');
-            print_normal('is enabled');
+            print_warning('is enabled (mod_userdir style URLs don\'t work with mod_ruid2!)');
             last;
         }
     }
