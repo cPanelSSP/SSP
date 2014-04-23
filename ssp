@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.54';
+my $version = '4.99.55';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -1901,6 +1901,7 @@ sub check_for_non_default_permissions {
         '/bin/bash'                    => '755',
         '/dev/null'                    => '666',
         '/etc'                         => '755',
+        '/etc/cpbackup.conf'           => '0644',
         '/etc/group'                   => '644',
         '/etc/hosts'                   => '644',
         '/etc/nsswitch.conf'           => '644',
@@ -1920,6 +1921,7 @@ sub check_for_non_default_permissions {
         '/usr/local/sbin'              => '755',
         '/var'                         => '755',
         '/var/cpanel'                  => '755',
+        '/var/cpanel/backups/config'   => '0644',
         '/var/cpanel/datastore'        => '755',
         '/var/cpanel/features'         => '755',
         '/var/cpanel/locale'           => '755',
@@ -6144,7 +6146,7 @@ sub check_for_immutable_files {
     return if !-x '/usr/bin/lsattr';
 
     my @path_dirs = split( m{:}, $ENV{'PATH'} );
-    push @path_dirs, '/usr/local/apache/conf/httpd.conf';
+    push @path_dirs, '/usr/local/apache/conf/httpd.conf', '/etc/cpbackup.conf', '/var/cpanel/backups/config';
 
     foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, run( 'lsattr', @path_dirs ) ) ) ) {
         print_warn('Immutable file: ');
