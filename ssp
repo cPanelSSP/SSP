@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.57';
+my $version = '4.99.58';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5342,8 +5342,13 @@ sub check_exim_log_sanity {
 sub check_for_UMBREON_rootkit {
     my $dir = '/usr/local/__UMBREON__';
     if ( chdir $dir ) {
-        print_warn('/usr/local/__UMBREON__: ');
-        print_warning('!! I can cd into this directory. Likely sign of Umbreon rootkit. Escalate to L3 now !!');
+        print "\n" x 2;
+        print_warn('!! [ UMBREON ROOTKIT ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "The following directory was found:\n";
+        print "\t$dir\n";
+        print "\tL3: use 07 - UMBREON Predef [L3 Only]\n";
+        print "\n" x 2;
     }
 }
 
