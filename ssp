@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.56';
+my $version = '4.99.57';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -274,6 +274,7 @@ check_for_MPM_ITK_and_suexec();
 check_for_openssl_heartbleed_bug();     # added per Chris
 check_for_broken_mysqldump();
 check_exim_log_sanity();
+check_for_UMBREON_rootkit();
 
 # [3RDP]
 check_for_assp();
@@ -387,6 +388,7 @@ sub check_for_dnsonly {
         check_for_disabled_services();
         check_for_harmful_php_mode_600_cron();
         check_for_openssl_heartbleed_bug();     # per Chris
+        check_for_UMBREON_rootkit();            # per Chris
 
         ## [3RDP]
         check_for_apf();
@@ -5336,6 +5338,15 @@ sub check_exim_log_sanity {
         }
     }
 }
+
+sub check_for_UMBREON_rootkit {
+    my $dir = '/usr/local/__UMBREON__';
+    if ( chdir $dir ) {
+        print_warn('/usr/local/__UMBREON__: ');
+        print_warning('!! I can cd into this directory. Likely sign of Umbreon rootkit. Escalate to L3 now !!');
+    }
+}
+
 
 ##############################
 #  END [WARN] CHECKS
