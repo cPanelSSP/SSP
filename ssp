@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.58';
+my $version = '4.99.59';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5265,8 +5265,8 @@ sub check_for_openssl_heartbleed_bug {
     chomp( my $openssl_ver = run( 'openssl', 'version' ) );
     return if !$openssl_ver;
 
-    # only 1.0.1(x) is vuln
-    if ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)/ ) {
+    # only 1.0.1[a-f] is vuln (and 1.0.2-beta which no one should be using)
+    if ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)[a-f]/ ) {
         my ( $maj, $min, $patch ) = ( $1, $2, $3 );
         return if $maj != 1;
         return if $min != 0;
@@ -5290,7 +5290,6 @@ sub check_for_openssl_heartbleed_bug {
     print_red('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
     print_red('This check does NOT take corrupt rpm dbs into account, and WILL false positive if corrupt');
     print "\n";
-
 }
 
 sub check_for_broken_mysqldump {
