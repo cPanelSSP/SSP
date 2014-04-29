@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.59';
+my $version = '4.99.60';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -1901,6 +1901,7 @@ sub check_for_non_default_permissions {
         '/'                            => '755',
         '/bin'                         => '755',
         '/bin/bash'                    => '755',
+        '/dev/log',                    => '666',
         '/dev/null'                    => '666',
         '/etc'                         => '755',
         '/etc/cpbackup.conf'           => '0644',
@@ -1953,6 +1954,9 @@ sub check_for_non_default_permissions {
                 next if ( $resource =~ '^/(var|sbin|usr/local/sbin|usr|usr/sbin)$|^/var/cpanel' and $mode == 711 );
                 if ( $resource eq '/' and $mode == 711 ) {
                     $resources_and_perms{$resource} .= ") (.ftpquota issues? see ticket 4429843";
+                }
+                if ( $resource eq '/dev/log' ) {
+                    $resources_and_perms{$resource} .= ") (CSF RESTRICT_SYSLOG can cause this. See ticket 4875833";
                 }
                 print_warn('Non-default Permissions: ');
                 print_warning("$resource (mode: $mode | default: $resources_and_perms{$resource})");
