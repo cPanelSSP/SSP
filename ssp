@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.60';
+my $version = '4.99.61';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5275,6 +5275,9 @@ sub check_for_openssl_heartbleed_bug {
         return if $maj != 1;
         return if $min != 0;
         return if $patch != 1;
+    }
+    else {
+        return;
     }
 
     my $patched;
