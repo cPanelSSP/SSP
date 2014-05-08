@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.61';
+my $version = '4.99.62';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -121,6 +121,7 @@ print_if_using_mydns_or_nsd();
 print_if_using_modruid2();
 print_mysql_version();
 print_backups_info();
+check_for_custom_zonetemplates();
 
 ## [WARN]
 check_selinux_status();
@@ -222,7 +223,6 @@ check_for_dhclient();
 check_for_var_cpanel_roundcube_install();
 check_for_missing_etc_localtime();
 check_for_immutable_files();
-check_for_rpmsave_conf();
 check_for_cloudlinux_mysql_gov();
 check_cpanel_config_for_low_maxmem();
 check_pure_ftpd_conf_for_upload_script_and_dead();    #must come after check_cpanel_config_for_low_maxmem
@@ -296,6 +296,7 @@ check_for_whmphp();         # Master reseller software
 check_for_cpremote();
 check_for_els();
 check_for_whmxtra();
+check_for_usr_local_mis();
 
 check_for_cdorked_A();                                          # malware
 check_for_cdorked_B();                                          # malware
@@ -1478,6 +1479,35 @@ sub print_backups_info {
         print_normal("[New: $new_backups_enabled] [Legacy: $old_backups_enabled]");
     }
 }
+
+sub check_for_custom_zonetemplates {
+    my $template_dir = '/var/cpanel/zonetemplates';
+    return if !-e $template_dir;
+
+    my $is_empty = 0; 
+
+    opendir( my $fh, $template_dir ) or return;
+    my @dirents = grep { !/^\.\.?/ } readdir $fh; 
+    closedir $fh; 
+
+    return if !@dirents;
+
+    for my $file (@dirents) {
+        if ( -z "${template_dir}/${file}" ) {
+            $is_empty = 1; 
+            last;
+        }    
+    }    
+
+    print_info('Zone templates: ');
+    if ( $is_empty == 1 ) {
+        print_red("found in $template_dir - some may be empty! See ticket 4897373");
+    }    
+    else {
+        print_normal("found in $template_dir");
+    }    
+}
+
 
 ##############################
 #  END [INFO] CHECKS
@@ -5679,6 +5709,14 @@ sub check_for_whmxtra {
     print_3rdp2("$ionsh exists. 'cPanel PHP loader' Tweak Settings or php.ini settings reverted? See 4622167, 4628203");
 }
 
+sub check_for_usr_local_mis {
+    my $dir = '/usr/local/mis';
+    return if !-d $dir;
+
+    print_3rdp("$dir: ");
+    print_3rdp2('found! This can prevent EA from completing. See ticket 4822059');
+}
+
 ##############################
 #  END [3RDP] CHECKS
 ##############################
@@ -6176,15 +6214,6 @@ sub check_for_immutable_files {
     }
 }
 
-sub check_for_rpmsave_conf {
-    foreach my $cfg ( '/etc/proftpd.conf', '/etc/pure-ftpd.conf' ) {
-        if ( -e $cfg . '.rpmsave' ) {
-            print_warn("Found .rpmsave (see FB 63887 if TLS is broken): ");
-            print_warning( $cfg . '.rpmsave' );
-        }
-    }
-}
-
 sub cached_run {
     if ( $INC{'Cpanel/CachedCommand.pm'} ) {
         goto \&Cpanel::CachedCommand::cachedcommand;
@@ -6235,5 +6264,6 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
         }
     }
 }
+
 
 1;
