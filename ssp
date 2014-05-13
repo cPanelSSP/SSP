@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.62';
+my $version = '4.99.63';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -223,6 +223,7 @@ check_for_dhclient();
 check_for_var_cpanel_roundcube_install();
 check_for_missing_etc_localtime();
 check_for_immutable_files();
+check_for_immutable_dirs();
 check_for_cloudlinux_mysql_gov();
 check_cpanel_config_for_low_maxmem();
 check_pure_ftpd_conf_for_upload_script_and_dead();    #must come after check_cpanel_config_for_low_maxmem
@@ -6211,6 +6212,22 @@ sub check_for_immutable_files {
     foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, run( 'lsattr', @path_dirs ) ) ) ) {
         print_warn('Immutable file: ');
         print_warning("$file");
+    }
+}
+
+sub check_for_immutable_dirs {
+    return if !-x '/usr/bin/lsattr';
+
+    my @dirs = qw( / );
+
+    foreach my $dir ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, run( 'lsattr', '-d', @dirs ) ) ) ) {
+        print_warn('Immutable and/or append-only directory: ');
+        if ( $dir =~ m#\s/\z# ) {
+            print_warning("$dir  This can mess with EA. See ticket 4929961");
+        }
+        else {
+            print_warning($dir);
+        }
     }
 }
 
