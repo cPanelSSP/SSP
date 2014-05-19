@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.63';
+my $version = '4.99.64';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -251,6 +251,7 @@ check_if_hostname_missing_from_localdomains();
 check_for_eximstats_newline();
 check_for_nfs();
 check_for_processes_killed_by_lfd();
+check_for_processes_killed_by_prm();
 check_for_broken_userdatadomains();
 check_ssl_db_perms();
 check_for_nat_plus_mod_evasive();
@@ -4872,6 +4873,53 @@ sub check_for_processes_killed_by_lfd {
         chomp @killed_by_lfd;
         print_warn("Last 10 processes killed by 3rd party software \"LFD\" (\"grep Kill:1 /var/log/lfd.log\"):\n");
         for my $killed_process (@killed_by_lfd) {
+            print_magenta("\t \\_ $killed_process");
+        }
+    }
+}
+
+sub check_for_processes_killed_by_prm {
+    my $log  = '/usr/local/prm/log_prm';
+    return if !-e $log;
+
+    my $size = (stat($log))[7];
+    return if !$size;
+
+    my $bytes_to_check = 10485760; # 10M
+    my $seek_position  = 0;
+    my $log_data;
+    my @logs;
+    my $count = 0;
+    my @killed_by_prm;
+
+    if ( $size > $bytes_to_check ) {
+        $seek_position = ( $size - $bytes_to_check );
+    }
+
+    open my $file_fh, '<', $log or return;
+    seek $file_fh, $seek_position, 0;
+    read $file_fh, $log_data, $bytes_to_check;
+    close $file_fh;
+
+    if ( $log_data =~ /\sKILLED\s/ ) {
+        @logs = split /\n/, $log_data;
+        undef $log_data;
+        @logs = reverse @logs;
+
+        for my $line (@logs) { 
+            if ( $line =~ /(\S+\s\d+\s\S+)\s(?:\S+)\s(?:\S+) proc pid:(?:\d+) \{user:(\S+) cmd:(\S+)\}.+(MAX_.+) KILLED/ ) {
+                push @killed_by_prm, "[$1] [user: $2] [cmd: $3] [$4]\n";
+                $count++;
+            }
+
+            last if $count >= 10;
+        }
+    }
+
+    if (@killed_by_prm) {
+        chomp @killed_by_prm;
+        print_warn("Last 10 processes killed by 3rd party software \"PRM\" (\"grep KILLED /usr/local/prm/log_prm\"):\n");
+        for my $killed_process (@killed_by_prm) {
             print_magenta("\t \\_ $killed_process");
         }
     }
