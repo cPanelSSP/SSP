@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.64';
+my $version = '4.99.65';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -262,6 +262,7 @@ check_for_missing_groups();
 check_for_cgihidepass();
 check_for_noquotafs();
 check_for_mod_rpaf();
+check_for_mod_spdy();
 check_for_roundcube_overlay();
 check_for_hostname_park_zoneexists();
 check_for_pgpass_colon_in_password_field();
@@ -5102,6 +5103,13 @@ sub check_for_mod_rpaf {
     if ( grep { /rpaf_module/ } @apache_modules_output ) {
         print_warn('mod_rpaf: ');
         print_warning('loaded. May prevent .htaccess from denying access. See 4422297');
+    }
+}
+
+sub check_for_mod_spdy {
+    if ( grep { /spdy_module/ } @apache_modules_output ) {
+        print_warn('mod_spdy: ');
+        print_warning('loaded. May break proxy subdomains. See 4973361');
     }
 }
 
