@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.67';
+my $version = '4.99.68';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2123,7 +2123,7 @@ sub check_limitsconf {
 
     if (@limitsconf) {
         print_warn('/etc/security/limits.conf: ');
-        print_warning('customizations found. DON\'T move/alter! Seeing "Unable to set uids"? See CronUnableToSetUID article.');
+        print_warning('customizations found. DON\'T move/alter! Seeing "Unable to set uids"? See CronUnableToSetUID article, FB 76597.');
     }
 }
 
