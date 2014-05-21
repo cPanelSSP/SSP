@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.65';
+my $version = '4.99.66';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5609,14 +5609,19 @@ sub check_for_1h {
         $one_h = 1;
         if (@apache_modules_output) {
             for my $line (@apache_modules_output) {
-                if ( $line =~ /hive/ ) {
+                if ( $line =~ /hive_module / ) {
                     $hive_module = 'loaded';
+                    last;
                 }
                 else {
                     $hive_module = 'not active';
                 }
             }
         }
+        else {
+            $hive_module = 'status unknown';
+        }
+
         if ( -x '/usr/local/1h/sbin/guardian' ) {
             for my $line (@process_list) {
                 if ( $line =~ /Guardian/ ) {
