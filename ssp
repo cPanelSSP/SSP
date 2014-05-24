@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.69';
+my $version = '4.99.70';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2169,6 +2169,7 @@ sub check_for_hooks_in_scripts_directory {
       57f8ea2d494e299827cc365c86a357ac    /scripts/postupcp
       e464adf0531fea2af4fe57361d9a43fb    /scripts/postupcp
       941772daaa48999f1d5ae5fe2f881e36    /scripts/postupcp
+      843f9a04ceed5d03dc34616b371abf06    /scripts/postupcp
       4988be925a6f50ec505618a7cec702e2    /scripts/postkillacct
       a4df04a6440073fe40363cfd241b1fe7    /scripts/postwwwacct
       03a0dc919c892bde254c52cefe4d0673    /scripts/postwwwacct
