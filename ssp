@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.68';
+my $version = '4.99.69';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5810,30 +5810,49 @@ sub build_libkeyutils_file_list {
 
 sub check_for_cdorked_A {
     my $apache_bin = '/usr/local/apache/bin/httpd';
+    my $max_bin_size = 10_485_760; # avoid slurping too much mem
     return if ( !-f $apache_bin );
-    return if ((stat($apache_bin))[7] > 10_485_760 ); # avoid slurping too much mem
+    return if ((stat($apache_bin))[7] > $max_bin_size ); 
 
-    my $has_cdorked = 0; 
-    my $httpd;
+    my $has_cdorked = 0;
+    my $signature; 
+    my @apache_bins = ();
+    push @apache_bins, $apache_bin;
 
-    if ( open my $fh, '<', $apache_bin ) {
-        local $/;
-        $httpd = <$fh>;
-        close $fh; 
-    }    
-    else {
-        return;
-    }    
 
-    return if !$httpd;
+    for my $process (@process_list) {
+        if ( $process =~ m{ \A root \s+ (\d+) [^\d]+ $apache_bin }xms ) {
+            my $pid = $1;
+            my $proc_pid_exe = "/proc/" . $pid . "/exe";
+            my $link = readlink($proc_pid_exe);
+            if ( $link =~ m{ \(deleted\) }xms ) {
+                next if ((stat($proc_pid_exe))[7] > $max_bin_size );
+                push @apache_bins, $proc_pid_exe;
+            }
+        }
+    }
 
-    if ( $httpd =~ /open_tty/ ) {
-        $has_cdorked = 1; 
-    }    
+    for my $check_bin (@apache_bins) {
+        my $httpd;
+        if ( open my $fh, '<', $check_bin ) {
+            local $/;
+            $httpd = <$fh>;
+            close $fh; 
+        }    
+
+        next if !$httpd;
+
+        if ( $httpd =~ /(open_tty|hangout|ptsname|Qkkbal)/ ) {
+            $signature = $check_bin . ": \"" . $1 . "\"";
+            $has_cdorked = 1; 
+            last;
+        }    
+    }
 
     if ( $has_cdorked == 1 ) {
         print_warn('!! [ Linux/Cdorked ] !! ');
         print_warning('L1/L2 escalate this ticket to L3. L3 use 00 - Cdorked premade');
+        print_warning("\tString found in $signature (see ticket 4482347)");
     }    
 }
 
