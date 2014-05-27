@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.70';
+my $version = '4.99.71';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -194,7 +194,7 @@ check_for_C_compiler_optimization();
 check_perl_version_less_than_588();
 check_for_low_ulimit_for_root();
 check_for_fork_bomb_protection();
-check_for_cloudlinux_not_licensed_through_cpanel();
+check_for_license_info();
 check_for_harmful_php_mode_600_cron();
 check_for_cPanel_lower_than_11_30_7_3();
 check_for_custom_exim_conf_local();
@@ -3212,7 +3212,7 @@ sub check_etc_hosts_sanity {
 
 sub check_for_empty_or_missing_files {
     opendir( my $dir_fh, '/var/cpanel/users' );
-    my @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
+    my @dir_contents = grep { !/^(\.\.?|cptkt\d+_.+)$/ } readdir $dir_fh;
     closedir $dir_fh;
 
     # if there are no users on the box, don't warn about userdatadomains
@@ -4315,13 +4315,13 @@ sub check_for_disabled_services {
     print_warning($disabled);
 }
 
-sub check_for_cloudlinux_not_licensed_through_cpanel {
-    return if ( $is_cloudlinux == 0 );
+sub check_for_license_info {
     return if !$external_ip_address;
 
     my $host = 'verify.cpanel.net';
     my $url  = '/index.cgi?ip=' . $external_ip_address;
     my $is_licensed_for_cloudlinux_through_cpanel = 0;
+    my $is_one_time_license = 0;
 
     my $sock = IO::Socket::INET->new(
         PeerAddr    => $host,
@@ -4342,10 +4342,20 @@ sub check_for_cloudlinux_not_licensed_through_cpanel {
         $is_licensed_for_cloudlinux_through_cpanel = 1;
     }
 
-    if ( $is_licensed_for_cloudlinux_through_cpanel == 0 ) {
+    if ( $buffer =~ /ONE TIME FEE/ ) {
+        $is_one_time_license = 1;
+    }
+
+    if ( $is_cloudlinux && $is_licensed_for_cloudlinux_through_cpanel == 0 ) {
         print_warn('CloudLinux: ');
         print_warning("installed, not licensed by cPanel [ http://verify.cpanel.net/index.cgi?ip=${external_ip_address} ]");
     }
+
+    if ( $is_one_time_license ) {
+        print_warn('License: ');
+        print_warning("may be a one-time cPanel license [ http://verify.cpanel.net/index.cgi?ip=${external_ip_address} ]");
+    }
+
 }
 
 # Yes, this actually happened...
