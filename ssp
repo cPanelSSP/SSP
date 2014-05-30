@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.71';
+my $version = '4.99.72';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -51,6 +51,8 @@ my $external_ip_address;
 my $TIERS                 = get_tiers_file();
 my @local_ipaddrs_list    = get_local_ipaddrs();
 my @process_list          = get_process_list();
+my %process;
+my %port;
 my %hostinfo              = get_hostinfo();
 my %cpuinfo               = get_cpuinfo();
 my $mysql_datadir         = get_mysql_datadir();
@@ -66,6 +68,9 @@ my %pureftpdconf;              # /etc/pure-ftpd.conf
 my @apache_version_output;     # httpd -v
 my @apache_modules_output;     # httpd -M
 my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexec );
+
+&get_process_pid_hash(\%process);
+&get_lsof_port_hash(\%port);
 
 if ( -x '/usr/local/apache/bin/httpd' ) {
     @apache_version_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-v' );
@@ -280,7 +285,7 @@ check_exim_log_sanity();
 check_for_UMBREON_rootkit();
 
 # [3RDP]
-check_for_assp();
+check_smtp_processes();
 check_for_varnish();
 check_for_litespeed();
 check_for_nginx();
@@ -657,14 +662,40 @@ sub get_tiers_file {
     return $TIERS;
 }
 
-sub get_process_list {
+sub get_process_list { # Usage of this needs to be deprecated in favor of the %process hash
+    return split /\n/, run( 'ps', 'axwwwf', '-o', 'user,pid,cmd' );
+}
 
-    ## used for checking for nginx, litespeed, mailscanner, etc.
-    ## better (?) would be to run lsof and check process names on listening ports.
+sub get_process_pid_hash ($) {
+    my ($href) = @_;
+    for ( split /\n/, run( 'ps', 'axwww', '-o', 'user,pid,ppid,cmd' ) ) {
+        # nobody    5403  1666 /usr/local/apache/bin/httpd -k start -DSSL
+        if ( m{ ^ ([^\s]+) \s+ (\d+) \s+ (\d+) \s+ (.*?) \s* $ }xms ) {
+            ${$href}{$2}{USER} = $1;
+            ${$href}{$2}{PPID} = $3;
+            ${$href}{$2}{CMD} = $4;
+        }
+    }
+}
 
-    my @processlist = split /\n/, run( 'ps', 'axwwwf', '-o', 'user,pid,cmd' );
-
-    return @processlist;
+sub get_lsof_port_hash ($) {
+    my ($href) = @_;
+    for ( split /\n/, run( 'lsof', '+c15', '-n', '-P', '-i' ) ) {
+        # cmd will be max 15 characaters due to lsof limitation
+        # spamd           1781     root    5u  IPv4  10887      0t0  TCP 127.0.0.1:783 (LISTEN)
+        my @lsof = split(/\s+/, $_, 10);
+        if (defined($lsof[9]) && $lsof[9] =~ /LISTEN/ ) {
+            my ($ip, $port) = split /:/, $lsof[8];
+            push @{${$href}{"$port"}}, {
+                'CMD' => $lsof[0],
+                'PID' => $lsof[1],
+                'USER' => $lsof[2],
+                'IPV' => $lsof[4],
+                'PROTO' => $lsof[7],
+                'IP' => $ip
+            };
+        }
+    }
 }
 
 sub get_hostinfo {
@@ -4209,7 +4240,7 @@ sub check_for_networkmanager {
 
     if ( $networkmanager_running && $networkmanager_running == 1 ) {
         print_warn('NetworkManager: ');
-        print_warning('found in the process list');
+        print_warning('found in the process list - see "DisableNetworkManager" wiki article');
     }
 }
 
@@ -5465,35 +5496,31 @@ sub check_for_UMBREON_rootkit {
 #  BEGIN [3RDP] CHECKS
 ##############################
 
-sub check_for_assp {
-    my @port_25_processes;
+sub check_smtp_processes {
+    my $assp_running = 0;
 
-    if ( $os eq 'linux' ) {
-        my @lsof_25 = split /\n/, run( 'lsof', '-n', '-i', 'tcp:25' );
-        if (@lsof_25) {
+    if ( ! defined($port{"25"}) && ! -f '/etc/eximdisable' ) {
+        print_warn('Exim: ');
+        print_warning('not disabled and does not appear to be up -- nothing listening on port 25');
+    }
 
-            for my $line (@lsof_25) {
-                if ( $line =~ m{ (\S+) \s+ (?:.*) \s TCP (?:.*):smtp \s \(LISTEN\) }xms ) {
-                    push( @port_25_processes, $1 );
-                }
-            }
+    return if ! defined($port{"25"});
 
-            if ( grep { m{ \A assp\.pl }xms } @port_25_processes ) {
-                print_3rdp('ASSP: ');
-                print_warning('assp.pl is listening on port 25');
-            }
-
-            if ( grep { m{ \A perl \z }xms } @port_25_processes ) {
-                print_3rdp('Exim: ');
-                print_3rdp2('something other than Exim found listening on port 25');
-            }
+    for my $href ( @{$port{"25"}} ) {
+        my $pid = $href->{PID};
+        my $cmd = $process{$pid}{CMD};
+        if ( $href->{PROTO} eq "TCP" && ! ($cmd =~ m{ \A /usr/sbin/exim \b }xms) ) {
+            print_3rdp('SMTP: ');
+            print_3rdp2('a process other than exim is listening on port 25 [' . $href->{IPV} . ' ' . $href->{IP} . '] [USER: ' . $href->{USER} . '] [CMD: ' . $cmd . '] [PID: ' . $pid . ']');
         }
-        else {
-            if ( !-f '/etc/eximdisable' ) {
-                print_warn('Exim: ');
-                print_warning('does not appear to be up');
-            }
+        if ( $cmd =~ m{ /assp\.pl \b }xms ) {
+            $assp_running = $pid;
         }
+    }
+
+    if ( $assp_running ) {
+        print_3rdp('ASSP: ');
+        print_3rdp2('assp.pl is listening on port 25 [PID: ' . $assp_running . '] Vendor: http://assp.sourceforge.net');
     }
 }
 
@@ -5835,8 +5862,7 @@ sub check_for_cdorked_A {
         if ( $process =~ m{ \A root \s+ (\d+) [^\d]+ $apache_bin }xms ) {
             my $pid = $1;
             my $proc_pid_exe = "/proc/" . $pid . "/exe";
-            my $link = readlink($proc_pid_exe);
-            if ( $link =~ m{ \(deleted\) }xms ) {
+            if ( readlink($proc_pid_exe) =~ m{ \(deleted\) }xms ) {
                 next if ((stat($proc_pid_exe))[7] > $max_bin_size );
                 push @apache_bins, $proc_pid_exe;
             }
