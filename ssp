@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.73';
+my $version = '4.99.74';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5486,26 +5486,11 @@ sub check_for_openssl_secadv_20140605 {
     my $openssl_changelog = run( 'rpm', '-q', '--changelog', 'openssl');
     return if ! $openssl_changelog;
 
-    my %cve_list = (
-        'CVE-2010-5298' => 1,
-        'CVE-2014-0195' => 1,
-        'CVE-2014-0198' => 1,
-        'CVE-2014-0221' => 1,
-        'CVE-2014-0224' => 1,
-        'CVE-2014-3470' => 1
-    );
-
-    for my $cve ( keys(%cve_list) ) {
-        if ( $openssl_changelog =~ /\s$cve\s/ ) {
-            delete $cve_list{$cve};
-        }
-    }
-
-    return if scalar keys(%cve_list) == 0;
+    return if ( $openssl_changelog && $openssl_changelog =~ /\sCVE-2014-0224\s/ );
 
     print "\n";
     print_warn('OpenSSL RPM missing secadv_20140605 patches: ');
-    print_warning(join(' ', keys(%cve_list)));
+    print_warning('CVE-2014-0224');
     print_red('Send customer this premade: "OpenSSL advisory 2014-06-05 - Discovery"');
     print_red('!! BEFORE SENDING PREMADE VERIFY THE MISSING CVE PATCHES WITH: rpm -q --changelog openssl | egrep \' CVE-201(0|4)-\'');
     print_red('This check does NOT take corrupt rpm dbs into account, and WILL false positive if corrupt');
