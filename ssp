@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.72';
+my $version = '4.99.73';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -43,7 +43,7 @@ $Term::ANSIColor::AUTORESET = 1;
 ######################
 
 my $cpanel_version        = get_cpanel_version();
-my ( $cpanel_version_major, $cpanel_version_minor ) = split /\./, $cpanel_version;
+my ( $cpanel_version_parent, $cpanel_version_major, $cpanel_version_minor, $cpanel_version_build ) = split /\./, $cpanel_version;
 my $hostname              = hostname();
 my $os                    = get_os();
 my $is_cloudlinux         = 0;
@@ -280,6 +280,7 @@ check_for_mailman_low_uid();
 check_for_missing_skiphttpauth();
 check_for_MPM_ITK_and_suexec();
 check_for_openssl_heartbleed_bug();     # added per Chris
+check_for_openssl_secadv_20140605();
 check_for_broken_mysqldump();
 check_exim_log_sanity();
 check_for_UMBREON_rootkit();
@@ -397,6 +398,7 @@ sub check_for_dnsonly {
         check_for_disabled_services();
         check_for_harmful_php_mode_600_cron();
         check_for_openssl_heartbleed_bug();     # per Chris
+        check_for_openssl_secadv_20140605();
         check_for_UMBREON_rootkit();            # per Chris
 
         ## [3RDP]
@@ -457,6 +459,48 @@ sub get_cpanel_version {
     else {
         return 'unknown';
     }
+}
+
+sub version_cmp { # should only be used by version_compare()
+    my ( $parent1, $major1, $minor1, $build1 ) = split /[\._]/, $_[0];
+    my ( $parent2, $major2, $minor2, $build2 ) = split /[\._]/, $_[1];
+    return $parent1 <=> $parent2 || $major1 <=> $major2 || $minor1 <=> $minor2 || $build1 <=> $build2;
+}
+
+sub version_compare {
+    # example: return if version_compare($ver_string, qw( >= 1.2.3.3 ));
+    # Must be a four-digit version separated by periods.
+    my ($ver1, $mode, $ver2) = @_;
+  # Shamelessly copied the comparison logic out of Cpanel::Version::Compare
+    my %modes = (
+        '>' => sub {
+              return if $_[0] eq $_[1];
+              return version_cmp(@_) > 0;
+          },
+          '<' => sub {
+              return if $_[0] eq $_[1];
+              return version_cmp(@_) < 0;
+          },
+          '==' => sub { return $_[0] eq $_[1] || version_cmp(@_) == 0; },
+          '!=' => sub { return $_[0] ne $_[1] && version_cmp(@_) != 0; },
+          '>=' => sub {
+              return 1 if $_[0] eq $_[1];
+              return version_cmp(@_) >= 0;
+          },
+          '<=' => sub {
+              return 1 if $_[0] eq $_[1];
+              return version_cmp(@_) <= 0;
+         }
+    );
+    return if ( ! exists $modes{$mode} );
+    return $modes{$mode}->( $ver1, $ver2 );
+}
+
+sub cpanel_version_is {
+    # example: return if cpanel_version_is(qw( >= 11.42.1.16 ));
+    return if $cpanel_version eq "unknown";
+    my ($mode, $ver) = @_;
+    return version_compare($cpanel_version, $mode, $ver);
 }
 
 # shameless rip of /usr/local/cpanel/Cpanel/SafeRun/Simple.pm which, along with
@@ -683,17 +727,20 @@ sub get_lsof_port_hash ($) {
     for ( split /\n/, run( 'lsof', '+c15', '-n', '-P', '-i' ) ) {
         # cmd will be max 15 characaters due to lsof limitation
         # spamd           1781     root    5u  IPv4  10887      0t0  TCP 127.0.0.1:783 (LISTEN)
+        # nc      9468 root    3u  IPv6  84415      0t0  TCP [::1]:25 (LISTEN)
         my @lsof = split(/\s+/, $_, 10);
         if (defined($lsof[9]) && $lsof[9] =~ /LISTEN/ ) {
-            my ($ip, $port) = split /:/, $lsof[8];
-            push @{${$href}{"$port"}}, {
-                'CMD' => $lsof[0],
-                'PID' => $lsof[1],
-                'USER' => $lsof[2],
-                'IPV' => $lsof[4],
-                'PROTO' => $lsof[7],
-                'IP' => $ip
-            };
+            if ( $lsof[8] =~ /^(.*):(\d+)$/ ) {
+                my ($ip, $port) = ($1, $2);
+                push @{${$href}{"$port"}}, {
+                    'CMD' => $lsof[0],
+                    'PID' => $lsof[1],
+                    'USER' => $lsof[2],
+                    'IPV' => $lsof[4],
+                    'PROTO' => $lsof[7],
+                    'IP' => $ip
+                };
+            }
         }
     }
 }
@@ -1677,7 +1724,7 @@ sub check_loopback_connection {
 
 sub check_cpanelconfig_filetype {
     chomp( my $file = run( 'file', '/var/cpanel/cpanel.config' ) );
-    if ( $file !~ m{ \A /var/cpanel/cpanel.config: \s ASCII \s text \z }xms ) {
+    if ( $file !~ m{ \A /var/cpanel/cpanel.config: \s ASCII \s text (, \s with \s very \s long \s lines)? \z }xms ) {
         print_warn('/var/cpanel/cpanel.config: ');
         print_warning("filetype is something other than 'ASCII text'! ($file)");
     }
@@ -1837,12 +1884,7 @@ sub check_for_local_apache_templates {
 }
 
 sub check_for_local_makecpphp_template {
-    my ( $v1, $v2 ) = split /\./, $cpanel_version;
-
-    # makecpphp has been removed from 11.36+
-    if ( ( $v1 > 11 ) || ( $v1 == 11 ) and ( $v2 >= 36 ) ) {
-        return;
-    }
+    return if cpanel_version_is(qw( >= 11.36.0.0 )); # makecpphp has been removed from 11.36+
 
     my $makecpphp_local_profile = '/var/cpanel/easy/apache/profile/makecpphp.profile.yaml.local';
 
@@ -2077,7 +2119,7 @@ sub check_for_non_default_permissions {
     if ( -e '/usr/local/cpanel/bin/cpwrap' ) {
         my $mode = ( stat('/usr/local/cpanel/bin/cpwrap') )[2] & 07777;
         $mode = sprintf "%lo", $mode;
-        if ( ( $cpanel_version_major <= 11 ) and ( $cpanel_version_minor <= 36 ) ) {
+        if ( cpanel_version_is(qw( <= 11.36.0.0 )) ) {
             if ( $mode != 4755 ) {
                 print_warn('Non-default Permissions: ');
                 print_warning("/usr/local/cpanel/bin/cpwrap (mode: $mode | default: 4755 )");
@@ -3312,13 +3354,10 @@ sub check_roundcube_mysql_pass_mismatch {
 }
 
 sub check_for_11_30_scripts_not_a_symlink {
-    my ( $v1, $v2 ) = split /\./, $cpanel_version;
-
-    if ( ( $v1 > 11 ) || ( ( $v1 == 11 ) and ( $v2 >= 30 ) ) ) {
-        if ( !-l '/scripts' ) {
-            print_warn('/scripts: ');
-            print_warning("cPanel is >= 11.30 [$cpanel_version] and /scripts is not a symlink");
-        }
+    return if cpanel_version_is(qw( < 11.30.0.0 ));
+    if ( !-l '/scripts' ) {
+        print_warn('/scripts: ');
+        print_warning("cPanel is >= 11.30 [$cpanel_version] and /scripts is not a symlink");
     }
 }
 
@@ -3433,29 +3472,9 @@ sub check_for_fork_bomb_protection {
 # cPanel < 11.30.7.3 will get YAML::Syck from CPAN. If this causes any issues with
 # Cpanel::TaskQueue, cPanel's position is to upgrade cPanel.
 sub check_for_cPanel_lower_than_11_30_7_3 {
-    my $could_be_affected = 0;
-
-    if ( $cpanel_version =~ m{ \A (\d+)\.(\d+)\.(\d+)\.(\d+) \z }xms ) {
-        if ( $1 < 11 ) {
-            $could_be_affected = 1;
-        }
-        elsif ( $1 == 11 ) {
-            if ( $2 < 30 ) {
-                $could_be_affected = 1;
-            }
-            elsif ( $2 == 30 and $3 < 7 ) {
-                $could_be_affected = 1;
-            }
-            elsif ( $2 == 30 and $3 == 7 and $4 < 3 ) {
-                $could_be_affected = 1;
-            }
-        }
-    }
-
-    if ( $could_be_affected == 1 ) {
-        print_warn('cPanel: ');
-        print_warning('versions < 11.30.7.3 use YAML::Syck from CPAN. If problems with Cpanel::TaskQueue, cPanel needs to be updated');
-    }
+    return if cpanel_version_is(qw( >= 11.30.7.3 ));
+    print_warn('cPanel: ');
+    print_warning('versions < 11.30.7.3 use YAML::Syck from CPAN. If problems with Cpanel::TaskQueue, cPanel needs to be updated');
 }
 
 sub check_for_custom_exim_conf_local {
@@ -5114,7 +5133,7 @@ sub check_for_missing_groups {
     my $missing_groups;
 
     for my $group (@groups) {
-        next if ( $group eq 'cpses' and $cpanel_version_major == 11 and $cpanel_version_minor < 40 ); # was cpses added in 11.40?
+        next if ( $group eq 'cpses' and cpanel_version_is(qw( < 11.40.0.0 )) ); # was cpses added in 11.40?
         my $gid = getgrnam($group);
         next if ( defined $gid and $gid =~ /^\d+$/ );
         $missing_groups .= "[$group] ";
@@ -5127,6 +5146,7 @@ sub check_for_missing_groups {
 }
 
 sub check_for_cgihidepass {
+    return if cpanel_version_is(qw( >= 11.42.1.1 )); # Fixed in 11.42.1.1
     if ( exists $cpconf{'cgihidepass'} and $cpconf{'cgihidepass'} == 1 ) {
         print_warn('cgihidepass: ');
         print_warning('Tweak Settings >> "Hide login password from cgi scripts" is enabled. Expired passwords can\'t be changed via WHM. See FB 87581');
@@ -5424,6 +5444,70 @@ sub check_for_openssl_heartbleed_bug {
     print_warning('Send customer this premade: OpenSSL Heartbleed Vulnerability - Discovery');
     print_red('The following check was used: rpm -q --changelog openssl | grep \' CVE-2014-0160 \'');
     print_red('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
+    print_red('This check does NOT take corrupt rpm dbs into account, and WILL false positive if corrupt');
+    print "\n";
+}
+
+sub check_for_openssl_secadv_20140605 {
+    my $sysinfo_config = '/var/cpanel/sysinfo.config';
+    return if !-f $sysinfo_config;
+
+    my $rpm_dist_ver;
+
+    open my $fh, '<', $sysinfo_config or return;
+    while (<$fh>) {
+        if ( /^rpm_dist_ver=(\d+)$/ ) {
+            $rpm_dist_ver = $1;
+            last;
+        }
+    }
+    close $fh or return;
+
+    return if !$rpm_dist_ver;
+    return if ( $rpm_dist_ver < 5 || $rpm_dist_ver > 6 ); # Only RHEL/CentOS 5 and 6 need apply
+
+    chomp( my $openssl_ver = run( 'openssl', 'version' ) );
+    return if !$openssl_ver;
+
+    # fixed in openssl 1.0.1h, 1.0.0m, and 0.9.8za
+    if ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)([a-z])([a-z]?)/ ) {
+        my ( $maj, $min, $patch ) = ( $1, $2, $3 );
+        # If we map the alphas into a number and sum the values the version will be compatible with version_compare() and save us a lot of trouble, i.e. h=8, m=13, and za=27
+        my %al2num = map { ("a".."z")[$_-1] => $_ } (1..26); # Isn't there a better way to do this?
+        my $sub = 0;
+        if ( $4 ) { $sub += $al2num{lc($4)} };
+        if ( $5 ) { $sub += $al2num{lc($5)} };
+        my $ver = join('.', $maj, $min, $patch, $sub);
+        return if version_compare($ver, qw( >= 1.0.1.8 )); # If > 1.0.1h we're done.
+        return if ( version_compare($ver, qw( < 1.0.1.0 )) && version_compare($ver, qw( >= 1.0.0.13 )) ); # If < 1.0.1 and >= 1.0.0m we're done.
+        return if ( version_compare($ver, qw( < 0.9.9.0 )) && version_compare($ver, qw( >= 0.9.8.27 )) ); # If < 0.9.9 and >= 0.9.8za we're done.
+    }
+
+    my $openssl_changelog = run( 'rpm', '-q', '--changelog', 'openssl');
+    return if ! $openssl_changelog;
+
+    my %cve_list = (
+        'CVE-2010-5298' => 1,
+        'CVE-2014-0195' => 1,
+        'CVE-2014-0198' => 1,
+        'CVE-2014-0221' => 1,
+        'CVE-2014-0224' => 1,
+        'CVE-2014-3470' => 1
+    );
+
+    for my $cve ( keys(%cve_list) ) {
+        if ( $openssl_changelog =~ /\s$cve\s/ ) {
+            delete $cve_list{$cve};
+        }
+    }
+
+    return if scalar keys(%cve_list) == 0;
+
+    print "\n";
+    print_warn('OpenSSL RPM missing secadv_20140605 patches: ');
+    print_warning(join(' ', keys(%cve_list)));
+    print_red('Send customer this premade: "OpenSSL advisory 2014-06-05 - Discovery"');
+    print_red('!! BEFORE SENDING PREMADE VERIFY THE MISSING CVE PATCHES WITH: rpm -q --changelog openssl | egrep \' CVE-201(0|4)-\'');
     print_red('This check does NOT take corrupt rpm dbs into account, and WILL false positive if corrupt');
     print "\n";
 }
