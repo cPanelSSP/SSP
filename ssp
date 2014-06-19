@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.75';
+my $version = '4.99.76';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5572,6 +5572,7 @@ sub check_for_readonly_filesystems {
         print_warn('Read-only filesystems: ');
         print_warning(join(" ", @read_only_fs));
     }
+    close($fh);
 }
 
 sub check_for_UMBREON_rootkit {
