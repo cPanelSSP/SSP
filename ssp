@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.74';
+my $version = '4.99.75';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -129,6 +129,7 @@ print_backups_info();
 check_for_custom_zonetemplates();
 
 ## [WARN]
+check_port_hash();
 check_selinux_status();
 check_runlevel();
 check_for_missing_root_cron();
@@ -283,7 +284,9 @@ check_for_openssl_heartbleed_bug();     # added per Chris
 check_for_openssl_secadv_20140605();
 check_for_broken_mysqldump();
 check_exim_log_sanity();
+check_for_readonly_filesystems();
 check_for_UMBREON_rootkit();
+check_for_jynx2_rootkit();
 
 # [3RDP]
 check_smtp_processes();
@@ -354,6 +357,7 @@ sub check_for_dnsonly {
         check_sysinfo();
 
         ## [WARN]
+        check_port_hash();
         check_selinux_status();
         check_runlevel();
         check_for_missing_root_cron();
@@ -399,7 +403,9 @@ sub check_for_dnsonly {
         check_for_harmful_php_mode_600_cron();
         check_for_openssl_heartbleed_bug();     # per Chris
         check_for_openssl_secadv_20140605();
+        check_for_readonly_filesystems();
         check_for_UMBREON_rootkit();            # per Chris
+        check_for_jynx2_rootkit();
 
         ## [3RDP]
         check_for_apf();
@@ -1597,6 +1603,14 @@ sub check_for_custom_zonetemplates {
 ##############################
 #  BEGIN [WARN] CHECKS
 ##############################
+
+sub check_port_hash {
+    return if ( scalar keys(%port) >= 1 );
+    print_warn('lsof: ');
+    print_warning('Did not return a list of TCP ports in LISTEN state.');
+    print_warning('  Either lsof is broken or there are zero listening services.');
+    print_warning('  Some port-based checks will be skipped!');
+}
 
 sub check_selinux_status {
     my @selinux_status = split /\n/, run('sestatus');
@@ -5543,6 +5557,23 @@ sub check_exim_log_sanity {
     }
 }
 
+sub check_for_readonly_filesystems {
+    open my $fh, '<', '/proc/mounts' or return;
+    my @read_only_fs = ();
+    while (<$fh>) {
+        if ( my @fs = split(' ') ) {
+            next if grep(/\/home\/virtfs\//,$fs[1]);
+            if ( grep(/\bro\b/, $fs[3]) ) {
+                push(@read_only_fs, $fs[1]);
+            }
+        }
+    }
+    if ( scalar @read_only_fs ) {
+        print_warn('Read-only filesystems: ');
+        print_warning(join(" ", @read_only_fs));
+    }
+}
+
 sub check_for_UMBREON_rootkit {
     my $dir = '/usr/local/__UMBREON__';
     if ( chdir $dir ) {
@@ -5552,6 +5583,28 @@ sub check_for_UMBREON_rootkit {
         print "The following directory was found:\n";
         print "\t$dir\n";
         print "\tL3: use 07 - UMBREON Predef [L3 Only]\n";
+        print "\n" x 2;
+    }
+}
+
+sub check_for_jynx2_rootkit {
+    my $dir = '/usr/bin64';
+    if ( chdir $dir ) {
+        my @found_jynx2_files = ();
+        my @jynx2_files = qw( 3.so 4.so );
+        for (@jynx2_files) {
+            my $file = $dir . "/" . $_;
+            if ( -e $file ) {
+                push(@found_jynx2_files, $file);
+            }
+        }
+        return if ( (scalar @found_jynx2_files) == 0 );
+        print "\n" x 2;
+        print_warn('!! [ Jynx 2 ROOTKIT ] !! ');
+        print_warning('L1/L2 escalate this ticket to L3');
+        print "The following files were found:\n";
+        print "\t" . join(" ", @found_jynx2_files) . "\n";
+        print "\tL3: use 07 - Jynx2 Predef [L3 Only]\n";
         print "\n" x 2;
     }
 }
@@ -5568,6 +5621,7 @@ sub check_for_UMBREON_rootkit {
 sub check_smtp_processes {
     my $assp_running = 0;
 
+    return if scalar keys(%port) == 0;
     if ( ! defined($port{"25"}) && ! -f '/etc/eximdisable' ) {
         print_warn('Exim: ');
         print_warning('not disabled and does not appear to be up -- nothing listening on port 25');
