@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.76';
+my $version = '4.99.77';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2030,6 +2030,12 @@ sub check_for_non_default_permissions {
         '/etc/nsswitch.conf'           => '644',
         '/etc/passwd'                  => '644',
         '/etc/stats.conf'              => '644',
+        '/home'                        => '0711',
+        '/home1'                       => '0711',
+        '/home2'                       => '0711',
+        '/home3'                       => '0711',
+        '/home4'                       => '0711',
+        '/home5'                       => '0711',
         '/opt'                         => '755',
         '/root/cpanel3-skel'           => '755',
         '/sbin'                        => '755',
@@ -2064,6 +2070,17 @@ sub check_for_non_default_permissions {
         '/usr/local/cpanel/base/horde/index.php'                => '644',
         '/usr/local/cpanel/base/3rdparty/squirrelmail/index.php'    => '644',
     );
+
+    my $wwwacctconf = '/etc/wwwacct.conf';
+    if ( open my $wwwacctconf_fh, '<', $wwwacctconf ) {
+        while (<$wwwacctconf_fh>) {
+            if (m{ ^ HOMEDIR \s ([/\-_A-Za-z0-9]+) $ }x) {
+                $resources_and_perms{$1} = '0711';
+                last;
+            }
+        }
+        close $wwwacctconf_fh;
+    }
 
     for my $resource ( keys %resources_and_perms ) {
         if ( -e $resource ) {
@@ -5562,8 +5579,8 @@ sub check_for_readonly_filesystems {
     my @read_only_fs = ();
     while (<$fh>) {
         if ( my @fs = split(' ') ) {
-            next if grep(/\/home\/virtfs\//,$fs[1]);
-            if ( grep(/\bro\b/, $fs[3]) ) {
+            next if grep(m{ / (home/virtfs|usr/share/cagefs-skeleton) / }x,$fs[1]);
+            if ( grep(m{ (^|,) ro (,|$) }x, $fs[3]) ) {
                 push(@read_only_fs, $fs[1]);
             }
         }
