@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.77';
+my $version = '4.99.78';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -285,8 +285,6 @@ check_for_openssl_secadv_20140605();
 check_for_broken_mysqldump();
 check_exim_log_sanity();
 check_for_readonly_filesystems();
-check_for_UMBREON_rootkit();
-check_for_jynx2_rootkit();
 
 # [3RDP]
 check_smtp_processes();
@@ -310,6 +308,8 @@ check_for_els();
 check_for_whmxtra();
 check_for_usr_local_mis();
 
+check_for_UMBREON_rootkit();                                    # malware
+check_for_jynx2_rootkit();                                      # malware
 check_for_cdorked_A();                                          # malware
 check_for_cdorked_B();                                          # malware
 check_for_libkeyutils_filenames();                              # malware
@@ -323,6 +323,7 @@ check_sha1_sigs_sshd();                                         # malware
 check_for_ebury_ssh_G();                                        # malware
 check_for_ebury_ssh_banner();                                   # malware
 check_for_ebury_root_file();                                    # malware
+check_for_bg_botnet();                                          # malware
 
 # This is run closer to the end since it has the potential to take the longest
 build_rpm_list();
@@ -404,8 +405,6 @@ sub check_for_dnsonly {
         check_for_openssl_heartbleed_bug();     # per Chris
         check_for_openssl_secadv_20140605();
         check_for_readonly_filesystems();
-        check_for_UMBREON_rootkit();            # per Chris
-        check_for_jynx2_rootkit();
 
         ## [3RDP]
         check_for_apf();
@@ -416,6 +415,8 @@ sub check_for_dnsonly {
         check_for_webmin();
         check_for_symantec();
 
+        check_for_UMBREON_rootkit();                                    # malware
+        check_for_jynx2_rootkit();                                      # malware
         check_for_libkeyutils_filenames();                              # malware
 #        check_for_unowned_libkeyutils_files($libkeyutils_files_ref);    # malware
         check_sha1_sigs_libkeyutils($libkeyutils_files_ref);            # malware
@@ -427,6 +428,7 @@ sub check_for_dnsonly {
         check_for_ebury_ssh_G();                                        # malware
         check_for_ebury_ssh_banner();                                   # malware
         check_for_ebury_root_file();                                    # malware
+        check_for_bg_botnet();                                          # malware
 
         exit;
     }
@@ -1286,7 +1288,7 @@ sub print_apache_info {
 
         print_info('Apache: ');
         print_warning($warning);
-        return;
+        #return;
     }
 
     if ($output) {
@@ -1294,6 +1296,18 @@ sub print_apache_info {
         print_normal($output);
     }
 
+    my %apache_ports = ();
+    for my $portnum ( keys(%port) ) {
+        for my $href ( @{$port{$portnum}} ) {
+            next if not $href->{USER} eq "root";
+            next if not $href->{CMD} eq "httpd";
+            $apache_ports{$portnum} = 1;
+        }
+    }
+    if ( scalar keys(%apache_ports) ) {
+        print_info('Apache: ');
+        print_normal('is listening on ports [ ' . join(" ", sort(keys(%apache_ports))) . ' ]'); 
+    }
 }
 
 sub print_php_configuration {
@@ -2785,7 +2799,7 @@ sub check_for_additional_rpms {
     return if !@rpm_list;
 
     my @additional_rpms = grep { /^(php-|kde-|psa-|clamav|clamd|rrdtool-)|(http|apache|pear|sendmail)/ } @rpm_list;
-    @additional_rpms = grep { !/httpd-tools|cpanel-|alt-php/ } @additional_rpms;
+    @additional_rpms = grep { !/httpd-tools|cpanel-|alt-php|apache-tomcat-apis/ } @additional_rpms;
     if (@additional_rpms) {
         print "\n";
         print_magenta('This is informational only. Unless these rpms directly relate to an issue, they can be ignored:');
@@ -5627,6 +5641,56 @@ sub check_for_jynx2_rootkit {
     }
 }
 
+sub check_for_bg_botnet {
+    my @found_bg_files = ();
+    # Not including the following /tmp files in the list because any non-root user can create them and trigger a false-positive just for the lolz.
+    # /tmp/bill.lock
+    # /tmp/gates.lock
+    # /tmp/moni.lock
+    # /tmp/notify.file
+    my @bg_files = qw(
+        /boot/pro
+        /boot/proh
+        /etc/sfewfesfsh
+        /usr/bin/pojie
+        /etc/atdd
+        /etc/atddd
+        /etc/cupsdd
+        /etc/cupsddd
+        /etc/dsfrefr
+        /etc/ferwfrre
+        /etc/gfhddsfew
+        /etc/gfhjrtfyhuf
+        /etc/ksapd
+        /etc/ksapdd
+        /etc/kysapd
+        /etc/kysapdd
+        /etc/rewgtf3er4t
+        /etc/sdmfdsfhjfe
+        /etc/sfewfesfs
+        /etc/sksapd
+        /etc/sksapdd
+        /etc/skysapd
+        /etc/skysapdd
+        /etc/xfsdx
+        /etc/xfsdxd
+        /usr/lib/libamplify.so
+        /etc/rc.d/init.d/DbSecuritySpt
+    );
+    for my $file (@bg_files) {
+        if ( -e $file ) {
+            push(@found_bg_files, $file);
+        }
+    }
+    return unless ( scalar @found_bg_files );
+    print "\n" x 2;
+    print_warn('!! [ BG BOTNET ] !! ');
+    print_warning('L1/L2 escalate this ticket to L3');
+    print "The following files were found:\n";
+    print "\t" . join(" ", @found_bg_files) . "\n";
+    print "\tL3: use 07 - BG Botnet Predef [L3 Only]\n";
+    print "\n" x 2;
+}
 
 ##############################
 #  END [WARN] CHECKS
