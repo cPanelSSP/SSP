@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.78';
+my $version = '4.99.79';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -67,6 +67,8 @@ my %cpconf;                    # cpanel.config
 my %pureftpdconf;              # /etc/pure-ftpd.conf
 my @apache_version_output;     # httpd -v
 my @apache_modules_output;     # httpd -M
+my ( $lsws_full_version, $lsws_numeric_version ) = get_lsws_version();
+
 my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexec );
 
 &get_process_pid_hash(\%process);
@@ -119,6 +121,8 @@ check_for_cpanel_update();
 print_uptime();
 check_for_clustering();
 print_apache_info();
+print_lsws_info();
+check_for_lsws_update();
 print_php_configuration();
 check_sysinfo();
 check_for_remote_mysql();
@@ -289,7 +293,6 @@ check_for_readonly_filesystems();
 # [3RDP]
 check_smtp_processes();
 check_for_varnish();
-check_for_litespeed();
 check_for_nginx();
 check_for_mailscanner();
 check_for_apf();
@@ -734,18 +737,24 @@ sub get_lsof_port_hash ($) {
     my ($href) = @_;
     for ( split /\n/, run( 'lsof', '+c15', '-n', '-P', '-i' ) ) {
         # cmd will be max 15 characaters due to lsof limitation
+        # Example from CentOS 6:
         # spamd           1781     root    5u  IPv4  10887      0t0  TCP 127.0.0.1:783 (LISTEN)
         # nc      9468 root    3u  IPv6  84415      0t0  TCP [::1]:25 (LISTEN)
+        # Example from an older CentOS 5 system (note empty SIZE column):
+        # exim       3066  mailnull    3u     IPv6            2566011                 TCP *:smtp (LISTEN)
         my @lsof = split(/\s+/, $_, 10);
         if (defined($lsof[9]) && $lsof[9] =~ /LISTEN/ ) {
-            if ( $lsof[8] =~ /^(.*):(\d+)$/ ) {
+            splice(@lsof, 6, 1); # Drop the SIZE/OFF column which can sometimes be blank and throw everything off
+        }
+        if (defined($lsof[8]) && $lsof[8] =~ /LISTEN/ ) {  # SIZE/OFF column is blank, or has been dropped
+            if ( $lsof[7] =~ /^(.*):(\d+)$/ ) {
                 my ($ip, $port) = ($1, $2);
                 push @{${$href}{"$port"}}, {
                     'CMD' => $lsof[0],
                     'PID' => $lsof[1],
                     'USER' => $lsof[2],
                     'IPV' => $lsof[4],
-                    'PROTO' => $lsof[7],
+                    'PROTO' => $lsof[6],
                     'IP' => $ip
                 };
             }
@@ -884,6 +893,24 @@ sub check_for_hacked_server_touchfile {
     }
 
     print "\n" x 10;
+}
+
+sub get_lsws_version {
+    my $lshttpd = '/usr/local/lsws/bin/lshttpd';
+    return if ! -x $lshttpd;
+    my ($lsws_full_version, $lsws_numeric_version) = ();
+    my @lshttpd_version_output = split /\n/, timed_run( $lshttpd, '-v' );
+    for ( @lshttpd_version_output ) {
+        if ( m{ \A (LiteSpeed/(\d+\.\d+\.\d+).*) }xms ) {
+            $lsws_full_version = $1;
+            $lsws_numeric_version = $2;
+        }
+    }
+
+    $lsws_full_version = "unknown" if ! $lsws_full_version;
+    $lsws_numeric_version = "unknown" if ! $lsws_numeric_version;
+
+    return ( $lsws_full_version, $lsws_numeric_version );
 }
 
 ##############################
@@ -1288,7 +1315,6 @@ sub print_apache_info {
 
         print_info('Apache: ');
         print_warning($warning);
-        #return;
     }
 
     if ($output) {
@@ -1609,6 +1635,68 @@ sub check_for_custom_zonetemplates {
     }    
 }
 
+sub print_lsws_info {
+    return if ! $lsws_full_version;
+    print_info('LiteSpeed Web Server: ');
+    print_normal('version [ ' . $lsws_full_version . ' ]'); 
+
+    my %lshttpd_ports = ();
+    for my $portnum ( keys(%port) ) {
+        for my $href ( @{$port{$portnum}} ) {
+            next if not $href->{USER} eq "root";
+            next if not $href->{CMD} eq "litespeed";
+            $lshttpd_ports{$portnum} = 1;
+        }
+    }
+    if ( scalar keys(%lshttpd_ports) ) {
+        print_info('LiteSpeed Web Server: ');
+        print_normal('is listening on ports [ ' . join(" ", sort(keys(%lshttpd_ports))) . ' ]'); 
+    }
+}
+
+sub check_for_lsws_update {
+    return if ! $lsws_numeric_version;
+    return if $lsws_numeric_version eq "unknown";
+    my ( $LSWS_DATA, @lsws_data ) = ();
+    my $available_lsws_version;
+
+    local $SIG{'ALRM'} = sub { return (); };
+
+    alarm 5;
+
+    my $sock = IO::Socket::INET->new(
+        PeerAddr => 'update.litespeedtech.com',
+        PeerPort => 80,
+        Proto    => 'tcp',
+        Timeout  => 3,
+    );
+
+    if ($sock) {
+        print $sock "GET /ws/latest.php HTTP/1.1\r\nHost: update.litespeedtech.com\r\n\r\n";
+        sysread $sock, $LSWS_DATA, 1000;
+        close $sock;
+    }
+
+    alarm 0;
+
+    return if ! $LSWS_DATA;
+
+    @lsws_data = split /\n/, $LSWS_DATA;
+
+    for (@lsws_data) {
+        if ( m{ \A LSWS=(\d+\.\d+\.\d+) \z }xms ) {
+            $available_lsws_version = $1;
+            last;
+        }
+    }
+
+    return if ! $available_lsws_version;
+
+    if ( version_compare( $lsws_numeric_version, '<', $available_lsws_version ) ) {
+        print_info('LiteSpeed Web Server: ');
+        print_warning("UPDATE AVAILABLE ($lsws_numeric_version -> $available_lsws_version)");
+    }
+}
 
 ##############################
 #  END [INFO] CHECKS
@@ -5743,22 +5831,6 @@ sub check_for_varnish {
     if ( grep { m{ \A varnish }xms } @port_80_processes ) {
         print_3rdp('Varnish: ');
         print_3rdp2('varnish is listening on port 80, known to break proxy subdomains. See "RareIssues" wiki article');
-    }
-}
-
-sub check_for_litespeed {
-    my $litespeed = 0;
-
-    for my $line (@process_list) {
-        if ( $line =~ /litespeed|lshttp/ and $line !~ /\_/ ) {
-            $litespeed = 1;
-            last;
-        }
-    }
-
-    if ( $litespeed == 1 ) {
-        print_3rdp('litespeed: ');
-        print_3rdp2('is running');
     }
 }
 
