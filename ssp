@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.79';
+my $version = '4.99.80';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -289,6 +289,7 @@ check_for_openssl_secadv_20140605();
 check_for_broken_mysqldump();
 check_exim_log_sanity();
 check_for_readonly_filesystems();
+check_for_lsws_and_modruid2();
 
 # [3RDP]
 check_smtp_processes();
@@ -1652,6 +1653,8 @@ sub print_lsws_info {
         print_info('LiteSpeed Web Server: ');
         print_normal('is listening on ports [ ' . join(" ", sort(keys(%lshttpd_ports))) . ' ]'); 
     }
+    print_info('LiteSpeed Web Server: ');
+    print_normal('is now supported, see http://staffwiki.cpanel.net/LinuxSupport/LiteSpeed'); 
 }
 
 sub check_for_lsws_update {
@@ -5778,6 +5781,17 @@ sub check_for_bg_botnet {
     print "\t" . join(" ", @found_bg_files) . "\n";
     print "\tL3: use 07 - BG Botnet Predef [L3 Only]\n";
     print "\n" x 2;
+}
+
+sub check_for_lsws_and_modruid2 {
+    return if ! $lsws_full_version;
+    for (@apache_modules_output) {
+        if (/ruid2_module/) {
+            print_warn('mod_ruid2: ');
+            print_warning('could cause file permission problems when using LiteSpeed Web Server (see ticket 5154193)');
+            last;
+        }
+    }
 }
 
 ##############################
