@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.81';
+my $version = '4.99.82';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2160,156 +2160,126 @@ sub check_perl_sanity {
 }
 
 sub check_for_non_default_permissions {
-    my %resources_and_perms = (
-        '/'                            => '0555',
-        '/bin'                         => '0555',
-        '/bin/bash'                    => '0755',
-        '/dev/log',                    => '0666',
-        '/dev/null'                    => '0666',
-        '/etc'                         => '0755',
-        '/etc/cpbackup.conf'           => '0644',
-        '/etc/group'                   => '0644',
-        '/etc/hosts'                   => '0644',
-        '/etc/nsswitch.conf'           => '0644',
-        '/etc/passwd'                  => '0644',
-        '/etc/stats.conf'              => '0644',
-        '/home'                        => '0711',
-        '/home1'                       => '0711',
-        '/home2'                       => '0711',
-        '/home3'                       => '0711',
-        '/home4'                       => '0711',
-        '/home5'                       => '0711',
-        '/opt'                         => '0755',
-        '/root/cpanel3-skel'           => '0755',
-        '/sbin'                        => '0555',
-        '/tmp'                         => '1777',
-        '/usr'                         => '0755',
-        '/usr/bin'                     => '0555',
-        '/usr/sbin'                    => '0555',
-        '/usr/sbin/exim'               => '4755',
-        '/usr/share'                   => '0755',
-        '/usr/share/zoneinfo'          => '0755',
-        '/usr/local'                   => '0755',
-        '/usr/local/apache'            => '0755',
-        '/usr/local/apache/bin/httpd'  => '0755',
-        '/usr/local/bin'               => '0755',
-        '/usr/local/sbin'              => '0755',
-        '/var'                         => '0755',
-        '/var/cpanel'                  => '0755',
-        '/var/cpanel/backups/config'   => '0644',
-        '/var/cpanel/datastore'        => '0755',
-        '/var/cpanel/features'         => '0755',
-        '/var/cpanel/locale'           => '0755',
-        '/var/cpanel/resellers'        => '0644',
-        '/var/lib'                     => '0755',
-        '/var/lib/mysql'               => '0751',
-        '/var/lib/mysql/mysql.sock'    => '0777',
-        '/var/log/exim_mainlog'        => '0640',
-        '/var/log/exim_paniclog'       => '0640',
-        '/var/log/exim/rejectlog'      => '0640',
-        '/var/tmp'                     => '1777',
-        '/usr/local/cpanel/php/cpanel.php'  => '0644',
-        '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => '0644',
-        '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'  => '0644',
-        '/usr/local/cpanel/base/3rdparty/phpPgAdmin/index.php'  => '0644',
-        '/usr/local/cpanel/base/3rdparty/roundcube/index.php'   => '0644',
-        '/usr/local/cpanel/base/horde/index.php'                => '0644',
-        '/usr/local/cpanel/base/3rdparty/squirrelmail/index.php'    => '0644',
+    my %check = ( # '/path' => [ ['default1', 'default2', ...], user, group, 'Additional info' ] # user/group is root if empty
+        '/'                            => [ ['0755', '0555'], '', '', ' - .ftpquota issues? see ticket 4429843' ],
+        '/bin'                         => [ ['0755', '0711', '0555'], '', '', '' ],
+        '/bin/bash'                    => [ ['0755'], '', '', '' ],
+        '/bin/ln'                      => [ ['0755', '0555'], '', '', '' ],
+        '/dev/log'                     => [ ['0666'], '', '', ' - CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog.' ],
+        '/dev/null'                    => [ ['0666'], '', '', '' ],
+        '/etc'                         => [ ['0755'], '', '', '' ],
+        '/etc/cpbackup.conf'           => [ ['0644'], '', '', '' ],
+        '/etc/group'                   => [ ['0644'], '', '', '' ],
+        '/etc/hosts'                   => [ ['0644'], '', '', '' ],
+        '/etc/nsswitch.conf'           => [ ['0644'], '', '', '' ],
+        '/etc/passwd'                  => [ ['0644'], '', '', '' ],
+        '/etc/shadow'                  => [ ['0600', '0400', '0200'], '', '', '' ],
+        '/etc/stats.conf'              => [ ['0644'], '', '', '' ],
+        '/home'                        => [ ['0711'], '', '', '' ],
+        '/home1'                       => [ ['0711'], '', '', '' ],
+        '/home2'                       => [ ['0711'], '', '', '' ],
+        '/home3'                       => [ ['0711'], '', '', '' ],
+        '/home4'                       => [ ['0711'], '', '', '' ],
+        '/home5'                       => [ ['0711'], '', '', '' ],
+        '/opt'                         => [ ['0755'], '', '', '' ],
+        '/root/cpanel3-skel'           => [ ['0755'], '', '', '' ],
+        '/sbin'                        => [ ['0755', '0711', '0555'], '', '', '' ],
+        '/sbin/ifconfig'               => [ ['0755', '0555'], '', '', '' ],
+        '/tmp'                         => [ ['1777'], '', '', '' ],
+        '/usr'                         => [ ['0755'], '', '', '' ],
+        '/usr/bin'                     => [ ['0755', '0711', '0555'], '', '', '' ],
+        '/usr/bin/crontab'             => [ ['6755', '4755', '4555'], '', '', '' ],
+        '/usr/bin/passwd'              => [ ['6755', '4755', '4555', '4511'], '', '', '' ],
+        '/usr/sbin'                    => [ ['0755', '0711', '0555'], '', '', '' ],
+        '/usr/sbin/exim'               => [ ['4755'], '', '', '' ],
+        '/usr/share'                   => [ ['0755'], '', '', '' ],
+        '/usr/share/zoneinfo'          => [ ['0755'], '', '', '' ],
+        '/usr/local'                   => [ ['0755'], '', '', '' ],
+        '/usr/local/apache'            => [ ['0755'], '', '', '' ],
+        '/usr/local/apache/bin/httpd'  => [ ['0755'], '', '', '' ],
+        '/usr/local/bin'               => [ ['0755', '0711', '0555'], '', '', '' ],
+        '/usr/local/cpanel'                                                             => [ ['0711'], '', 'wheel', '' ],
+        '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'                          => [ ['0644'], '', 'wheel', '' ],
+        '/usr/local/cpanel/base/3rdparty/phpPgAdmin/index.php'                          => [ ['0644'], '', 'wheel', '' ],
+        '/usr/local/cpanel/base/3rdparty/roundcube/index.php'                           => [ ['0644'], '', 'wheel', '' ],
+        '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => [ ['0644'], '', 'wheel', '' ],
+        '/usr/local/cpanel/base/3rdparty/squirrelmail/index.php'                        => [ ['0644'], '', 'wheel', '' ],
+        '/usr/local/cpanel/php/cpanel.php'                                              => [ ['0644'], '', '', '' ],
+        '/usr/local/sbin'              => [ ['0755', '0711', '0555'], '', '', '' ],
+        '/var'                         => [ ['0755'], '', '', '' ],
+        '/var/cpanel'                  => [ ['0755', '0711', '0555'], '', '', '' ],
+        '/var/cpanel/backups/config'   => [ ['0644'], '', '', '' ],
+        '/var/cpanel/datastore'        => [ ['0755'], '', '', '' ],
+        '/var/cpanel/features'         => [ ['0755'], '', '', '' ],
+        '/var/cpanel/locale'           => [ ['0755'], '', '', '' ],
+        '/var/cpanel/resellers'        => [ ['0644'], '', '', '' ],
+        '/var/lib'                     => [ ['0755'], '', '', '' ],
+        '/var/lib/mysql'               => [ ['0751'], 'mysql', 'mysql', '' ],
+        '/var/lib/mysql/mysql.sock'    => [ ['0777'], 'mysql', 'mysql', '' ],
+        '/var/log/exim_mainlog'        => [ ['0640'], 'mailnull', 'mail', '' ],
+        '/var/log/exim_paniclog'       => [ ['0640'], 'mailnull', 'mail', '' ],
+        '/var/log/exim_rejectlog'      => [ ['0640'], 'mailnull', 'mail', '' ],
+        '/var/tmp'                     => [ ['1777'], '', '', '' ]
     );
 
     my $wwwacctconf = '/etc/wwwacct.conf';
     if ( open my $wwwacctconf_fh, '<', $wwwacctconf ) {
         while (<$wwwacctconf_fh>) {
             if (m{ ^ HOMEDIR \s ([/\-_A-Za-z0-9]+) $ }x) {
-                $resources_and_perms{$1} = '0711';
+                $check{$1} = [ ['0711'], '', '', '' ];
                 last;
             }
         }
         close $wwwacctconf_fh;
     }
 
-    for my $resource ( keys %resources_and_perms ) {
+    if ( cpanel_version_is(qw( < 11.42.0.0 )) ) {
+        $check{'/usr/local/cpanel/base/horde/index.php'} = [ ['0644'], '', 'wheel', '' ];
+    }
+    else {
+        $check{'/usr/local/cpanel/base/horde/index.php'} = [ ['0644'], '', '', '' ];
+    }
+
+    if ( cpanel_version_is(qw( <= 11.36.0.0 )) ) {
+       $check{'/usr/local/cpanel/bin/cpwrap'} = [ ['4755'], '', 'wheel', '' ];
+    }
+    else {
+       $check{'/usr/local/cpanel/bin/cpwrap'} = [ ['0755'], '', 'wheel', '' ];
+    }
+
+    if ( ( cpanel_version_is(qw( >= 11.44.0.0 )) && cpanel_version_is(qw( < 11.44.0.8 )) ) || ( cpanel_version_is(qw( >= 11.42.0.0 )) && cpanel_version_is(qw( < 11.42.1.18 )) ) ) {
+       $check{'/usr/local/cpanel/bin/sendmail'} = [ ['4755'], '', '', ' - CGIEmail wants suid /u/l/cpanel/bin/sendmail (case 86561)' ];
+    }
+    else {
+       $check{'/usr/local/cpanel/bin/sendmail'} = [ ['0755'], '', '', '' ];
+    }
+
+    for my $resource ( sort keys %check ) {
         if ( -l $resource ) {
             print_warn('Non-default Location: ');
             print_warning($resource . " is a symlink to [ " . readlink($resource) . " ]");
         }
         if ( -e $resource ) {
-            my $mode = ( stat($resource) )[2] & 07777;
+            my ($mode, $uid, $gid) = ( stat($resource) )[2,4,5];
+            $mode &= 07777;
             $mode = sprintf "%lo", $mode;
-            if ( $mode != $resources_and_perms{$resource} ) {
-                next if ( $resource =~ '^(/(s?)bin|/usr/(s?)bin|/)$' and $mode == 755 );                  # CentOS 6.2+
-                next if ( $resource =~ '^/(var|sbin|usr/local/sbin|usr|usr/sbin)$|^/var/cpanel' and $mode == 711 );
-                if ( $resource eq '/' and $mode == 711 ) {
-                    $resources_and_perms{$resource} .= ") (.ftpquota issues? see ticket 4429843";
-                }
-                if ( $resource eq '/dev/log' ) {
-                    $resources_and_perms{$resource} .= ") (CSF RESTRICT_SYSLOG can cause this. See ticket 4875833";
-                }
-                print_warn('Non-default Permissions: ');
-                print_warning("$resource (mode: $mode | default: $resources_and_perms{$resource})");
+            my $user = getpwuid($uid);
+            my $group = getgrgid($gid);
+            my $checkuser = $check{$resource}[1] ? $check{$resource}[1] : 'root';
+            my $checkgroup = $check{$resource}[2] ? $check{$resource}[2] : 'root';
+            if ( ! ($user eq $checkuser) || ! ($group eq $checkgroup) ) {
+                print_warn('Non-default Ownership: ');
+                print_warning($resource . ' (owner: [ ' . $user . ':' . $group . ' ] | default: [ ' . $checkuser . ':' . $checkgroup . ' ])' . $check{$resource}[3] );
             }
-        }
-    }
-
-    ## cPanel changes /etc/shadow from 0400 to 0600 (and possibly 0200?)
-    if ( -e '/etc/shadow' ) {
-        my $mode = ( stat('/etc/shadow') )[2] & 07777;
-        $mode = sprintf "%lo", $mode;
-        if ( $mode != 600 and $mode != 400 and $mode != 200 ) {
-            print_warn('Non-default Permissions: ');
-            print_warning("/etc/shadow (mode: $mode | default: 0400 or 0600)");
-        }
-    }
-
-    if ( -e '/usr/bin/crontab' ) {
-        my $mode = ( stat('/usr/bin/crontab') )[2] & 07777;
-        $mode = sprintf "%lo", $mode;
-        if ( $mode != 4755 and $mode != 6755 and $mode != 4555 ) {
-            print_warn('Non-default Permissions: ');
-            print_warning("/usr/bin/crontab (mode: $mode | default: 4755 or 6755 or 4555)");
-        }
-    }
-
-    if ( -e '/usr/bin/passwd' ) {
-        my $mode = ( stat('/usr/bin/passwd') )[2] & 07777;
-        $mode = sprintf "%lo", $mode;
-        if ( $mode !~ m{ \A ( 4755 | 6755 | 4511 | 4555 ) \z }xms ) {
-            print_warn('Non-default Permissions: ');
-            print_warning("/usr/bin/passwd (mode: $mode | default: 4755 or 6755 or 4511 or 4555)");
-        }
-    }
-
-    if ( -e '/sbin/ifconfig' ) {
-        my $mode = ( stat('/sbin/ifconfig') )[2] & 07777;
-        $mode = sprintf "%lo", $mode;
-        if ( $mode != 755 and $mode != 555 ) {
-            print_warn('Non-default Permissions: ');
-            print_warning("/sbin/ifconfig (mode: $mode | default: 755 or 555)");
-        }
-    }
-
-    if ( -e '/bin/ln' ) {
-        my $mode = ( stat('/bin/ln') )[2] & 07777;
-        $mode = sprintf "%lo", $mode;
-        if ( $mode != 755 and $mode != 555 ) {
-            print_warn('Non-default Permissions: ');
-            print_warning("/bin/ln (mode: $mode | default: 755 or 555)");
-        }
-    }
-
-    if ( -e '/usr/local/cpanel/bin/cpwrap' ) {
-        my $mode = ( stat('/usr/local/cpanel/bin/cpwrap') )[2] & 07777;
-        $mode = sprintf "%lo", $mode;
-        if ( cpanel_version_is(qw( <= 11.36.0.0 )) ) {
-            if ( $mode != 4755 ) {
-                print_warn('Non-default Permissions: ');
-                print_warning("/usr/local/cpanel/bin/cpwrap (mode: $mode | default: 4755 )");
+            my $default = 0;
+            for my $checkmode ( @{$check{$resource}[0]} ) {
+                if ( $mode == $checkmode ) {
+                    $default = 1;
+                }
             }
-        }
-        else {
-            if ( $mode != 755 ) {
-                print_warn('Non-default Permissions: ');
-                print_warning("/usr/local/cpanel/bin/cpwrap (mode: $mode | default: 0755 )");
+            if ( ! $default == 1 ) {
+                    print_warn('Non-default Permissions: ');
+                    print_warning($resource . ' (mode: ' . sprintf("%04d", $mode) . ' | default: ' . join(' or ', @{$check{$resource}[0]}) . ')' . $check{$resource}[3] );
             }
         }
     }
@@ -3433,7 +3403,7 @@ sub check_etc_hosts_sanity {
 
 sub check_for_empty_or_missing_files {
     opendir( my $dir_fh, '/var/cpanel/users' );
-    my @dir_contents = grep { !/^(\.\.?|cptkt\d+_.+)$/ } readdir $dir_fh;
+    my @dir_contents = grep { !/^(\.\.?|cp\d+[a-z]+)$/ } readdir $dir_fh;
     closedir $dir_fh;
 
     # if there are no users on the box, don't warn about userdatadomains
