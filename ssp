@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.80';
+my $version = '4.99.81';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -51,12 +51,13 @@ my $external_ip_address;
 my $TIERS                 = get_tiers_file();
 my @local_ipaddrs_list    = get_local_ipaddrs();
 my @process_list          = get_process_list();
-my %process;
-my %port;
+my %process; &get_process_pid_hash(\%process);
+my %port; &get_lsof_port_hash(\%port);
 my %hostinfo              = get_hostinfo();
 my %cpuinfo               = get_cpuinfo();
-my $mysql_datadir         = get_mysql_datadir();
-my $mysql_error_log       = get_mysql_error_log();
+my %mysql_conf; &get_mysql_conf(\%mysql_conf);
+my $mysql_datadir         = get_mysql_datadir(); # needs %mysql_conf
+my $mysql_error_log       = get_mysql_error_log(); # needs %mysql_conf
 my @mysql_rpm_versions;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
 my @custom_opt_mods;           # items in /var/cpanel/easy/apache/custom_opt_mods/
 my @usr_local_cpanel_hooks;    # items in /usr/local/cpanel/hooks/
@@ -71,8 +72,6 @@ my ( $lsws_full_version, $lsws_numeric_version ) = get_lsws_version();
 
 my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexec );
 
-&get_process_pid_hash(\%process);
-&get_lsof_port_hash(\%port);
 
 if ( -x '/usr/local/apache/bin/httpd' ) {
     @apache_version_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-v' );
@@ -87,6 +86,7 @@ my @phpini  = get_phpini();
     if ( open( my $cpconf_fh, '<', '/var/cpanel/cpanel.config' ) ) {
         local $/ = undef;
         %cpconf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($cpconf_fh) );
+        close $cpconf_fh;
     }
     else {
         die "/var/cpanel/cpanel.config could not be opened. Unable to proceed.\n";
@@ -137,6 +137,7 @@ check_port_hash();
 check_selinux_status();
 check_runlevel();
 check_for_missing_root_cron();
+check_for_missing_usr_bin_crontab();
 check_if_upcp_is_running();
 check_valid_upcp();
 check_interface_lo();
@@ -172,8 +173,6 @@ check_for_nat();
 check_for_oracle_linux();
 check_for_usr_local_cpanel_hooks();
 check_for_sql_safe_mode();
-check_mysql_non_default_datadir();
-check_mysqld_warnings_errors();
 check_for_domain_forwarding();
 check_for_empty_apache_templates();
 check_for_empty_postgres_config();
@@ -199,7 +198,8 @@ check_roundcube_mysql_pass_mismatch();
 check_for_kernel_headers_rpm();
 check_for_11_30_scripts_not_a_symlink();
 check_for_hooks_from_var_cpanel_hooks_yaml();
-check_for_non_default_mysql_error_log_location();
+check_mysqld_warnings_errors();
+check_mysql_config();
 check_for_C_compiler_optimization();
 check_perl_version_less_than_588();
 check_for_low_ulimit_for_root();
@@ -223,9 +223,6 @@ check_for_rpm_overrides();
 check_for_odd_yum_conf();
 check_var_cpanel_immutable_files();
 check_for_noxsave_in_grub_conf();
-check_for_my_cnf_skip_name_resolve();
-check_for_my_cnf_sql_mode();
-check_for_my_cnf_skip_networking();
 check_for_rpm_dist_ver_unknown();
 check_for_homeloader_php_extension();
 check_for_networkmanager();
@@ -266,7 +263,7 @@ check_for_broken_userdatadomains();
 check_ssl_db_perms();
 check_for_nat_plus_mod_evasive();
 check_for_stray_index_php();
-check_for_missing_mysql_version_in_cpanelconfig();
+check_for_missing_cpanelconfig_items();
 check_for_port_80_not_apache();
 check_for_missing_groups();
 check_for_cgihidepass();
@@ -689,7 +686,8 @@ sub print_tip {
         '/var/cpanel/conf/apache/local can potentially cause issues. See ticket 3915299 for an example',
         'System backups are not uploaded via FTP by default, requires manual config. See http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/SystemBackups',
         '$PATH may differ when executing something via cron rather than the command line. See ticket 4419531',
-        '"failed to open scan directory /var/spool/exim/scan/[...]: Too many links" could mean a directory has reached limit of 32,000 files/dirs'
+        '"failed to open scan directory /var/spool/exim/scan/[...]: Too many links" could mean a directory has reached limit of 32,000 files/dirs',
+        'If innodb_force_recovery is enabled in the MySQL configuration, this can sometimes prevent mysqldump from working (see ticket 5193581).'
     );
 
     my $num  = int rand scalar @tips;
@@ -761,6 +759,38 @@ sub get_lsof_port_hash ($) {
             }
         }
     }
+}
+
+sub get_mysql_conf () {
+    my ($href) = @_;
+    my $lines = 0;
+    if ( open( my $mycnf_fh, '<', '/etc/my.cnf' ) ) {
+        my $section = 'unknown';
+        while (<$mycnf_fh>) {
+            chomp;
+            next if /^(#|$)/;
+            if ( m{ \A \s* \[ \s*+ ([^\]]+) \s*+ ] }x ) {
+                $section = lc($1);
+                $lines++;
+                next;
+            }
+            if ( m{ \A \s* ([^=]+?) \s* = \s*+ (?:["']?) ([^"']*?) (?:["']?) \s*+ \Z }x ) {
+                my $key = lc($1);
+                $key =~ tr/_-//d;
+                ${$href}{$section}{$key} = [$1, $2];
+                $lines++;
+                next;
+            }
+            if ( m{ \A \s* ([^\s]+) \s* \Z }x ) {
+                my $key = lc($1);
+                $key =~ tr/_-//d;
+                ${$href}{$section}{$key} = [ $1, 'enabled' ];
+                $lines++;
+            }
+        }
+        close $mycnf_fh;
+    }
+    ${$href}{'LINES'} = $lines;
 }
 
 sub get_hostinfo {
@@ -1359,8 +1389,8 @@ sub print_php_configuration {
     }
     close $phpconf_fh;
 
-    if ( $suexec && $suexec == 1 ) {
-        $suexec = '/w suexec';
+    if ( $suexec && $suexec eq '1' ) {
+        $suexec = 'with suexec';
     }
     else {
         $suexec = 'without suexec';
@@ -1376,17 +1406,17 @@ sub print_php_configuration {
                 $php5version = '(version unknown)';
             }
 
-            if ( $php5handler eq 'fcgi' ) {
+            if ( $php5handler && $php5handler eq 'fcgi' ) {
                 print_info('PHP Default: ');
                 print_warning("PHP $php5version $php5handler $suexec (mod_userdir style URLs don't work with fcgi!)");
             }
-            else {
+            elsif ( $php5handler ) {
                 print_info('PHP Default: ');
                 print_normal("PHP $php5version $php5handler $suexec");
             }
         }
 
-        if ( $php4handler ne 'none' ) {
+        if ( $php4handler && $php4handler ne 'none' ) {
             my @php_v = split /\n/, cached_run( '/usr/local/php4/bin/php', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php4version = $1;
@@ -1400,7 +1430,7 @@ sub print_php_configuration {
         }
     }
 
-    if ( $phpversion == 4 ) {
+    if ( $phpversion && $phpversion == 4 ) {
         if ( -x '/usr/local/php4/bin/php' ) {
             my @php_v = split /\n/, cached_run( '/usr/local/php4/bin/php', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
@@ -1410,7 +1440,7 @@ sub print_php_configuration {
                 $php4version = '(version unknown)';
             }
 
-            if ( $php4handler eq 'fcgi' ) {
+            if ( $php4handler && $php4handler eq 'fcgi' ) {
                 print_info('PHP Default: ');
                 print_warning("PHP $php4version $php4handler $suexec (mod_userdir style URLs don't work with fcgi!)");
             }
@@ -1420,7 +1450,7 @@ sub print_php_configuration {
             }
         }
 
-        if ( $php5handler ne 'none' ) {
+        if ( $php5handler && $php5handler ne 'none' ) {
             my @php_v = split /\n/, cached_run( '/usr/bin/php', '-n', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php5version = $1;
@@ -1434,7 +1464,7 @@ sub print_php_configuration {
         }
     }
 
-    if ( $php4handler eq 'none' and $php5handler eq 'none' ) {
+    if ( ( ( $php4handler && $php5handler ) && ( $php4handler eq 'none' && $php5handler eq 'none' ) ) || ! ( $php4handler && $php5handler ) ) {
         print "\n";
         print_warn('PHP: ');
         print_warning('no handler defined for PHP4 or PHP5!');
@@ -1755,6 +1785,14 @@ sub check_for_missing_root_cron {
     if ( !-f $cron ) {
         print_warn('Missing cron: ');
         print_warning("root's cron file $cron is missing!");
+    }
+}
+
+sub check_for_missing_usr_bin_crontab {
+    my $crontab = '/usr/bin/crontab';
+    if ( ! -f $crontab ) {
+        print_warn('Missing crontab binary: ');
+        print_warning('file ' . $crontab . ' is missing!  Seeing "warn [jail_safe_crontab] Cpanel::Wrap::send_cpwrapd_request error"?  This may be why.');
     }
 }
 
@@ -2123,57 +2161,60 @@ sub check_perl_sanity {
 
 sub check_for_non_default_permissions {
     my %resources_and_perms = (
-        '/'                            => '755',
-        '/bin'                         => '755',
-        '/bin/bash'                    => '755',
-        '/dev/log',                    => '666',
-        '/dev/null'                    => '666',
-        '/etc'                         => '755',
+        '/'                            => '0555',
+        '/bin'                         => '0555',
+        '/bin/bash'                    => '0755',
+        '/dev/log',                    => '0666',
+        '/dev/null'                    => '0666',
+        '/etc'                         => '0755',
         '/etc/cpbackup.conf'           => '0644',
-        '/etc/group'                   => '644',
-        '/etc/hosts'                   => '644',
-        '/etc/nsswitch.conf'           => '644',
-        '/etc/passwd'                  => '644',
-        '/etc/stats.conf'              => '644',
+        '/etc/group'                   => '0644',
+        '/etc/hosts'                   => '0644',
+        '/etc/nsswitch.conf'           => '0644',
+        '/etc/passwd'                  => '0644',
+        '/etc/stats.conf'              => '0644',
         '/home'                        => '0711',
         '/home1'                       => '0711',
         '/home2'                       => '0711',
         '/home3'                       => '0711',
         '/home4'                       => '0711',
         '/home5'                       => '0711',
-        '/opt'                         => '755',
-        '/root/cpanel3-skel'           => '755',
-        '/sbin'                        => '755',
+        '/opt'                         => '0755',
+        '/root/cpanel3-skel'           => '0755',
+        '/sbin'                        => '0555',
         '/tmp'                         => '1777',
-        '/usr'                         => '755',
-        '/usr/bin'                     => '755',
-        '/usr/sbin'                    => '755',
+        '/usr'                         => '0755',
+        '/usr/bin'                     => '0555',
+        '/usr/sbin'                    => '0555',
         '/usr/sbin/exim'               => '4755',
-        '/usr/local/apache'            => '755',
-        '/usr/local/apache/bin/httpd'  => '755',
-        '/usr/local/bin'               => '755',
-        '/usr/local/sbin'              => '755',
-        '/var'                         => '755',
-        '/var/cpanel'                  => '755',
+        '/usr/share'                   => '0755',
+        '/usr/share/zoneinfo'          => '0755',
+        '/usr/local'                   => '0755',
+        '/usr/local/apache'            => '0755',
+        '/usr/local/apache/bin/httpd'  => '0755',
+        '/usr/local/bin'               => '0755',
+        '/usr/local/sbin'              => '0755',
+        '/var'                         => '0755',
+        '/var/cpanel'                  => '0755',
         '/var/cpanel/backups/config'   => '0644',
-        '/var/cpanel/datastore'        => '755',
-        '/var/cpanel/features'         => '755',
-        '/var/cpanel/locale'           => '755',
-        '/var/cpanel/resellers'        => '644',
-        '/var/lib'                     => '755',
-        '/var/lib/mysql'               => '751',
-        '/var/lib/mysql/mysql.sock'    => '777',
+        '/var/cpanel/datastore'        => '0755',
+        '/var/cpanel/features'         => '0755',
+        '/var/cpanel/locale'           => '0755',
+        '/var/cpanel/resellers'        => '0644',
+        '/var/lib'                     => '0755',
+        '/var/lib/mysql'               => '0751',
+        '/var/lib/mysql/mysql.sock'    => '0777',
         '/var/log/exim_mainlog'        => '0640',
         '/var/log/exim_paniclog'       => '0640',
         '/var/log/exim/rejectlog'      => '0640',
         '/var/tmp'                     => '1777',
-        '/usr/local/cpanel/php/cpanel.php'  => '644',
-        '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => '644',
-        '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'  => '644',
-        '/usr/local/cpanel/base/3rdparty/phpPgAdmin/index.php'  => '644',
-        '/usr/local/cpanel/base/3rdparty/roundcube/index.php'   => '644',
-        '/usr/local/cpanel/base/horde/index.php'                => '644',
-        '/usr/local/cpanel/base/3rdparty/squirrelmail/index.php'    => '644',
+        '/usr/local/cpanel/php/cpanel.php'  => '0644',
+        '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => '0644',
+        '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'  => '0644',
+        '/usr/local/cpanel/base/3rdparty/phpPgAdmin/index.php'  => '0644',
+        '/usr/local/cpanel/base/3rdparty/roundcube/index.php'   => '0644',
+        '/usr/local/cpanel/base/horde/index.php'                => '0644',
+        '/usr/local/cpanel/base/3rdparty/squirrelmail/index.php'    => '0644',
     );
 
     my $wwwacctconf = '/etc/wwwacct.conf';
@@ -2188,11 +2229,15 @@ sub check_for_non_default_permissions {
     }
 
     for my $resource ( keys %resources_and_perms ) {
+        if ( -l $resource ) {
+            print_warn('Non-default Location: ');
+            print_warning($resource . " is a symlink to [ " . readlink($resource) . " ]");
+        }
         if ( -e $resource ) {
             my $mode = ( stat($resource) )[2] & 07777;
             $mode = sprintf "%lo", $mode;
             if ( $mode != $resources_and_perms{$resource} ) {
-                next if ( $resource =~ '^(/(s?)bin|/usr/(s?)bin|/)$' and $mode == 555 );                  # CentOS 6.2+
+                next if ( $resource =~ '^(/(s?)bin|/usr/(s?)bin|/)$' and $mode == 755 );                  # CentOS 6.2+
                 next if ( $resource =~ '^/(var|sbin|usr/local/sbin|usr|usr/sbin)$|^/var/cpanel' and $mode == 711 );
                 if ( $resource eq '/' and $mode == 711 ) {
                     $resources_and_perms{$resource} .= ") (.ftpquota issues? see ticket 4429843";
@@ -2686,30 +2731,18 @@ sub find_usr_local_cpanel_hooks {
 sub check_for_sql_safe_mode {
     if ( grep { m# \A (?:[ \t]+)? sql\.safe_mode \s* = \s* on #ixms } @phpini ) {
         print_warn('/usr/local/lib/php.ini: ');
-        print_warning('sql.safe_mode is enabled!');
+        print_warning('sql.safe_mode is enabled! This may break PHP SQL authentication.');
     }
 }
 
 sub get_mysql_datadir {
-    my $my_cnf  = '/etc/my.cnf';
     my $datadir = '/var/lib/mysql/';
-
-    if ( open my $my_cnf_fh, '<', $my_cnf ) {
-        while (<$my_cnf_fh>) {
-            chomp( my $line = $_ );
-            if ( $line =~ m{ \A datadir \s* = \s* (?:["']?) ([^"']+) }xms ) {
-                $datadir = $1;
-                $datadir =~ s/[\s\t]+$//g;
-                last;
-            }
+    if ( $mysql_conf{'LINES'} && $mysql_conf{'mysqld'}{'datadir'} ) {
+        $datadir =  $mysql_conf{'mysqld'}{'datadir'}[1];
+        if ( $datadir !~ m{ / \z }xms ) {
+            $datadir .= '/';
         }
-        close $my_cnf_fh;
     }
-
-    if ( $datadir !~ m{ / \z }xms ) {
-        $datadir .= '/';
-    }
-
     return $datadir;
 }
 
@@ -2723,13 +2756,6 @@ sub check_mysqld_warnings_errors {
             print_warn('MySQL config errors: ');
             print_warning($mysql_err);
         }
-    }
-}
-
-sub check_mysql_non_default_datadir {
-    if ( $mysql_datadir !~ m{ /var/lib/mysql(/?) \z }xms ) {
-        print_warn('MySQL non-default datadir: ');
-        print_warning($mysql_datadir);
     }
 }
 
@@ -3140,53 +3166,39 @@ sub check_wwwacctconf_for_incorrect_minuid {
 }
 
 sub check_roots_cron_for_certain_commands {
-    my $cron = '/var/spool/cron/root';
+    my @cronlist = glob( q{
+        /etc/cron.d/*
+        /etc/cron.hourly/*
+        /etc/cron.daily/*
+        /etc/cron.weekly/*
+        /etc/cron.monthly/*
+        /var/spool/cron/root
+    } );
 
-    return if !-e $cron;
+    my %found = ();
 
-    my %commands = ();
-    my $commands;
-
-    if ( open my $cron_fh, '<', $cron ) {
-        while (<$cron_fh>) {
-            if (m{ \A [^#]+ (\s|\/)rm\s }xms) {
-                $commands{'rm'} = 1;
+    for my $cron ( @cronlist ) {
+        next if ! ( -f $cron || -l $cron );
+        next if ($cron =~ m{ /makewhatis\.cron }x); # List of false-positives to filter out.
+        if ( open my $cron_fh, '<', $cron ) {
+            while (<$cron_fh>) {
+                if (m{ \A [^#]* (?:^|\s|\/)(rm|unlink|chmod|chown|chattr|kill|pkill|skill|tmpwatch)\s }x) {
+                    $found{$cron}{$1} = 1;
+                }
             }
-            if (m{ \A [^#]+ (\s|\/)unlink\s }xms) {
-                $commands{'unlink'} = 1;
-            }
-            if (m{ \A [^#]+ (\s|\/)chmod\s }xms) {
-                $commands{'chmod'} = 1;
-            }
-            if (m{ \A [^#]+ (\s|\/)chown\s }xms) {
-                $commands{'chown'} = 1;
-            }
-            if (m{ \A [^#]+ (\s|\/)chattr\s }xms) {
-                $commands{'chattr'} = 1;
-            }
-            if (m{ \A [^#]+ (\s|\/)kill\s }xms) {
-                $commands{'kill'} = 1;
-            }
-            if (m{ \A [^#]+ (\s|\/)pkill\s }xms) {
-                $commands{'pkill'} = 1;
-            }
-            if (m{ \A [^#]+ (\s|\/)skill\s }xms) {
-                $commands{'skill'} = 1;
-            }
-            if (m{ \A [^#]+ (\s|\/)tmpwatch\s }xms) {
-                $commands{'tmpwatch'} = 1;
-            }
+            close $cron_fh;
         }
-        close $cron_fh;
     }
 
-    if (%commands) {
-        while ( my ( $key, $value ) = each(%commands) ) {
-            $commands .= "[$key] ";
+    if (%found) {
+        for my $cron ( keys(%found) ) {
+            my $additional_info = "";
+            if ( $found{$cron}{'tmpwatch'} ) {
+                $additional_info = ' (tmpwatch may be deleting /tmp/mysql.sock)';
+            }
+            print_warn("cron: ");
+            print_warning( $cron . " contains [ " . join(' ', sort(keys(%{$found{$cron}}))) . " ]" . $additional_info);
         }
-
-        print_warn("$cron commands found: ");
-        print_warning($commands);
     }
 }
 
@@ -3537,31 +3549,34 @@ sub check_for_hooks_from_var_cpanel_hooks_yaml {
 }
 
 sub get_mysql_error_log {
-    if ( open my $file_fh, '<', '/etc/my.cnf' ) {
-        while (<$file_fh>) {
-            if (m{ \A log-error \s? = \s? (.*) \z }xms) {
-                $mysql_error_log = $1;
-                $mysql_error_log =~ s/\"//g;
-                $mysql_error_log =~ s/\'//g;
-                chomp $mysql_error_log;
-                last;
-            }
-        }
-        close $file_fh;
-    }
-
-    if ($mysql_error_log) {
-        return $mysql_error_log;
+    if ( $mysql_conf{'LINES'} && $mysql_conf{'mysqld'}{'logerror'} ) {
+        return $mysql_conf{'mysqld'}{'logerror'}[1];
     }
     else {
         return '/var/lib/mysql/' . $hostname . '.err';
     }
 }
 
-sub check_for_non_default_mysql_error_log_location {
-    if ( $mysql_error_log and $mysql_error_log !~ m# \A /var/lib/mysql/${hostname}\.err \z #xms ) {
-        print_warn('MySQL: ');
-        print_warning("error log configured in /etc/my.cnf as $mysql_error_log");
+sub check_mysql_config {
+    return if ! $mysql_conf{'LINES'};
+    my %mysqld_checks = ( # 'optionwithoutdashesorunderscores' => ['defaultvalue', '- Help text'],
+        'datadir' => ['/var/lib/mysql', ''],
+        'innodbforcerecovery' => ['0', '- Makes all InnoDB databases read-only, will break MySQL upgrades.'],
+        'logerror' => ['/var/lib/mysql/' . $hostname . '.err', ''],
+        'skipnameresolve' => ['', '- Seeing "Can\'t find any matching row"? That may be why.'],
+        'skipnetworking' => ['', '- Webmail or other MySQL related items not functioning properly? That may be why.'],
+        'sqlmode' => ['', '- Seeing "Field \'ssl_cipher\' doesn\'t have a default value"? That may be why.']
+    );
+    for my $check ( sort(keys(%mysqld_checks)) ) {
+        if ( $mysql_conf{'mysqld'}{$check} && ! ( $mysql_conf{'mysqld'}{$check}[1] eq $mysqld_checks{$check}[0] ) ) {
+            print_warn('MySQL /etc/my.cnf: ');
+            if ( $mysql_conf{'mysqld'}{$check}[1] eq "enabled" ) {
+                print_warning('[ ' . $mysql_conf{'mysqld'}{$check}[0] . ' ] found ' . $mysqld_checks{$check}[1]);
+            }
+            else {
+                print_warning('[ ' . $mysql_conf{'mysqld'}{$check}[0] . ' = ' . $mysql_conf{'mysqld'}{$check}[1] . ' ] ' . $mysqld_checks{$check}[1]);
+            }
+        }
     }
 }
 
@@ -4285,73 +4300,6 @@ sub check_for_noxsave_in_grub_conf {
     }
 }
 
-sub check_for_my_cnf_skip_name_resolve {
-    my $skip_name_resolve = 0;
-    my $conf_setting;
-
-    my $my_cnf = '/etc/my.cnf';
-    if ( open my $my_cnf_fh, '<', $my_cnf ) {
-        while (<$my_cnf_fh>) {
-            chomp( my $line = $_ );
-            if ( $line =~ m{ \A (?:[ \t]+)? (skip[_-]na.*) }xms ) {
-                $conf_setting = $1;
-                $skip_name_resolve = 1;
-                last;
-            }
-        }
-        close $my_cnf;
-    }
-
-    if ( $skip_name_resolve == 1 ) {
-        print_warn('/etc/my.cnf: ');
-        print_warning("$conf_setting found. Seeing \"Can't find any matching row\"? That may be why");
-    }
-}
-
-sub check_for_my_cnf_sql_mode {
-    my $sql_mode = 0;
-
-    my $my_cnf = '/etc/my.cnf';
-    if ( open my $my_cnf_fh, '<', $my_cnf ) {
-        while (<$my_cnf_fh>) {
-            chomp( my $line = $_ );
-            if ( $line =~ m{ \A sql[-_]mode }xms ) {
-                $sql_mode = 1;
-                last;
-            }
-        }
-        close $my_cnf;
-    }
-
-    if ( $sql_mode == 1 ) {
-        print_warn('/etc/my.cnf: ');
-        print_warning('sql_mode or sql-mode found. Seeing "Field \'ssl_cipher\' doesn\'t have a default value"? That may be why');
-    }
-}
-
-sub check_for_my_cnf_skip_networking {
-    my $skip_networking = 0;
-    my $conf_setting;
-
-    my $my_cnf = '/etc/my.cnf';
-    if ( open my $my_cnf_fh, '<', $my_cnf ) {
-        while (<$my_cnf_fh>) {
-            chomp( my $line = $_ );
-            if ( $line =~ m{ \A (?:[ \t]+)? (skip[_-]net.*) }xms ) {
-                $conf_setting = $1;
-                $skip_networking = 1; 
-                last;
-            }    
-        }    
-        close $my_cnf;
-    }    
-
-    if ( $skip_networking == 1 ) {
-        print_warn('/etc/my.cnf: ');
-        print_warning("$conf_setting found. Webmail or other MySQL related items not functioning properly? That may be why.");
-    }    
-}
-
 sub check_for_rpm_dist_ver_unknown {
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
     my $is_broken      = 0;
@@ -4375,7 +4323,7 @@ sub check_for_rpm_dist_ver_unknown {
 }
 
 sub check_for_homeloader_php_extension {
-    return if ( $php5handler ne 'dso' );
+    return if ( $php5handler && $php5handler ne 'dso' );
 
     if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? homeloader\.so ['"]? #xms } @phpini ) {
         print_warn('/usr/local/lib/php.ini: ');
@@ -4785,7 +4733,7 @@ sub check_for_nocloudlinux_touchfile {
 }
 
 sub check_for_phphandler_and_opcode_caching_incompatibility {
-    return if ( $php5handler ne 'suphp' );
+    return if ( $php5handler && $php5handler ne 'suphp' );
 
     my $message;
 
@@ -5188,10 +5136,13 @@ sub check_for_stray_index_php {
     }
 }
 
-sub check_for_missing_mysql_version_in_cpanelconfig {
-    if ( not exists $cpconf{'mysql-version'} or $cpconf{'mysql-version'} =~ /^(?:[ \t]+|$)/ ) {
-        print_warn('/var/cpanel/cpanel.config: ');
-        print_warning('contains an empty "mysql-version=" setting');
+
+sub check_for_missing_cpanelconfig_items {
+    for my $checkvar ( qw( ftpserver mailserver mysql-version ) ) {
+        if ( not exists $cpconf{$checkvar} or $cpconf{$checkvar} =~ /^(?:[ \t]+|$)/ ) {
+            print_warn('/var/cpanel/cpanel.config: ');
+            print_warning('empty or missing "' . $checkvar . '" setting');
+        }
     }
 }
 
@@ -5684,7 +5635,7 @@ sub check_for_readonly_filesystems {
     my @read_only_fs = ();
     while (<$fh>) {
         if ( my @fs = split(' ') ) {
-            next if grep(m{ / (home/virtfs|usr/share/cagefs-skeleton) / }x,$fs[1]);
+            next if grep(m{ / (virtfs|cagefs-skeleton) / }x,$fs[1]);
             if ( grep(m{ (^|,) ro (,|$) }x, $fs[3]) ) {
                 push(@read_only_fs, $fs[1]);
             }
