@@ -1353,7 +1353,7 @@ sub print_php_configuration {
         if (/^php5:[ \t]+['"]?([^'"]+)/) {
             $php5handler = $1;
         }
-        if (/^suexec:[ \t]+['"]?([0-9]?)['"]?/) {
+        if (/^suexec:[ \t]+['"]?([^'"]+)/) {
             $suexec = $1;
         }
     }
@@ -4375,7 +4375,7 @@ sub check_for_rpm_dist_ver_unknown {
 }
 
 sub check_for_homeloader_php_extension {
-    return if ( defined $php5handler && $php5handler ne 'dso' );
+    return if ( $php5handler ne 'dso' );
 
     if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? homeloader\.so ['"]? #xms } @phpini ) {
         print_warn('/usr/local/lib/php.ini: ');
@@ -4785,7 +4785,7 @@ sub check_for_nocloudlinux_touchfile {
 }
 
 sub check_for_phphandler_and_opcode_caching_incompatibility {
-    return if ( defined $php5handler && $php5handler ne 'suphp' );
+    return if ( $php5handler ne 'suphp' );
 
     my $message;
 
