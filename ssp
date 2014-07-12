@@ -33,7 +33,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.82';
+my $version = '4.99.83';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -769,12 +769,14 @@ sub get_mysql_conf () {
         while (<$mycnf_fh>) {
             chomp;
             next if /^(#|$)/;
-            if ( m{ \A \s* \[ \s*+ ([^\]]+) \s*+ ] }x ) {
+            if ( m{ \A \s* \[([^\]]+)] }x ) {
                 $section = lc($1);
+                $section =~ s/^\s*//g;
+                $section =~ s/\s*$//g;
                 $lines++;
                 next;
             }
-            if ( m{ \A \s* ([^=]+?) \s* = \s*+ (?:["']?) ([^"']*?) (?:["']?) \s*+ \Z }x ) {
+            if ( m{ \A \s* ([^=]+?) \s* = \s* (?:["']?) ([^"']*?) (?:["']?) \s* \Z }x ) {
                 my $key = lc($1);
                 $key =~ tr/_-//d;
                 ${$href}{$section}{$key} = [$1, $2];
@@ -2264,7 +2266,9 @@ sub check_for_non_default_permissions {
             $mode &= 07777;
             $mode = sprintf "%lo", $mode;
             my $user = getpwuid($uid);
+            $user = $user ? $user : $uid;
             my $group = getgrgid($gid);
+            $group = $group ? $group : $gid;
             my $checkuser = $check{$resource}[1] ? $check{$resource}[1] : 'root';
             my $checkgroup = $check{$resource}[2] ? $check{$resource}[2] : 'root';
             if ( ! ($user eq $checkuser) || ! ($group eq $checkgroup) ) {
@@ -4156,6 +4160,8 @@ sub check_for_rpm_overrides {
                                | fd3f270edda79575343e910369b75ab7
                                | 57baebe121bcd5ab9752dd63f60ecd81
                                | 1d9f5d246ef2c9ab29f33cf00a3af9a5
+                               | a89257469792a846e8db72edd6d29919
+                               | c79a35d2f9633bce58f66b0f1549f4d3
                                 ) \s }xms ) {
         $local_is_default = 1;
     }
