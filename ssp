@@ -22,18 +22,13 @@ if ( $^O ne 'linux' ) {
     die "Unknown OS: $^O (only Linux is supported)";
 }
 
-{
-    local @INC = ( @INC, "/usr/local/cpanel" );
-    eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require Cpanel::CachedCommand; };
-}
-
 if ( $< != 0 ) {
     die "SSP must be run as root\n";
 }
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.83';
+my $version = '4.99.84';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -74,12 +69,12 @@ my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexe
 
 
 if ( -x '/usr/local/apache/bin/httpd' ) {
-    @apache_version_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-v' );
-    @apache_modules_output = split /\n/, timed_run( '/usr/local/apache/bin/httpd', '-M' );
+    @apache_version_output = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-v' );
+    @apache_modules_output = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-M' );
 }
 
 # TODO: use +c 15 so the entire process name is displayed if >9 chars
-my @lsof_80 = split /\n/, run( 'lsof', '-n', '-i', 'tcp:80' );
+my @lsof_80 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:80' );
 my @phpini  = get_phpini();
 
 {
@@ -95,6 +90,8 @@ my @phpini  = get_phpini();
 
 chomp( my @libkeyutils_files = build_libkeyutils_file_list());          # must come before the malware checks
 my $libkeyutils_files_ref = \@libkeyutils_files;
+
+my $crit_buffer; # Critical output to be printed at the end
 
 ######################
 ##  END GLOBALS     ##
@@ -130,6 +127,7 @@ print_if_using_mydns_or_nsd();
 print_if_using_modruid2();
 print_mysql_version();
 print_backups_info();
+print_mailserver_info();
 check_for_custom_zonetemplates();
 
 ## [WARN]
@@ -195,7 +193,6 @@ check_etc_hosts_sanity();
 check_for_empty_or_missing_files();
 check_for_apache_listen_host_is_localhost();
 check_roundcube_mysql_pass_mismatch();
-check_for_kernel_headers_rpm();
 check_for_11_30_scripts_not_a_symlink();
 check_for_hooks_from_var_cpanel_hooks_yaml();
 check_mysqld_warnings_errors();
@@ -281,12 +278,10 @@ check_for_allow_update_in_named_conf();
 check_for_mailman_low_uid();
 check_for_missing_skiphttpauth();
 check_for_MPM_ITK_and_suexec();
-check_for_openssl_heartbleed_bug();     # added per Chris
-check_for_openssl_secadv_20140605();
+check_for_modruid2_warnings();
 check_for_broken_mysqldump();
 check_exim_log_sanity();
 check_for_readonly_filesystems();
-check_for_lsws_and_modruid2();
 
 # [3RDP]
 check_smtp_processes();
@@ -309,6 +304,7 @@ check_for_els();
 check_for_whmxtra();
 check_for_usr_local_mis();
 
+# [CRIT] - Anything that requires a pre-defined response to be sent and/or escalation
 check_for_UMBREON_rootkit();                                    # malware
 check_for_jynx2_rootkit();                                      # malware
 check_for_cdorked_A();                                          # malware
@@ -326,11 +322,14 @@ check_for_ebury_ssh_banner();                                   # malware
 check_for_ebury_root_file();                                    # malware
 check_for_bg_botnet();                                          # malware
 
-# This is run closer to the end since it has the potential to take the longest
+# These are run closer to the end since it has the potential to take the longest due to RPM usage
 build_rpm_list();
+my $openssl_rpm_changelog = get_openssl_rpm_changelog();
 
 # These require build_rpm_list() to have been run, so that @rpm_list is populated
-check_for_ebury_3_digit_rpms();          # malware
+check_for_ebury_3_digit_rpms();                                 # malware
+check_for_openssl_heartbleed_bug();                             # advisory
+check_for_openssl_secadv_20140605();                            # advisory
 populate_mysql_rpm_versions_array();
 check_for_mysql_4();
 check_for_additional_rpms();
@@ -339,6 +338,14 @@ check_php_libmysqlclient_mismatch();
 check_for_percona_rpms();
 check_for_duplicate_rpms();
 check_for_better_linux();
+check_for_kernel_headers_rpm();
+
+print_info2('Done.');
+
+if ( $crit_buffer ) {
+    print_magenta("\n\nThere was critical-level output above, here it is again:");
+    print $crit_buffer; 
+}
 
 # All checks for DNSONLY go here
 sub check_for_dnsonly {
@@ -403,8 +410,6 @@ sub check_for_dnsonly {
         check_for_networkmanager();
         check_for_disabled_services();
         check_for_harmful_php_mode_600_cron();
-        check_for_openssl_heartbleed_bug();     # per Chris
-        check_for_openssl_secadv_20140605();
         check_for_readonly_filesystems();
 
         ## [3RDP]
@@ -416,6 +421,9 @@ sub check_for_dnsonly {
         check_for_webmin();
         check_for_symantec();
 
+        ## [CRIT]
+        check_for_openssl_heartbleed_bug();
+        check_for_openssl_secadv_20140605();
         check_for_UMBREON_rootkit();                                    # malware
         check_for_jynx2_rootkit();                                      # malware
         check_for_libkeyutils_filenames();                              # malware
@@ -430,6 +438,13 @@ sub check_for_dnsonly {
         check_for_ebury_ssh_banner();                                   # malware
         check_for_ebury_root_file();                                    # malware
         check_for_bg_botnet();                                          # malware
+
+        print_info2('Done.');
+
+        if ( $crit_buffer ) {
+            print_magenta("\n\nThere was critical-level output above, here it is again:");
+            print $crit_buffer; 
+        }
 
         exit;
     }
@@ -512,83 +527,97 @@ sub cpanel_version_is {
     return version_compare($cpanel_version, $mode, $ver);
 }
 
-# shameless rip of /usr/local/cpanel/Cpanel/SafeRun/Simple.pm which, along with
-# all other current cPanel modules, is not guaranteed to work with 11.35+ apparently.
-# so, we take what we need and put it here
-sub run_trap_stderr {
-    my $cmdline = \@_;
-    my $output;
+sub timed_run { # Borrowed from Cpanel::SafeRun::Timed and modified
+    my ( $timer, @PROGA ) = @_;
+    $timer = $timer ? $timer : 15; # A timer value of 0 means use the default, currently 15.
+    return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
 
-    local ($/);
-    my ( $pid, $prog_fh );
+    open( my $save_stderr_fh, '>&STDERR' );
+    open( STDERR, '>', '/dev/null' );
 
-    if ( $pid = open( $prog_fh, '-|' ) ) {
-
+    my $output = undef;
+    my $complete = 0;
+    my $pid;
+    my $fh;    # Case 63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
+    eval {
+        local $SIG{'__DIE__'} = 'DEFAULT';
+        local $SIG{'ALRM'} = sub { $output = undef; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
+        alarm($timer);
+        if ( $pid = open( $fh, '-|' ) ) {
+            local $/;
+            $output = readline($fh);
+            close($fh);
+        }
+        elsif ( defined $pid ) {
+            open( STDIN, '<', '/dev/null' );
+            exec(@PROGA) or exit 1;
+        }
+        else {
+            warn 'Error while executing: [' . join( ' ', @PROGA ) . ']: ' . $!;
+            alarm(0);
+            open( STDERR, '>&=' . fileno($save_stderr_fh) );
+            return;
+        }
+        $complete = 1;
+        alarm 0;
+    };
+    alarm 0;
+    if ( !$complete && $pid && $pid > 0 ) {
+        kill( 15, $pid );    #TERM
+        sleep(2);            # Give the process a chance to die 'nicely'
+        kill( 9, $pid );     #KILL
     }
-    else {
-        open STDERR, '>&STDOUT';
-        ( $ENV{'PATH'} ) = $ENV{'PATH'} =~ m/(.*)/;    # untaint, FB 6622
-        exec(@$cmdline);
-        exit(127);
-    }
-
-    if ( !$prog_fh || !$pid ) {
-        $? = -1;
-
-        return \$output;
-    }
-    $output = readline($prog_fh);
-    close($prog_fh);
-
+    open( STDERR, '>&=' . fileno($save_stderr_fh) );
     return $output;
 }
 
-# shameless rip of /usr/local/cpanel/Cpanel/SafeRun/Simple.pm which, along with
-# all other current cPanel modules, is not guaranteed to work with 11.35+ apparently.
-# so, we take what we need and put it here
-sub run {
-    my $cmdline = \@_;
-    my $output;
+sub timed_run_trap_stderr { # Borrowed from Cpanel::SafeRun::Timed and modified
+    my ( $timer, @PROGA ) = @_;
+    $timer = $timer ? $timer : 15; # A timer value of 0 means use the default, currently 15.
+    return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
 
-    local ($/);
-    my ( $pid, $prog_fh );
+    open( my $save_stderr_fh, '>&STDERR' );
+    open( STDERR, '>', '/dev/null' );
 
-    if ( $pid = open( $prog_fh, '-|' ) ) {
-
+    my $output = undef;
+    my $complete = 0;
+    my $pid;
+    my $fh;    # Case 63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
+    eval {
+        local $SIG{'__DIE__'} = 'DEFAULT';
+        local $SIG{'ALRM'} = sub { $output = undef; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
+        alarm($timer);
+        if ( $pid = open( $fh, '-|' ) ) {
+            local $/;
+            $output = readline($fh);
+            close($fh);
+        }
+        elsif ( defined $pid ) {
+            open( STDIN, '<', '/dev/null' );
+            open( STDERR, '>&STDOUT' );
+            exec(@PROGA) or exit 1;
+        }
+        else {
+            warn 'Error while executing: [' . join( ' ', @PROGA ) . ']: ' . $!;
+            alarm(0);
+            open( STDERR, '>&=' . fileno($save_stderr_fh) );
+            return;
+        }
+        $complete = 1;
+        alarm 0;
+    };
+    alarm 0;
+    if ( !$complete && $pid && $pid > 0 ) {
+        kill( 15, $pid );    #TERM
+        sleep(2);            # Give the process a chance to die 'nicely'
+        kill( 9, $pid );     #KILL
     }
-    else {
-        open STDERR, '>', '/dev/null';
-        ( $ENV{'PATH'} ) = $ENV{'PATH'} =~ m/(.*)/;    # untaint, FB 6622
-        exec(@$cmdline);
-        exit(127);
-    }
-
-    if ( !$prog_fh || !$pid ) {
-        $? = -1;
-
-        return \$output;
-    }
-    $output = readline($prog_fh);
-    close($prog_fh);
-
+    open( STDERR, '>&=' . fileno($save_stderr_fh) );
     return $output;
-}
-
-sub timed_run {
-    eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require Cpanel::SafeRun::Timed; };
-
-    if ( !$@ && $INC{'Cpanel/SafeRun/Timed.pm'} ) {
-        open( my $save_stderr_fh, '>&STDERR' );
-        open( STDERR, '>', '/dev/null' );
-        my $result = Cpanel::SafeRun::Timed::timedsaferun( 10, @_ );
-        open( STDERR, '>&=' . fileno($save_stderr_fh) );
-        return $result;
-    }
-    goto \&run;
 }
 
 sub get_local_ipaddrs {
-    my @ifconfig = split /\n/, run( 'ifconfig', '-a' );
+    my @ifconfig = split /\n/, timed_run( 0, 'ifconfig', '-a' );
     for my $line (@ifconfig) {
         if ( $line =~ m{ (\d+\.\d+\.\d+\.\d+) }xms ) {
             my $ipaddr = $1;
@@ -602,7 +631,7 @@ sub get_local_ipaddrs {
 }
 
 sub get_os {
-    chomp( my $_os = lc run('uname') );
+    chomp( my $_os = lc timed_run( 0, 'uname') );
     return $_os;
 }
 
@@ -717,12 +746,12 @@ sub get_tiers_file {
 }
 
 sub get_process_list { # Usage of this needs to be deprecated in favor of the %process hash
-    return split /\n/, run( 'ps', 'axwwwf', '-o', 'user,pid,cmd' );
+    return split /\n/, timed_run( 0, 'ps', 'axwwwf', '-o', 'user,pid,cmd' );
 }
 
 sub get_process_pid_hash ($) {
     my ($href) = @_;
-    for ( split /\n/, run( 'ps', 'axwww', '-o', 'user,pid,ppid,cmd' ) ) {
+    for ( split /\n/, timed_run( 0, 'ps', 'axwww', '-o', 'user,pid,ppid,cmd' ) ) {
         # nobody    5403  1666 /usr/local/apache/bin/httpd -k start -DSSL
         if ( m{ ^ ([^\s]+) \s+ (\d+) \s+ (\d+) \s+ (.*?) \s* $ }xms ) {
             ${$href}{$2}{USER} = $1;
@@ -734,7 +763,7 @@ sub get_process_pid_hash ($) {
 
 sub get_lsof_port_hash ($) {
     my ($href) = @_;
-    for ( split /\n/, run( 'lsof', '+c15', '-n', '-P', '-i' ) ) {
+    for ( split /\n/, timed_run( 0, 'lsof', '+c15', '-n', '-P', '-i' ) ) {
         # cmd will be max 15 characaters due to lsof limitation
         # Example from CentOS 6:
         # spamd           1781     root    5u  IPv4  10887      0t0  TCP 127.0.0.1:783 (LISTEN)
@@ -798,8 +827,8 @@ sub get_mysql_conf () {
 sub get_hostinfo {
     my %hostinfos;
 
-    $hostinfos{'kernel'}   = run( 'uname', '-r' );
-    $hostinfos{'hardware'} = run( 'uname', '-i' );
+    $hostinfos{'kernel'}   = timed_run( 0, 'uname', '-r' );
+    $hostinfos{'hardware'} = timed_run( 0, 'uname', '-i' );
     $hostinfos{'environment'} = get_environment();
 
     chomp %hostinfos;
@@ -851,6 +880,20 @@ sub print_warn {
     my $text = shift;
     print BOLD RED ON_BLACK "[WARN] * $text";
 }
+
+sub print_crit {
+    my $text = shift;
+    $crit_buffer .= BOLD MAGENTA ON_BLACK '[CRIT] * ' . $text;
+    print BOLD MAGENTA ON_BLACK '[CRIT] * ' . $text;
+}
+
+sub print_critical {
+    my $text = shift;
+    $text = $text ? $text : "";
+    $crit_buffer .= BOLD MAGENTA ON_BLACK $text . "\n";
+    print BOLD MAGENTA ON_BLACK $text . "\n";
+}
+
 
 sub print_3rdp {
     my $text = shift;
@@ -909,30 +952,29 @@ sub check_for_hacked_server_touchfile {
 
     return if scalar @touchfiles == 0;
 
-    print "\n" x 10;
-    print_warn('HACKED SERVER! ');
-    print_warning('[L1/L2 ESCALATE TO L3 NOW]. The following touchfiles were found:');
+    print_critical();
+    print_crit('HACKED SERVER! ');
+    print_critical('[L1/L2 ESCALATE TO L3 NOW]. The following touchfiles were found:');
     for my $touchfile (@touchfiles) {
         if ( $touchfile =~ /^\.cp\.([^\d]+)\.(\d{4}-\d{2}-\d{2})_([^_]+)_(\d+)$/ ) {
             my ( $cptech, $date, $ipaddr, $ticket ) = ( $1, $2, $3, $4 );
             $date =~ s#-#/#g;
             $cptech = ucfirst $cptech;
-            print_magenta("\t => $docdir/$touchfile");
-            print_magenta("\t\t $cptech reported this server at $ipaddr as compromised on $date local server time in ticket $ticket");
+            print_critical("\t => $docdir/$touchfile");
+            print_critical("\t\t $cptech reported this server at $ipaddr as compromised on $date local server time in ticket $ticket");
             if ( !grep { /^$ipaddr$/ } @local_ipaddrs_list ) {
-                print_red("\t\t NOTE: IP addr $ipaddr not found on the server!");
+                print_critical("\t\t NOTE: IP addr $ipaddr not found on the server!");
             }
         }
     }
-
-    print "\n" x 10;
+    print_critical();
 }
 
 sub get_lsws_version {
     my $lshttpd = '/usr/local/lsws/bin/lshttpd';
     return if ! -x $lshttpd;
     my ($lsws_full_version, $lsws_numeric_version) = ();
-    my @lshttpd_version_output = split /\n/, timed_run( $lshttpd, '-v' );
+    my @lshttpd_version_output = split /\n/, timed_run( 0, $lshttpd, '-v' );
     for ( @lshttpd_version_output ) {
         if ( m{ \A (LiteSpeed/(\d+\.\d+\.\d+).*) }xms ) {
             $lsws_full_version = $1;
@@ -1174,29 +1216,21 @@ sub check_for_cpanel_update {
 }
 
 sub check_perl_version_less_than_588 {
-    my @perl_v = split /\n/, cached_run( 'perl', '-v' );
-
-    my $perl_version;
-    for my $line (@perl_v) {
-        if ( $line =~ m{ \A This \s is \s perl, \s v(\d+\.\d+\.\d+) \s }xms ) {
-            $perl_version = $1;
-            last;
-        }
+    my $perl_version = $^V;
+    if ( $perl_version =~ /^v(.+)$/ ) {
+        $perl_version = $1;
     }
 
     return if !$perl_version;
 
-    my $perl_version_tmp = $perl_version;
-    $perl_version_tmp =~ s/\.//g;
-
-    if ( $perl_version_tmp < 588 ) {    # 5.10 shows as 5.10.0, so there shouldn't be any false positives for that
+    if ( version_compare($perl_version, qw( < 5.8.8 )) ) {
         print_warn('Perl Version: ');
-        print_warning("less than 5.8.8.: $perl_version");
+        print_warning('less than 5.8.8: [ ' . $perl_version . ' ]');
     }
 }
 
 sub print_uptime {
-    chomp( my $uptime = run('uptime') );
+    chomp( my $uptime = timed_run( 0, 'uptime') );
     print_info('Uptime: ');
     print_normal($uptime);
 }
@@ -1400,7 +1434,7 @@ sub print_php_configuration {
 
     if ( $phpversion == 5 ) {
         if ( -x '/usr/bin/php' ) {
-            my @php_v = split /\n/, cached_run( '/usr/bin/php', '-n', '-v' );
+            my @php_v = split /\n/, timed_run( 0, '/usr/bin/php', '-n', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php5version = $1;
             }
@@ -1419,7 +1453,7 @@ sub print_php_configuration {
         }
 
         if ( $php4handler && $php4handler ne 'none' ) {
-            my @php_v = split /\n/, cached_run( '/usr/local/php4/bin/php', '-v' );
+            my @php_v = split /\n/, timed_run( 0, '/usr/local/php4/bin/php', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php4version = $1;
             }
@@ -1434,7 +1468,7 @@ sub print_php_configuration {
 
     if ( $phpversion && $phpversion == 4 ) {
         if ( -x '/usr/local/php4/bin/php' ) {
-            my @php_v = split /\n/, cached_run( '/usr/local/php4/bin/php', '-v' );
+            my @php_v = split /\n/, timed_run( 0, '/usr/local/php4/bin/php', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php4version = $1;
             }
@@ -1453,7 +1487,7 @@ sub print_php_configuration {
         }
 
         if ( $php5handler && $php5handler ne 'none' ) {
-            my @php_v = split /\n/, cached_run( '/usr/bin/php', '-n', '-v' );
+            my @php_v = split /\n/, timed_run( 0, '/usr/bin/php', '-n', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
                 $php5version = $1;
             }
@@ -1479,14 +1513,14 @@ sub check_sysinfo {
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
 
     my ( $release, $ises ) = get_release_version();    # 5.8, 2
-    chomp( my $arch = run( 'uname', '-i' ) );
+    chomp( my $arch = timed_run( 0, 'uname', '-i' ) );
 
     my $rebuild = 0;
 
     if ( !-e $sysinfo_config ) {
         print_info('sysinfo: ');
         print_warning('does not exist, running /scripts/gensysinfo to fix');
-        run('/scripts/gensysinfo');
+        timed_run( 0, '/scripts/gensysinfo' );
     }
     else {
         open my $sysinfo_fh, '<', $sysinfo_config;
@@ -1512,8 +1546,8 @@ sub check_sysinfo {
     }
 
     if ( $rebuild == 1 ) {
-        run( 'mv', $sysinfo_config, "${sysinfo_config}.ssp.$^T" );
-        run('/scripts/gensysinfo');
+        timed_run( 0, 'mv', $sysinfo_config, "${sysinfo_config}.ssp.$^T" );
+        timed_run( 0, '/scripts/gensysinfo');
         print_info('sysinfo: ');
         print_warning('/var/cpanel/sysinfo.config contained errors and was rebuilt');
     }
@@ -1577,7 +1611,7 @@ sub print_if_using_modruid2 {
 }
 
 sub print_mysql_version {
-    my $mysql_output = run( 'mysql', '-V' );
+    my $mysql_output = timed_run( 0, 'mysql', '-V' );
     if ( $mysql_output ) {
         chomp $mysql_output;
         print_info('MySQL Version: ');
@@ -1637,6 +1671,16 @@ sub print_backups_info {
     }
     else {
         print_normal("[New: $new_backups_enabled] [Legacy: $old_backups_enabled]");
+    }
+}
+
+sub print_mailserver_info {
+    print_info('Mailserver: ');
+    if ( exists $cpconf{'mailserver'} ) {
+        print_normal($cpconf{'mailserver'});
+    }
+    else {
+        print_warning('missing setting in cpanel.config');
     }
 }
 
@@ -1750,7 +1794,7 @@ sub check_port_hash {
 }
 
 sub check_selinux_status {
-    my @selinux_status = split /\n/, run('sestatus');
+    my @selinux_status = split /\n/, timed_run( 0, 'sestatus' );
 
     return if !@selinux_status;
 
@@ -1765,7 +1809,7 @@ sub check_selinux_status {
 sub check_runlevel {
     if ( $os eq 'linux' ) {
         my $runlevel;
-        my $who_r = run( 'who', '-r' );
+        my $who_r = timed_run( 0, 'who', '-r' );
 
         # CentOS 5.7, 5.8:
         #         run-level 3  2012-01-25 10:38                   last=S
@@ -1840,7 +1884,7 @@ sub check_valid_upcp {
 sub check_interface_lo {
     my $is_up = 0;
 
-    my $ifconfig_lo = run( 'ifconfig', 'lo' );
+    my $ifconfig_lo = timed_run( 0, 'ifconfig', 'lo' );
 
     if ( $ifconfig_lo =~ /UP LOOPBACK/ ) {
         $is_up = 1;
@@ -1882,7 +1926,7 @@ sub check_loopback_connection {
 }
 
 sub check_cpanelconfig_filetype {
-    chomp( my $file = run( 'file', '/var/cpanel/cpanel.config' ) );
+    chomp( my $file = timed_run( 0, 'file', '/var/cpanel/cpanel.config' ) );
     if ( $file !~ m{ \A /var/cpanel/cpanel.config: \s ASCII \s text (, \s with \s very \s long \s lines)? \z }xms ) {
         print_warn('/var/cpanel/cpanel.config: ');
         print_warning("filetype is something other than 'ASCII text'! ($file)");
@@ -2074,7 +2118,7 @@ sub check_for_custom_apache_includes {
     for my $include (@includes) {
         if ( !-z "${include_dir}/${include}" ) {
             if ( $include eq 'pre_virtualhost_global.conf' ) {
-                my $md5 = run( 'md5sum', '/usr/local/apache/conf/includes/pre_virtualhost_global.conf' );
+                my $md5 = timed_run( 0, 'md5sum', '/usr/local/apache/conf/includes/pre_virtualhost_global.conf' );
                 next if ( $md5 && $md5 =~ m{ \A 1693b9075fa54ede224bfeb8ad42a182 \s }xms );
                 $custom_includes .= " [$include]";
             }
@@ -2167,6 +2211,7 @@ sub check_for_non_default_permissions {
         '/bin'                         => [ ['0755', '0711', '0555'], '', '', '' ],
         '/bin/bash'                    => [ ['0755'], '', '', '' ],
         '/bin/ln'                      => [ ['0755', '0555'], '', '', '' ],
+        '/bin/rm'                      => [ ['0755', '0555'], '', '', ' - File Manager unable to delete files?  This may be why.' ],
         '/dev/log'                     => [ ['0666'], '', '', ' - CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog.' ],
         '/dev/null'                    => [ ['0666'], '', '', '' ],
         '/etc'                         => [ ['0755'], '', '', '' ],
@@ -2177,12 +2222,12 @@ sub check_for_non_default_permissions {
         '/etc/passwd'                  => [ ['0644'], '', '', '' ],
         '/etc/shadow'                  => [ ['0600', '0400', '0200'], '', '', '' ],
         '/etc/stats.conf'              => [ ['0644'], '', '', '' ],
-        '/home'                        => [ ['0711'], '', '', '' ],
-        '/home1'                       => [ ['0711'], '', '', '' ],
-        '/home2'                       => [ ['0711'], '', '', '' ],
-        '/home3'                       => [ ['0711'], '', '', '' ],
-        '/home4'                       => [ ['0711'], '', '', '' ],
-        '/home5'                       => [ ['0711'], '', '', '' ],
+        '/home'                        => [ ['0755', '0711'], '', '', '' ],
+        '/home1'                       => [ ['0755', '0711'], '', '', '' ],
+        '/home2'                       => [ ['0755', '0711'], '', '', '' ],
+        '/home3'                       => [ ['0755', '0711'], '', '', '' ],
+        '/home4'                       => [ ['0755', '0711'], '', '', '' ],
+        '/home5'                       => [ ['0755', '0711'], '', '', '' ],
         '/opt'                         => [ ['0755'], '', '', '' ],
         '/root/cpanel3-skel'           => [ ['0755'], '', '', '' ],
         '/sbin'                        => [ ['0755', '0711', '0555'], '', '', '' ],
@@ -2228,7 +2273,7 @@ sub check_for_non_default_permissions {
     if ( open my $wwwacctconf_fh, '<', $wwwacctconf ) {
         while (<$wwwacctconf_fh>) {
             if (m{ ^ HOMEDIR \s ([/\-_A-Za-z0-9]+) $ }x) {
-                $check{$1} = [ ['0711'], '', '', '' ];
+                $check{$1} = [ ['0755', '0711'], '', '', '' ];
                 last;
             }
         }
@@ -2356,7 +2401,7 @@ sub check_limitsconf {
 }
 
 sub check_disk_space {
-    my @df = split /\n/, run('df');
+    my @df = split /\n/, timed_run( 0, 'df' );
     for my $line (@df) {
         if ( $line =~ m{ (9[8-9]|100)% \s+ (.*) }xms ) {
             my ( $usage, $partition ) = ( $1, $2 );
@@ -2369,7 +2414,7 @@ sub check_disk_space {
 }
 
 sub check_disk_inodes {
-    my @df_i = split /\n/, run( 'df', '-i' );
+    my @df_i = split /\n/, timed_run( 0, 'df', '-i' );
     for my $line (@df_i) {
         if ( $line =~ m{ (9[8-9]|100)% \s+ (.*) }xms ) {
             my ( $usage, $partition ) = ( $1, $2 );
@@ -2427,7 +2472,7 @@ sub check_for_hooks_in_scripts_directory {
     if (@hooks) {
         for my $hook (@hooks) {
             $hook = '/scripts/' . $hook;
-            chomp( my $checksum = run( 'md5sum', $hook ) );
+            chomp( my $checksum = timed_run( 0, 'md5sum', $hook ) );
             $checksum =~ s/\s.*//g;
             next if exists $hooks_ignore{$checksum};
 
@@ -2496,7 +2541,7 @@ sub check_for_gdm {
 }
 
 sub check_for_redhat_firewall {
-    my $iptables = run( 'iptables', '-L', 'RH-Firewall-1-INPUT' );
+    my $iptables = timed_run( 0, 'iptables', '-L', 'RH-Firewall-1-INPUT' );
 
     if ($iptables) {
         print_warn('Default Redhat Firewall Check: ');
@@ -2555,7 +2600,7 @@ sub check_for_easyapache_hooks {
 
     for my $hook (@hooks) {
         if ( -f $hook and !-z $hook ) {
-            chomp( my $checksum = run( 'md5sum', $hook ) );
+            chomp( my $checksum = timed_run( 0, 'md5sum', $hook ) );
             $checksum =~ s/\s.*//g;
             next if exists $hooks_ignore{$checksum};
             $hooks .= " $hook";
@@ -2569,7 +2614,7 @@ sub check_for_easyapache_hooks {
 }
 
 sub check_for_home_noexec {
-    my @mount = split /\n/, run('mount');
+    my @mount = split /\n/, timed_run( 0, 'mount' );
 
     for my $mount (@mount) {
         if ( $mount =~ m{ \s on \s (/home([^\s]?)) \s (:?.*) noexec }xms ) {
@@ -2680,7 +2725,7 @@ sub check_for_usr_local_cpanel_hooks {
         for my $hook (@usr_local_cpanel_hooks) {
             my $tmp_hook = '/usr/local/cpanel/hooks/' . $hook;
             if ( -f $tmp_hook and !-z $tmp_hook ) {
-                chomp( my $checksum = run( 'md5sum', $tmp_hook ) );
+                chomp( my $checksum = timed_run( 0, 'md5sum', $tmp_hook ) );
                 $checksum =~ s/\s.*//g;
                 next if exists $hooks_ignore{$checksum};
                 $hooks .= "$hook ";
@@ -2721,7 +2766,7 @@ sub get_mysql_datadir {
 }
 
 sub check_mysqld_warnings_errors {
-    foreach my $mysql_err ( grep ( m{\[(?:err)}i, split( /\n/, run_trap_stderr( 'mysqld', '-u', 'mysql', '--help' ) ) ) ) {
+    foreach my $mysql_err ( grep ( m{\[(?:err)}i, split( /\n/, timed_run_trap_stderr( 0, 'mysqld', '-u', 'mysql', '--help' ) ) ) ) {
         if ( $mysql_err =~ m/open_files_limit=/ ) {
             print_warn('MySQL config missing newline: [see FB 64008]: ');
             print_warning($mysql_err);
@@ -2947,12 +2992,12 @@ sub check_php_libmysqlclient_mismatch {
         while ( my $line = <$phpconfyaml_fh> ) {
             if ( $line =~ m{ \A php4: \s (.*) }xms ) {
                 if ( $1 ne 'none' ) {
-                    @php4_ldd = split /\n/, run( 'ldd', $php4_binary );
+                    @php4_ldd = split /\n/, timed_run( 0, 'ldd', $php4_binary );
                 }
             }
             elsif ( $line =~ m{ \A php5: \s (.*) }xms ) {
                 if ( $1 ne 'none' ) {
-                    @php5_ldd = split /\n/, run( 'ldd', $php5_binary );
+                    @php5_ldd = split /\n/, timed_run( 0, 'ldd', $php5_binary );
                 }
             }
         }
@@ -3149,11 +3194,29 @@ sub check_roots_cron_for_certain_commands {
         /var/spool/cron/root
     } );
 
+    # The default tmpwatch cron CAN remove the /tmp/mysql.sock symlink, so it should not be ignored.
+    my %cron_ignore = ( # These contain 'interesting' commands that should be ignored if they aren't going to cause problems
+        '7440999604d3517ca235c7949f803ece' => '/etc/cron.daily/maldet', # Default
+        'aede9174c0a1b0cf225165e204aa6fd8' => '/etc/cron.hourly/modsecparse.pl', # Default
+        '195ddc2ac97502c2a96cc758cb7c9097' => '/etc/cron.daily/freshclam', # Default
+        'de7d9c2df94e20af5aa401e708c3119d' => '/etc/cron.daily/prelink', # Default
+        '3ffb5926bb7533bb077e2ec37f767851' => '/etc/cron.daily/tmpwatch', # modified to not remove symlinks, so wouldn't delete mysql.sock
+    );
+
     my %found = ();
 
     for my $cron ( @cronlist ) {
         next if ! ( -f $cron || -l $cron );
-        next if ($cron =~ m{ /makewhatis\.cron }x); # List of false-positives to filter out.
+        next if ($cron =~ m{ /(
+            freshclam |
+            makewhatis\.cron |
+            maldet |
+            modsecparse.pl |
+            prelink
+            ) $ }x); # Common false-positives to filter out entirely.
+        chomp( my $checksum = timed_run( 0, 'md5sum', $cron ) );
+        $checksum =~ s/\s.*//g;
+        next if ( $checksum && $cron_ignore{$checksum} );
         if ( open my $cron_fh, '<', $cron ) {
             while (<$cron_fh>) {
                 if (m{ \A [^#]* (?:^|\s|\/)(rm|unlink|chmod|chown|chattr|kill|pkill|skill|tmpwatch)\s }x) {
@@ -3328,7 +3391,7 @@ sub check_for_non_default_modsec_rules {
         ## On 11.32.5.9 with EA v3.14.13, default modsec2.conf is 650 bytes.
         ## It's always been small in size.
         my $modsec2_conf_size     = ( stat($modsec2_conf) )[7];
-        my $modsec2_conf_max_size = 1200;
+        my $modsec2_conf_max_size = 1447;
         if ( $modsec2_conf_size > $modsec2_conf_max_size ) {
             print_warn('modsec: ');
             print_warning("$modsec2_conf is > $modsec2_conf_max_size bytes, may contain custom rules");
@@ -3562,8 +3625,8 @@ sub check_for_C_compiler_optimization {
 }
 
 sub check_for_low_ulimit_for_root {
-    my $ulimit_m = run('echo `ulimit -m`');
-    my $ulimit_v = run('echo `ulimit -v`');
+    my $ulimit_m = timed_run( 0, 'echo `ulimit -m`' );
+    my $ulimit_v = timed_run( 0, 'echo `ulimit -v`' );
 
     chomp( $ulimit_m, $ulimit_v );
 
@@ -3699,7 +3762,7 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
 }
 
 sub check_for_non_default_umask {
-    my $umask = run('echo `umask`');
+    my $umask = timed_run( 0, 'echo `umask`');
 
     return if !$umask;
 
@@ -3725,11 +3788,7 @@ sub check_for_kernel_headers_rpm {
         print_warn('Missing file: /usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
     }
     else {
-        my $rpm_check = run_trap_stderr( 'rpm', '-q', 'kernel-headers' );
-
-        return if ( $rpm_check =~ /error: / );
-
-        if ( $rpm_check =~ /not installed/ ) {
+        if ( @rpm_list && ! grep(/^kernel-headers-/, @rpm_list) ) {
             print_warn('kernel-headers RPM: ');
             print_warning('not found. This can cause problems with EA');
         }
@@ -3913,12 +3972,12 @@ sub check_for_clock_skew {
       Jul 6   Aug 7   Sep 8   Oct 9   Nov 10  Dec 11
     );
 
-    $rdate_time = run( 'rdate', '-p', '-t', '1', $rdate_server );
+    $rdate_time = timed_run( 0, 'rdate', '-p', '-t', '1', $rdate_server );
 
     ## fall back to UDP if necessary
     ## we don't use UDP first because many of the rdate servers don't reply when using it
     if ( !$rdate_time ) {
-        $rdate_time = run( 'rdate', '-p', '-t', '1', '-u', $rdate_server );
+        $rdate_time = timed_run( 0, 'rdate', '-p', '-t', '1', '-u', $rdate_server );
     }
 
     return if !$rdate_time;
@@ -3980,7 +4039,7 @@ sub check_for_zlib_h {
 }
 
 sub check_for_better_linux {
-    return if !@extended_rpm_list;
+    return if ( ! $#extended_rpm_list );
 
     foreach my $rpm_ref ( grep { $_->{'name'} =~ m/^kernel/ } @extended_rpm_list ) {
         if ( $rpm_ref->{'release'} =~ m/\.bl/ ) {
@@ -3993,7 +4052,7 @@ sub check_for_better_linux {
 }
 
 sub check_for_duplicate_rpms {
-    return if !@extended_rpm_list;
+    return if ( ! $#extended_rpm_list );
 
     my %SEEN_RPMS;
     my %DUP_RPMS;
@@ -4009,7 +4068,7 @@ sub check_for_duplicate_rpms {
         next if ( $dup_rpm =~ m{^(?:gpg-pubkey|kernel)} );
 
         print_warn('DUPLICATE RPM: ');
-        print_warning( "$dup_rpm has multiple version: " . join( " ", @{ $SEEN_RPMS{$dup_rpm} } ) );
+        print_warning( "$dup_rpm has multiple versions: " . join( " ", @{ $SEEN_RPMS{$dup_rpm} } ) );
 
     }
 }
@@ -4094,7 +4153,7 @@ sub check_distcache_and_libapr {
     }
 
     if ( $has_distcache == 1 ) {
-        my @ldd = split /\n/, run( 'ldd', '/usr/local/apache/bin/httpd' );
+        my @ldd = split /\n/, timed_run( 0, 'ldd', '/usr/local/apache/bin/httpd' );
         for my $line (@ldd) {
             if ( $line =~ m{ libapr(?:.*) \s+ => \s+ (\S+) }xms ) {
                 if ( $1 !~ m{ \A /usr/local/apache/lib/libapr }xms ) {
@@ -4147,11 +4206,11 @@ sub check_for_rpm_overrides {
     return if !-d $rpm_override_dir;
 
     if ( -f $local_versions ) {
-        $md5_local = run( 'md5sum', $local_versions );
+        $md5_local = timed_run( 0, 'md5sum', $local_versions );
     }
 
     if ( -f $easy_versions ) {
-        $md5_easy = run( 'md5sum', $easy_versions );
+        $md5_easy = timed_run( 0, 'md5sum', $easy_versions );
     }
 
     ## these are checksums for default files. we ignore them to prevent needless output from SSP
@@ -4162,6 +4221,7 @@ sub check_for_rpm_overrides {
                                | 1d9f5d246ef2c9ab29f33cf00a3af9a5
                                | a89257469792a846e8db72edd6d29919
                                | c79a35d2f9633bce58f66b0f1549f4d3
+                               | 352969216e1673edfa8d4ecf189043dc
                                 ) \s }xms ) {
         $local_is_default = 1;
     }
@@ -4945,7 +5005,7 @@ sub check_for_nfs {
 
     if ( $has_nfs == 1 ) {
         print_warn('NFS: ');
-        print_warning('filesystem(s) with NFS detected. This can cause cPanel to load slow (see ticket 4380977, FB 79549)');
+        print_warning('filesystem(s) with NFS detected. This can cause cPanel to load slowly (see ticket 4380977, FB 79549)');
     }    
 }
 
@@ -5154,7 +5214,7 @@ sub check_for_port_80_not_apache {
 
     return if !$unknown_httpd;
 
-    my $ipcs = run( 'ipcs', '-m' );
+    my $ipcs = timed_run( 0, 'ipcs', '-m' );
 
     print_warn('Port 80: ');
 
@@ -5321,7 +5381,7 @@ sub check_for_easyparams_attributes {
     my $easyparams = '/scripts/easyparams';
     return if !-e $easyparams;
 
-    my $attributes = run( 'lsattr', $easyparams );
+    my $attributes = timed_run( 0, 'lsattr', $easyparams );
     if ( $attributes =~ m/^-[-]*(?:a|i)/ ) {
         print_warn("$easyparams: ");
         print_warning('is immutable or append only. This should never be done, and can break EasyApache!');
@@ -5431,7 +5491,7 @@ sub check_for_MPM_ITK_and_suexec {
     my $has_itk = 0;
     my $suexec_disabled = 0;
 
-    my @httpd_V = split /\n/, run( '/usr/local/apache/bin/httpd', '-V' );
+    my @httpd_V = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-V' );
 
     for my $line (@httpd_V) {
         if ( $line =~ /^Server MPM:\s+(.*)/ ) {
@@ -5460,7 +5520,28 @@ sub check_for_MPM_ITK_and_suexec {
     print_warning('enabled, but suexec is also enabled. This can break redirects like /cpanel. See FB 83405.');
 }
 
+sub check_for_modruid2_warnings {
+    for (@apache_modules_output) {
+        if (/ruid2_module/) {
+            if ( exists $cpconf{'jailapache'} and $cpconf{'jailapache'} == 1 ) {
+                print_warn('mod_ruid2: ');
+                print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see cases 84393, 104017, and tickets 5015613, 5227891');
+            }
+            if ( $php5handler && $php5handler eq 'suphp' ) {
+                print_warn('mod_ruid2: ');
+                print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see cases 70561, 105901');
+            }
+            if ( $lsws_full_version ) {
+                print_warn('mod_ruid2: ');
+                print_warning('could cause file permission problems when using LiteSpeed Web Server (see ticket 5154193)');
+            }
+            last;
+        }
+    }
+}
+
 sub check_for_openssl_heartbleed_bug {
+    return if ! $openssl_rpm_changelog;
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
     return if !-f $sysinfo_config;
 
@@ -5478,7 +5559,7 @@ sub check_for_openssl_heartbleed_bug {
     return if !$rpm_dist_ver;
     return if ( $rpm_dist_ver <= 5 ); # RHEL/CentOS 5 not vuln: http://cpanel.net/heartbleed-vulnerability-information/
 
-    chomp( my $openssl_ver = run( 'openssl', 'version' ) );
+    chomp( my $openssl_ver = timed_run( 0, 'openssl', 'version' ) );
     return if !$openssl_ver;
 
     # only 1.0.1[a-f] is vuln (and 1.0.2-beta which no one should be using)
@@ -5492,26 +5573,19 @@ sub check_for_openssl_heartbleed_bug {
         return;
     }
 
-    my $patched;
+    return if $openssl_rpm_changelog =~ m{ \sCVE-2014-0160\s }xms;
 
-    my $openssl_changelog = run( 'rpm', '-q', '--changelog', 'openssl');
-
-    if ( $openssl_changelog && $openssl_changelog =~ /\sCVE-2014-0160\s/ ) {
-        $patched = 1;
-    }
-
-    return if $patched;
-
-    print "\n";
-    print_warn('Heartbleed: ');
-    print_warning('Send customer this premade: OpenSSL Heartbleed Vulnerability - Discovery');
-    print_red('The following check was used: rpm -q --changelog openssl | grep \' CVE-2014-0160 \'');
-    print_red('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
-    print_red('This check does NOT take corrupt rpm dbs into account, and WILL false positive if corrupt');
-    print "\n";
+    print_critical();
+    print_crit('Heartbleed: ');
+    print_critical('Send customer this premade: OpenSSL Heartbleed Vulnerability - Discovery');
+    print_critical('The following check was used: rpm -q --changelog openssl | grep \' CVE-2014-0160 \'');
+    print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
+    print_critical('This check does NOT take corrupt rpm dbs into account, and CAN false positive if corrupt');
+    print_critical();
 }
 
 sub check_for_openssl_secadv_20140605 {
+    return if ! $openssl_rpm_changelog;
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
     return if !-f $sysinfo_config;
 
@@ -5529,7 +5603,7 @@ sub check_for_openssl_secadv_20140605 {
     return if !$rpm_dist_ver;
     return if ( $rpm_dist_ver < 5 || $rpm_dist_ver > 6 ); # Only RHEL/CentOS 5 and 6 need apply
 
-    chomp( my $openssl_ver = run( 'openssl', 'version' ) );
+    chomp( my $openssl_ver = timed_run( 0, 'openssl', 'version' ) );
     return if !$openssl_ver;
 
     # fixed in openssl 1.0.1h, 1.0.0m, and 0.9.8za
@@ -5546,18 +5620,15 @@ sub check_for_openssl_secadv_20140605 {
         return if ( version_compare($ver, qw( < 0.9.9.0 )) && version_compare($ver, qw( >= 0.9.8.27 )) ); # If < 0.9.9 and >= 0.9.8za we're done.
     }
 
-    my $openssl_changelog = run( 'rpm', '-q', '--changelog', 'openssl');
-    return if ! $openssl_changelog;
+    return if ( $openssl_rpm_changelog =~ m{ \sCVE-2014-0224\s }xms );
 
-    return if ( $openssl_changelog && $openssl_changelog =~ /\sCVE-2014-0224\s/ );
-
-    print "\n";
-    print_warn('OpenSSL RPM missing secadv_20140605 patches: ');
-    print_warning('CVE-2014-0224');
-    print_red('Send customer this premade: "OpenSSL advisory 2014-06-05 - Discovery"');
-    print_red('!! BEFORE SENDING PREMADE VERIFY THE MISSING CVE PATCHES WITH: rpm -q --changelog openssl | egrep \' CVE-201(0|4)-\'');
-    print_red('This check does NOT take corrupt rpm dbs into account, and WILL false positive if corrupt');
-    print "\n";
+    print_critical();
+    print_crit('OpenSSL RPM missing secadv_20140605 patches: ');
+    print_critical('CVE-2014-0224');
+    print_critical('Send customer this premade: "OpenSSL advisory 2014-06-05 - Discovery"');
+    print_critical('!! BEFORE SENDING PREMADE VERIFY THE MISSING CVE PATCHES WITH: rpm -q --changelog openssl | egrep \' CVE-201(0|4)-\'');
+    print_critical('This check does NOT take corrupt rpm dbs into account, and CAN false positive if corrupt');
+    print_critical();
 }
 
 sub check_for_broken_mysqldump {
@@ -5627,13 +5698,13 @@ sub check_for_readonly_filesystems {
 sub check_for_UMBREON_rootkit {
     my $dir = '/usr/local/__UMBREON__';
     if ( chdir $dir ) {
-        print "\n" x 2;
-        print_warn('!! [ UMBREON ROOTKIT ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "The following directory was found:\n";
-        print "\t$dir\n";
-        print "\tL3: use 07 - UMBREON Predef [L3 Only]\n";
-        print "\n" x 2;
+        print_critical();
+        print_crit('!! [ UMBREON ROOTKIT ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('The following directory was found:');
+        print_critical("\t" . $dir);
+        print_critical("\tL3: use 07 - UMBREON Predef [L3 Only]");
+        print_critical();
     }
 }
 
@@ -5649,13 +5720,13 @@ sub check_for_jynx2_rootkit {
             }
         }
         return if ( (scalar @found_jynx2_files) == 0 );
-        print "\n" x 2;
-        print_warn('!! [ Jynx 2 ROOTKIT ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "The following files were found:\n";
-        print "\t" . join(" ", @found_jynx2_files) . "\n";
-        print "\tL3: use 07 - Jynx2 Predef [L3 Only]\n";
-        print "\n" x 2;
+        print_critical();
+        print_crit('!! [ Jynx 2 ROOTKIT ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('The following files were found:');
+        print_critical("\t" . join(" ", @found_jynx2_files));
+        print_critical("\tL3: use 07 - Jynx2 Predef [L3 Only]");
+        print_critical();
     }
 }
 
@@ -5701,24 +5772,13 @@ sub check_for_bg_botnet {
         }
     }
     return unless ( scalar @found_bg_files );
-    print "\n" x 2;
-    print_warn('!! [ BG BOTNET ] !! ');
-    print_warning('L1/L2 escalate this ticket to L3');
-    print "The following files were found:\n";
-    print "\t" . join(" ", @found_bg_files) . "\n";
-    print "\tL3: use 07 - BG Botnet Predef [L3 Only]\n";
-    print "\n" x 2;
-}
-
-sub check_for_lsws_and_modruid2 {
-    return if ! $lsws_full_version;
-    for (@apache_modules_output) {
-        if (/ruid2_module/) {
-            print_warn('mod_ruid2: ');
-            print_warning('could cause file permission problems when using LiteSpeed Web Server (see ticket 5154193)');
-            last;
-        }
-    }
+    print_critical();
+    print_crit('!! [ BG BOTNET ] !! ');
+    print_critical('L1/L2 escalate this ticket to L3');
+    print_critical('The following files were found:');
+    print_critical("\t" . join(" ", @found_bg_files));
+    print_critical("\tL3: use 07 - BG Botnet Predef [L3 Only]");
+    print_critical();
 }
 
 ##############################
@@ -5808,7 +5868,7 @@ sub check_for_mailscanner {
 }
 
 sub check_for_apf {
-    my $chkconfig_apf = run( 'chkconfig', '--list', 'apf' );
+    my $chkconfig_apf = timed_run( 0, 'chkconfig', '--list', 'apf' );
     if ($chkconfig_apf) {
         if ( $chkconfig_apf =~ /3:on/ ) {
             print_3rdp('APF: ');
@@ -5819,7 +5879,7 @@ sub check_for_apf {
 
 sub check_for_csf {
     my $lfd = 0;
-    my $csf = run( 'whereis', 'csf' );
+    my $csf = timed_run( 0, 'whereis', 'csf' );
 
     if ( $csf =~ /\// ) {
         print_3rdp('CSF: ');
@@ -5900,7 +5960,7 @@ sub check_for_1h {
 }
 
 sub check_for_webmin {
-    my @lsof_10000 = split /\n/, run( 'lsof', '-n', '-i', 'tcp:10000' );
+    my @lsof_10000 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:10000' );
 
     if (@lsof_10000) {
         print_3rdp('Webmin: ');
@@ -6105,9 +6165,11 @@ sub check_for_cdorked_A {
     }
 
     if ( $has_cdorked == 1 ) {
-        print_warn('!! [ Linux/Cdorked ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3. L3 use 00 - Cdorked premade');
-        print_warning("\tString found in $signature (see ticket 4482347)");
+        print_critical();
+        print_crit('!! [ Linux/Cdorked ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3. L3 use 00 - Cdorked premade');
+        print_critical("\tString found in $signature (see ticket 4482347)");
+        print_critical();
     }    
 }
 
@@ -6124,10 +6186,12 @@ sub check_for_cdorked_B {
     }
 
     if ( $has_cdorked_b == 1 ) {
-        print_warn('!! [ Linux/Cdorked ] !! ');
-        print_warning('L1/L2: escalate this ticket to L3. L3 use 00 - eBury / CDorked - Free Migration [L3 only]');
-        print_warning("\tThe following files were found (note the spaces at the end of the files):");
-        print_warning("\t$cdorked_files");
+        print_critical();
+        print_crit('!! [ Linux/Cdorked ] !! ');
+        print_critical('L1/L2: escalate this ticket to L3. L3 use 00 - eBury / CDorked - Free Migration [L3 only]');
+        print_critical("\tThe following files were found (note the spaces at the end of the files):");
+        print_critical("\t$cdorked_files");
+        print_critical();
     }
 }
 
@@ -6152,10 +6216,12 @@ sub check_for_libkeyutils_filenames {
     }
 
     if ($bad_libs) {
-        print "\n\n";
-        print_warn('!! [ LIBKEYUTILS ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "The following file(s) were found:\n$bad_libs\n";
+        print_critical();
+        print_crit('!! [ LIBKEYUTILS ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('The following file(s) were found:');
+        print_critical($bad_libs);
+        print_critical();
     }
 }
 
@@ -6196,7 +6262,7 @@ sub check_sha1_sigs_libkeyutils {
     );
 
     for my $lib (@$libs) {
-        my $checksum = run( 'sha1sum', "$lib" );
+        my $checksum = timed_run( 0, 'sha1sum', "$lib" );
         chomp $checksum;
         $checksum =~ s/\s.*//g;
         if ( grep { /$checksum/ } @checksums ) {
@@ -6206,11 +6272,13 @@ sub check_sha1_sigs_libkeyutils {
     }
 
     if ( $trojaned_lib ) {
-        print "\n\n";
-        print_warn('!! [ LIBKEYUTILS ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "The following file(s) were found:\n\t$trojaned_lib\n";
-        print "\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/\n";
+        print_critical();
+        print_crit('!! [ LIBKEYUTILS ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('The following file(s) were found:');
+        print_critical("\t" . $trojaned_lib);
+        print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/");
+        print_critical();
     }
 }
 
@@ -6221,7 +6289,7 @@ sub check_for_unowned_libkeyutils_files {
     my @unowned_libs;
 
     for my $lib (@$libs) {
-        chomp( my $rpm_check = run( 'rpm', '-qf', "$lib" ));
+        chomp( my $rpm_check = timed_run( 0, 'rpm', '-qf', "$lib" ));
         if ( $rpm_check =~ /owned/ ) {
             push @unowned_libs, $lib;
         }
@@ -6229,20 +6297,21 @@ sub check_for_unowned_libkeyutils_files {
 
     return if !@unowned_libs;
 
-    print "\n\n";
-    print_warn('!! [ EBURY ] !! ');
-    print_warning('L1/L2 escalate this ticket to L3');
-    print "\tThe following libkeyutils files do not belong to a package (checked via 'rpm -qf'):\n";
+    print_critical();
+    print_crit('!! [ EBURY ] !! ');
+    print_critical('L1/L2 escalate this ticket to L3');
+    print_critical("\tThe following libkeyutils files do not belong to a package (checked via 'rpm -qf'):");
     for my $file (@unowned_libs) {
-        print "\t$file\n";
+        print_critical("\t" . $file);
     }
+    print_critical();
 }
 
 sub check_sha1_sigs_httpd {
     my $httpd = '/usr/local/apache/bin/httpd';
     return if !-e $httpd;
     my $infected = 0;
-    my $sha1sum = run( 'sha1sum', $httpd );
+    my $sha1sum = timed_run( 0, 'sha1sum', $httpd );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }
@@ -6279,11 +6348,12 @@ sub check_sha1_sigs_httpd {
     }
 
     if ( $infected == 1 ) {
-        print "\n\n";
-        print_warn('!! [ EBURY ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "\t$httpd has a SHA-1 signature of $sha1sum\n";
-        print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
+        print_critical();
+        print_crit('!! [ EBURY ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical("\t" . $httpd . " has a SHA-1 signature of " . $sha1sum);
+        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
+        print_critical();
     }
 }
 
@@ -6291,7 +6361,7 @@ sub check_sha1_sigs_named {
     my $named = '/usr/sbin/named';
     return if !-e $named;
     my $infected = 0;
-    my $sha1sum = run( 'sha1sum', $named );
+    my $sha1sum = timed_run( 0, 'sha1sum', $named );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }    
@@ -6309,11 +6379,11 @@ sub check_sha1_sigs_named {
     }
     
     if ( $infected == 1 ) {
-        print "\n\n";
-        print_warn('!! [ EBURY ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "\t$named has a SHA-1 signature of $sha1sum\n";
-        print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
+        print_critical();
+        print_crit('!! [ EBURY ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical("\t" . $named . " has a SHA-1 signature of " . $sha1sum);
+        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
     }    
 }
 
@@ -6321,7 +6391,7 @@ sub check_sha1_sigs_ssh {
     my $ssh = '/usr/bin/ssh';
     return if !-e $ssh;
     my $infected = 0; 
-    my $sha1sum = run( 'sha1sum', $ssh );
+    my $sha1sum = timed_run( 0, 'sha1sum', $ssh );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }    
@@ -6339,11 +6409,12 @@ sub check_sha1_sigs_ssh {
     }    
 
     if ( $infected == 1 ) {
-        print "\n\n";
-        print_warn('!! [ EBURY ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "\t$ssh has a SHA-1 signature of $sha1sum\n";
-        print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
+        print_critical();
+        print_crit('!! [ EBURY ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical("\t" . $ssh . " has a SHA-1 signature of " . $sha1sum);
+        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
+        print_critical();
     }    
 }
 
@@ -6351,7 +6422,7 @@ sub check_sha1_sigs_ssh_add {
     my $ssh_add = '/usr/bin/ssh-add';
     return if !-e $ssh_add;
     my $infected = 0; 
-    my $sha1sum = run( 'sha1sum', $ssh_add );
+    my $sha1sum = timed_run( 0, 'sha1sum', $ssh_add );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }    
@@ -6369,8 +6440,8 @@ sub check_sha1_sigs_ssh_add {
 
     if ( $infected == 1 ) {
         print "\n\n";
-        print_warn('!! [ EBURY ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
+        print_crit('!! [ EBURY ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
         print "\t$ssh_add has a SHA-1 signature of $sha1sum\n";
         print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
     }    
@@ -6380,7 +6451,7 @@ sub check_sha1_sigs_sshd {
     my $sshd = '/usr/sbin/sshd';
     return if !-e $sshd;
     my $infected = 0; 
-    my $sha1sum = run( 'sha1sum', $sshd );
+    my $sha1sum = timed_run( 0, 'sha1sum', $sshd );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }    
@@ -6400,11 +6471,12 @@ sub check_sha1_sigs_sshd {
     }    
 
     if ( $infected == 1 ) {
-        print "\n\n";
-        print_warn('!! [ EBURY ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "\t$sshd has a SHA-1 signature of $sha1sum\n";
-        print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
+        print_critical();
+        print_crit('!! [ EBURY ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical("\t" . $sshd . " has a SHA-1 signature of " . $sha1sum);
+        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
+        print_critical();
     }    
 }
 
@@ -6415,13 +6487,14 @@ sub check_for_ebury_ssh_G {
     return if !-x $ssh;
     return if -z $ssh;
 
-    my $ssh_G = run_trap_stderr( $ssh, '-G' );
+    my $ssh_G = timed_run_trap_stderr( 0, $ssh, '-G' );
     if ( $ssh_G !~ /illegal|unknown/ ) {
-        print "\n\n";
-        print_warn('!! [ EBURY ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "\t'$ssh -G' did not return either 'illegal' or 'unknown'\n";
-        print "\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/\n";
+        print_critical();
+        print_crit('!! [ EBURY ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical("\t'" . $ssh . " -G' did not return either 'illegal' or 'unknown'");
+        print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/");
+        print_critical();
     }
 }
 
@@ -6450,11 +6523,12 @@ sub check_for_ebury_ssh_banner {
     chomp $ssh_banner;
 
     if ( $ssh_banner =~ m{ \A SSH-2\.0-[0-9a-f]{22,46} }xms ) {
-        print "\n\n";
-        print_warn('!! [ EBURY ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "\tsshd banner matches known signature from ebury infected machines: $ssh_banner\n";
-        print "\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/\n";
+        print_critical();
+        print_crit('!! [ EBURY ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical("\tsshd banner matches known signature from ebury infected machines: " . $ssh_banner);
+        print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/");
+        print_critical();
     }
 }
 
@@ -6462,11 +6536,12 @@ sub check_for_ebury_root_file {
     my $file = '/home/ ./root';
 
     if ( -e $file ) {
-        print "\n\n";
-        print_warn('!! [ EBURY ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "\tFound file: $file\n";
-        print "\tReference: p24 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
+        print_critical();
+        print_crit('!! [ EBURY ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical("\tFound file: " . $file);
+        print_critical("\tReference: p24 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
+        print_critical();
     }
 }
 
@@ -6491,10 +6566,12 @@ sub check_for_ebury_3_digit_rpms {
     }
 
     if ($bad_rpms) {
-        print "\n\n";
-        print_warn('!! [ EBURY ] !! ');
-        print_warning('L1/L2 escalate this ticket to L3');
-        print "The following rpm(s) were found:\n$bad_rpms\n";
+        print_critical();
+        print_crit('!! [ EBURY ] !! ');
+        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical("The following rpm(s) were found:");
+        print_critical($bad_rpms);
+        print_critical();
     }
 }
 
@@ -6505,37 +6582,30 @@ sub build_rpm_list {
 
     print_info2("RPM check (running \"rpm -qa ...\"). This will timeout after $timeout seconds.");
 
-    if ( my $pid = open( my $fh, '-|' ) ) {
-        local $/ = undef;
-        local $SIG{'ALRM'} = sub {
-            print_warning('Additional RPM: check timed out');
-            kill( 'TERM', $pid );
-            sleep(1);
-            kill( 9, $pid );
-        };
-        alarm $timeout;
-        @extended_rpm_list = map {
-            my ( $arch, $name, $version, $release ) = split( /\t/, $_ );
-            {
-                'name'    => $name,
-                'arch'    => $arch,
-                'version' => $version,
-                'release' => $release
-            }
-        } split( /\n/, readline($fh) );
+    my $rpm_list = timed_run( $timeout, 'rpm', '-qa', '--queryformat', q{%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n} );
+    return if ! $rpm_list;
 
+    @extended_rpm_list = map {
+        my ( $arch, $name, $version, $release ) = split( /\t/, $_ );
+        {
+            'name'    => $name,
+            'arch'    => $arch,
+            'version' => $version,
+            'release' => $release
+        }
+    } split( /\n/, $rpm_list );
+
+    if ( $#extended_rpm_list > 1 ) {
+        @rpm_list =  map { $_->{'name'} . '-' . $_->{'version'} . '-' . $_->{'release'} } @extended_rpm_list;
     }
-    else {
-        exec 'rpm', '-qa', '--queryformat', q{%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n};
-        exit 1;
-    }
+}
 
-    alarm 0;
+sub get_openssl_rpm_changelog {
+    my $timeout = 15;
 
-    @rpm_list =
-      map { $_->{'name'} . '-' . $_->{'version'} . '-' . $_->{'release'} } @extended_rpm_list;
+    print_info2("RPM query OpenSSL changelog (running \"rpm -q ...\"). This will timeout after $timeout seconds.");
 
-    return @rpm_list;
+    my $changelog = timed_run( $timeout, qw( rpm -q --changelog openssl ) );
 }
 
 sub check_for_immutable_files {
@@ -6544,7 +6614,7 @@ sub check_for_immutable_files {
     my @path_dirs = split( m{:}, $ENV{'PATH'} );
     push @path_dirs, '/usr/local/apache/conf/httpd.conf', '/etc/cpbackup.conf', '/var/cpanel/backups/config';
 
-    foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, run( 'lsattr', @path_dirs ) ) ) ) {
+    foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', @path_dirs ) ) ) ) {
         print_warn('Immutable file: ');
         print_warning("$file");
     }
@@ -6555,7 +6625,7 @@ sub check_for_immutable_dirs {
 
     my @dirs = qw( / );
 
-    foreach my $dir ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, run( 'lsattr', '-d', @dirs ) ) ) ) {
+    foreach my $dir ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', '-d', @dirs ) ) ) ) {
         print_warn('Immutable and/or append-only directory: ');
         if ( $dir =~ m#\s/\z# ) {
             print_warning("$dir  This can mess with EA. See ticket 4929961");
@@ -6563,15 +6633,6 @@ sub check_for_immutable_dirs {
         else {
             print_warning($dir);
         }
-    }
-}
-
-sub cached_run {
-    if ( $INC{'Cpanel/CachedCommand.pm'} ) {
-        goto \&Cpanel::CachedCommand::cachedcommand;
-    }
-    else {
-        goto \&run;
     }
 }
 
@@ -6608,7 +6669,7 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
             print_warning("CallUploadScript set to yes, /var/run/pure-ftpd.upload.pipe is missing [might be broken ConfigServer's cxs ( http://configserver.com/cp/cxs.html )]");
         }
         else {
-            my $out = run( 'lsof', '-n', '/var/run/pure-ftpd.upload.pipe' );
+            my $out = timed_run( 0, 'lsof', '-n', '/var/run/pure-ftpd.upload.pipe' );
             if ( !$out ) {
                 print_warn("/etc/pure-ftpd.conf: ");
                 print_warning("CallUploadScript set to yes, and /var/run/pure-ftpd.upload.pipe does not seem to have anything listening on it. [might be broken ConfigServer's cxs ( http://configserver.com/cp/cxs.html )]");
