@@ -28,7 +28,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.86';
+my $version = '4.99.87';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -306,7 +306,8 @@ check_for_els();
 check_for_whmxtra();
 check_for_usr_local_mis();
 
-# [CRIT] - Anything that requires a pre-defined response to be sent and/or escalation
+# [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
+check_for_unsupported_php();                                    # Extreme care!
 check_for_UMBREON_rootkit();                                    # malware
 check_for_jynx2_rootkit();                                      # malware
 check_for_cdorked_A();                                          # malware
@@ -1273,7 +1274,9 @@ sub check_perl_version_less_than_588 {
 }
 
 sub print_uptime {
-    chomp( my $uptime = timed_run( 0, 'uptime') );
+    my $uptime = timed_run( 0, 'uptime');
+    chomp $uptime if $uptime;
+    $uptime = $uptime ? $uptime : 'UNKNOWN';
     print_info('Uptime: ');
     print_normal($uptime);
 }
@@ -5795,6 +5798,30 @@ sub check_for_readonly_filesystems {
     close($fh);
 }
 
+sub check_for_unsupported_php {
+    return if ! $phpversion;
+    return if $phpversion >= 6;
+    my $min_php5 = '5.3.0'; 
+   if ( $phpversion == 4 ) {
+        return if ! $php4version;
+    }
+    if ( $phpversion == 5 ) {
+        return if ! $php5version;
+        return if version_compare( $php5version, '>=', $min_php5 );
+    }
+    print_critical();
+    print_crit('!! RUNNING A VERSION OF PHP THAT IS NO LONGER SUPPORTED BY EASYAPACHE !! ');
+    print_critical();
+    print_critical('Do not run EasyApache without confirmation that this will replace PHP with a supported PHP version!');
+    if ( $php4version ) {
+        print_critical( 'PHP4: ' . $php4version );
+    }
+    if ( $php5version && version_compare( $php5version, '<', $min_php5 ) ) {
+        print_critical( 'PHP5: ' . $php5version );
+    }
+    print_critical();
+};
+
 sub check_for_UMBREON_rootkit {
     my $dir = '/usr/local/__UMBREON__';
     if ( chdir $dir ) {
@@ -6367,7 +6394,7 @@ sub check_sha1_sigs_libkeyutils {
     );
 
     for my $lib (@$libs) {
-        my $checksum = timed_run( 0, 'sha1sum', "$lib" );
+        next unless my $checksum = timed_run( 0, 'sha1sum', "$lib" );
         chomp $checksum;
         $checksum =~ s/\s.*//g;
         if ( grep { /$checksum/ } @checksums ) {
@@ -6416,7 +6443,7 @@ sub check_sha1_sigs_httpd {
     my $httpd = '/usr/local/apache/bin/httpd';
     return if !-e $httpd;
     my $infected = 0;
-    my $sha1sum = timed_run( 0, 'sha1sum', $httpd );
+    return unless my $sha1sum = timed_run( 0, 'sha1sum', $httpd );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }
@@ -6466,7 +6493,7 @@ sub check_sha1_sigs_named {
     my $named = '/usr/sbin/named';
     return if !-e $named;
     my $infected = 0;
-    my $sha1sum = timed_run( 0, 'sha1sum', $named );
+    return unless my $sha1sum = timed_run( 0, 'sha1sum', $named );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }    
@@ -6496,7 +6523,7 @@ sub check_sha1_sigs_ssh {
     my $ssh = '/usr/bin/ssh';
     return if !-e $ssh;
     my $infected = 0; 
-    my $sha1sum = timed_run( 0, 'sha1sum', $ssh );
+    return unless my $sha1sum = timed_run( 0, 'sha1sum', $ssh );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }    
@@ -6527,7 +6554,7 @@ sub check_sha1_sigs_ssh_add {
     my $ssh_add = '/usr/bin/ssh-add';
     return if !-e $ssh_add;
     my $infected = 0; 
-    my $sha1sum = timed_run( 0, 'sha1sum', $ssh_add );
+    return unless my $sha1sum = timed_run( 0, 'sha1sum', $ssh_add );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }    
@@ -6556,7 +6583,7 @@ sub check_sha1_sigs_sshd {
     my $sshd = '/usr/sbin/sshd';
     return if !-e $sshd;
     my $infected = 0; 
-    my $sha1sum = timed_run( 0, 'sha1sum', $sshd );
+    return unless my $sha1sum = timed_run( 0, 'sha1sum', $sshd );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }    
@@ -6717,9 +6744,15 @@ sub check_for_immutable_files {
     return if !-x '/usr/bin/lsattr';
 
     my @path_dirs = split( m{:}, $ENV{'PATH'} );
-    push @path_dirs, '/usr/local/apache/conf/httpd.conf', '/etc/cpbackup.conf', '/etc/exim.conf', '/var/cpanel/backups/config';
+    push @path_dirs, '/etc/cpbackup.conf', '/etc/exim.conf';
 
     foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', @path_dirs ) ) ) ) {
+        print_warn('Immutable file: ');
+        print_warning("$file");
+    }
+    my @recursive_path_dirs = qw ( /usr/local/apache /var/cpanel/backups );
+
+    foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', '-R', @recursive_path_dirs ) ) ) ) {
         print_warn('Immutable file: ');
         print_warning("$file");
     }
@@ -6728,7 +6761,7 @@ sub check_for_immutable_files {
 sub check_for_immutable_dirs {
     return if !-x '/usr/bin/lsattr';
 
-    my @dirs = qw( / );
+    my @dirs = qw( / /usr/local/apache /usr/local/apache/conf /usr/local/apache/htdocs );
 
     foreach my $dir ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', '-d', @dirs ) ) ) ) {
         print_warn('Immutable and/or append-only directory: ');
