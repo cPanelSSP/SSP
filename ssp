@@ -1832,7 +1832,7 @@ sub print_lsws_info {
         print_normal('is listening on ports [ ' . join(" ", sort(keys(%lshttpd_ports))) . ' ]'); 
     }
     print_info('LiteSpeed Web Server: ');
-    print_normal('is now supported, see http://staffwiki.cpanel.net/LinuxSupport/LiteSpeed'); 
+    print_normal('is now supported, see http://cpanel.wiki/display/LS/LiteSpeed'); 
 }
 
 sub check_for_lsws_update {
