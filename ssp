@@ -148,6 +148,7 @@ check_for_rawopts();
 check_for_rawenv();
 check_for_custom_opt_mods();
 check_for_local_apache_templates();
+check_for_local_template_account_suspensions_include();
 check_for_local_makecpphp_template();
 check_for_custom_apache_includes();
 check_for_tomcatoptions();
@@ -2185,6 +2186,28 @@ sub check_for_local_apache_templates {
     if ($templates) {
         print_warn('Custom apache2 templates: ');
         print_warning($templates);
+    }
+}
+
+sub check_for_local_template_account_suspensions_include {
+    my $template = '/var/cpanel/templates/apache2/main.local';
+    my $conf = "account_suspensions.conf";
+    my $noconf = 0;
+
+    if (-e $template) {
+    	if ( open my $template_fh, '<', $template ) {
+    		my @lines = <$template_fh>;
+    		close($template_fh);
+    		my @match = grep (/$conf/, @lines);
+			if (@match == 0) {
+                $noconf = 1;
+            }
+        }
+
+        if ( $noconf == 1 ) {
+            print_warn('Account Suspensions Include Missing From main.local: ');
+            print_warning("If accounts are not showing as suspended in web browser check to see if the account_suspensions.conf include exists in the template - [FB 108965]");
+        }
     }
 }
 
