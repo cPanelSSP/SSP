@@ -13,6 +13,7 @@ use Storable;
 use POSIX;
 use Time::Local;
 use IPC::Open3;
+use Cwd qw(abs_path);
 
 if ( !-d '/usr/local/cpanel' ) {
     die '/usr/local/cpanel not found';
@@ -28,7 +29,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.87';
+my $version = '4.99.88';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -148,12 +149,14 @@ check_for_rawopts();
 check_for_rawenv();
 check_for_custom_opt_mods();
 check_for_local_apache_templates();
+check_for_missing_account_suspensions_conf();
 check_for_local_makecpphp_template();
 check_for_custom_apache_includes();
 check_for_tomcatoptions();
 check_for_sneaky_htaccess();
 check_perl_sanity();
 check_for_non_default_permissions();
+check_for_stale_lockfiles();
 check_awstats_permissions();
 check_var_cpanel_users_files_ownership();
 check_root_suspended();
@@ -983,6 +986,9 @@ sub check_for_multiple_tech_logins {
     #NAME     LINE         TIME             COMMENT
     #root     pts/0        2014-07-29 07:24 (192.168.130.1)
 
+    # we can sometimes get additional text after the IP or hostname
+    #root     pts/2        2014-08-07 07:17 (208.74.121.102:S.0)
+
     my $who = '/usr/bin/who';
     return if ! -x $who;
 
@@ -996,8 +1002,8 @@ sub check_for_multiple_tech_logins {
             next;
         }
         if ( $line =~ m{ \((.+)\)\Z }xms ) {
-            if ($1 =~ m{ \A (.*\.)?(cptxoffice\.net|cloudlinux\.com|litespeedtech.com) \z }xms ||
-                $1 =~ m{ \A (208\.74\.12[0-7]\.\d+|69\.175\.92\.(4[89]|5[0-9]|6[0-4])|69\.10\.42\.69) \z }xms ) {
+            if ($1 =~ m{ \A (.*\.)?(cptxoffice\.net|cloudlinux\.com|litespeedtech.com)(:|$) }xms ||
+                $1 =~ m{ \A (208\.74\.12[0-7]\.\d+|69\.175\.92\.(4[89]|5[0-9]|6[0-4])|69\.10\.42\.69)(:|$) }xms ) {
                 push (@tech_logins, $line);
                 $num_logins++;
             }
@@ -1451,7 +1457,11 @@ sub print_apache_info {
 
 sub print_php_configuration {
     my $phpconf = '/usr/local/apache/conf/php.conf.yaml';
-    return if !-f $phpconf;
+    if (!-f $phpconf) {
+        print_info('PHP: ');
+        print_warning($phpconf . " missing.  PHP checks will be skipped.");
+        return;
+    }
 
     open my $phpconf_fh, '<', $phpconf;
     while (<$phpconf_fh>) {
@@ -1832,7 +1842,7 @@ sub print_lsws_info {
         print_normal('is listening on ports [ ' . join(" ", sort(keys(%lshttpd_ports))) . ' ]'); 
     }
     print_info('LiteSpeed Web Server: ');
-    print_normal('is now supported, see http://staffwiki.cpanel.net/LinuxSupport/LiteSpeed'); 
+    print_normal('is now supported, see http://cpanel.wiki/display/LS/LiteSpeed'); 
 }
 
 sub check_for_lsws_update {
@@ -2166,25 +2176,74 @@ sub find_custom_opt_mods {
 }
 
 sub check_for_local_apache_templates {
-    my $apache2_template_dir = '/var/cpanel/templates/apache2';
-    my @dir_contents;
+    my @templatedirs = qw(
+        /var/cpanel/templates/apache2_4
+        /var/cpanel/templates/apache2_2
+        /var/cpanel/templates/apache2_0
+        /var/cpanel/templates/apache2
+        /var/cpanel/templates/apache1_3
+        /var/cpanel/templates/apache1
+    ); # Order is somewhat important above for cosmetic reasons, due to symlinks
+    my %templatedirs = ();
+    for my $templatedir (@templatedirs) { # Canonicalize symlinks so we only check a real path once, but store original name for printing.
+        next if !-d $templatedir;
+        $templatedirs{abs_path($templatedir)} = $templatedir;
+    }
+    for my $templatedir (sort(keys(%templatedirs))) {
+        my @dir_contents = ();
+        if ( opendir( my $dir_fh, $templatedir ) ) {
+            @dir_contents = readdir $dir_fh;
+            closedir $dir_fh;
+        }
 
-    if ( -d $apache2_template_dir ) {
-        opendir( my $dir_fh, $apache2_template_dir );
-        @dir_contents = readdir $dir_fh;
-        closedir $dir_fh;
+        my $templates = undef;
+        for my $template (@dir_contents) {
+            if ( $template =~ m{ \.local \z }xms ) {
+                $templates .= " $template";
+            }
+        }
+        if ($templates) {
+            print_warn('Custom templates (' . $templatedirs{$templatedir} . '): ');
+            print_warning($templates);
+        }
+    }
+}
+
+sub check_for_missing_account_suspensions_conf {
+    return if ! -f '/usr/local/apache/conf/includes/account_suspensions.conf';
+    my @templates = qw(
+        /var/cpanel/templates/apache2_4/main.local
+        /var/cpanel/templates/apache2_2/main.local
+        /var/cpanel/templates/apache2_0/main.local
+        /var/cpanel/templates/apache2/main.local
+        /var/cpanel/templates/apache1_3/main.local
+        /var/cpanel/templates/apache1/main.local
+    ); # Order is somewhat important above for cosmetic reasons, due to symlinks
+
+    my %templates = ();
+    for my $template (@templates) { # Canonicalize symlinks so we only check a real path once, but store original name for printing.
+        next if !-f $template;
+        $templates{abs_path($template)}[0] = $template;
     }
 
-    my $templates;
-    for my $template (@dir_contents) {
-        if ( $template =~ m{ \.local \z }xms ) {
-            $templates .= " $template";
+    for my $template ( sort(keys(%templates)) ) {
+        next if !-f $template;
+        $templates{$template}[1] = 0;
+        if ( open my $template_fh, '<', $template ) {
+            while (<$template_fh>) {
+                if (m{ \A \s* Include \s+ \"? /usr/local/apache/conf/includes/account_suspensions.conf \"? }x) {
+                    $templates{$template}[1] = 1;
+                }
+            }
+            close $template_fh;
         }
     }
 
-    if ($templates) {
-        print_warn('Custom apache2 templates: ');
-        print_warning($templates);
+    for my $template (keys(%templates)) {
+        if (! $templates{$template}[1]) {
+            print_warn("Custom templates: ");
+            print_warning( $templates{$template}[0] . " is missing include for account_suspensions.conf!\n\t\\_ Use predefined \"03 - Suspensions Template Update\"");
+        }
     }
 }
 
@@ -2433,6 +2492,25 @@ sub check_for_non_default_permissions {
                     print_warn('Non-default Permissions: ');
                     print_warning($resource . ' (mode: ' . sprintf("%04d", $mode) . ' | default: ' . join(' or ', @{$check{$resource}[0]}) . ')' . $check{$resource}[3] );
             }
+        }
+    }
+}
+
+sub check_for_stale_lockfiles {
+    my %check = ( # '/path' => [ 'type', 'Additional info' ]; # type is pid, fcntl, touch, etc., for future use.
+        '/etc/digestshadow.lock'    => [ 'fcntl', 'Can prevent modifying system digestshadow file, check if active with lsof and MOVE ONLY IF STALE.' ],
+        '/etc/group.lock'           => [ 'fcntl', 'Can prevent modifying system group file, check if active with lsof and MOVE ONLY IF STALE.' ],
+        '/etc/gshadow.lock'         => [ 'fcntl', 'Can prevent modifying system gshadow file, check if active with lsof and MOVE ONLY IF STALE.' ],
+        '/etc/gtmp'                 => [ 'touch', 'Can prevent modifying system group file, check if active with lsof and MOVE ONLY IF STALE.' ],
+        '/etc/passwd.lock'          => [ 'fcntl', 'Can prevent modifying system passwd file, check if active with lsof and MOVE ONLY IF STALE.' ],
+        '/etc/ptmp'                 => [ 'touch', 'Can prevent modifying system passwd file, check if active with lsof and MOVE ONLY IF STALE. See ticket 5315853.' ],
+        '/etc/shadow.lock'          => [ 'fcntl', 'Can prevent modifying system shadow file, check if active with lsof and MOVE ONLY IF STALE.' ]
+    );
+
+    for my $resource ( sort keys %check ) {
+        if ( -e $resource ) {
+            print_warn('Lockfile exists: ');
+            print_warning($resource . ' (' . $check{$resource}[1] . ')');
         }
     }
 }
@@ -3315,7 +3393,8 @@ sub check_roots_cron_for_certain_commands {
             makewhatis\.cron |
             maldet |
             modsecparse.pl |
-            prelink
+            prelink |
+            rpm
             ) $ }x); # Common false-positives to filter out entirely.
         chomp( my $checksum = timed_run( 0, 'md5sum', $cron ) );
         $checksum =~ s/\s.*//g;
@@ -3491,10 +3570,8 @@ sub check_for_non_default_modsec_rules {
     return if ( $modsec_enabled == 0 );
 
     if ( -f $modsec2_conf ) {
-        ## On 11.32.5.9 with EA v3.14.13, default modsec2.conf is 650 bytes.
-        ## It's always been small in size.
         my $modsec2_conf_size     = ( stat($modsec2_conf) )[7];
-        my $modsec2_conf_max_size = 1447;
+        my $modsec2_conf_max_size = 1500;
         if ( $modsec2_conf_size > $modsec2_conf_max_size ) {
             print_warn('modsec: ');
             print_warning("$modsec2_conf is > $modsec2_conf_max_size bytes, may contain custom rules");
@@ -3567,7 +3644,7 @@ sub check_etc_hosts_sanity {
 
     if ( $hostname_entry == 0 ) {
         print_warn('/etc/hosts: ');
-        print_warning("no entry found for the server's hostname! [$hostname]");
+        print_warning("no entry found for the server's hostname! [$hostname] (Can break EA or Apache when mod_unique_id is enabled)");
     }
 }
 
@@ -4333,6 +4410,7 @@ sub check_for_rpm_overrides {
                                   d56abe76c47853eceb706f0855e642a7
                                 | 89d631ef7c1d43475c20d7be7b7290ff
                                 | 600ff436e5939656a5645c6139cc0228
+                                | 657d59cc9627d30a95d0b84ef4245185
                                 ) \s }xms ) {
         $easy_is_default = 1;
     }
@@ -5164,48 +5242,48 @@ sub check_for_processes_killed_by_lfd {
 }
 
 sub check_for_processes_killed_by_prm {
-    my $log  = '/usr/local/prm/log_prm';
-    return if !-e $log;
+    my @logfiles = qw( /usr/local/prm/prm_log /usr/local/prm/log_prm /usr/local/prm/logs/prm.log );
+    for my $log (@logfiles) {
+        next if -l $log;
+        next if !-f $log;
+        my $size = (stat($log))[7];
+        next if !$size;
+    
+        my $bytes_to_check = 10485760; # 10M
+        my $seek_position  = 0;
+        my $log_data = undef;
+        my @logs;
+        my $count = 0;
+        my @killed_by_prm = ();
 
-    my $size = (stat($log))[7];
-    return if !$size;
-
-    my $bytes_to_check = 10485760; # 10M
-    my $seek_position  = 0;
-    my $log_data;
-    my @logs;
-    my $count = 0;
-    my @killed_by_prm;
-
-    if ( $size > $bytes_to_check ) {
-        $seek_position = ( $size - $bytes_to_check );
-    }
-
-    open my $file_fh, '<', $log or return;
-    seek $file_fh, $seek_position, 0;
-    read $file_fh, $log_data, $bytes_to_check;
-    close $file_fh;
-
-    if ( $log_data =~ /\sKILLED\s/ ) {
-        @logs = split /\n/, $log_data;
-        undef $log_data;
-        @logs = reverse @logs;
-
-        for my $line (@logs) { 
-            if ( $line =~ /(\S+\s\d+\s\S+)\s(?:\S+)\s(?:\S+) proc pid:(?:\d+) \{user:(\S+) cmd:(\S+)\}.+(MAX_.+) KILLED/ ) {
-                push @killed_by_prm, "[$1] [user: $2] [cmd: $3] [$4]\n";
-                $count++;
-            }
-
-            last if $count >= 10;
+        if ( $size > $bytes_to_check ) {
+            $seek_position = ( $size - $bytes_to_check );
         }
-    }
 
-    if (@killed_by_prm) {
-        chomp @killed_by_prm;
-        print_warn("Last 10 processes killed by 3rd party software \"PRM\" (\"grep KILLED /usr/local/prm/log_prm\"):\n");
-        for my $killed_process (@killed_by_prm) {
-            print_magenta("\t \\_ $killed_process");
+        open my $file_fh, '<', $log or return;
+        seek $file_fh, $seek_position, 0;
+        read $file_fh, $log_data, $bytes_to_check;
+        close $file_fh;
+
+        if ( $log_data =~ /\sKILLED\s/ ) {
+            @logs = split /\n/, $log_data;
+            undef $log_data;
+            @logs = reverse @logs;
+    
+            for my $line (@logs) { 
+                if ( $line =~ /(\S+\s\d+\s\S+)\s(?:\S+)\s(?:\S+) proc pid:(?:\d+) \{user:(\S+) cmd:(\S+)\}.+(MAX_.+) KILLED/ ) {
+                    push @killed_by_prm, "[$1] [user: $2] [cmd: $3] [$4]";
+                    $count++;
+                }
+
+                last if $count >= 10;
+            }
+        }
+        if (@killed_by_prm) {
+            print_warn("Last 10 processes killed by 3rd party software \"PRM\" (\"grep KILLED " . $log . "\"):\n");
+            for my $killed_process (@killed_by_prm) {
+                print_magenta("\"\t \\_ $killed_process\"");
+            }
         }
     }
 }
