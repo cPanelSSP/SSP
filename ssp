@@ -29,7 +29,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.88';
+my $version = '4.99.89';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -49,6 +49,7 @@ my @local_ipaddrs_list    = get_local_ipaddrs();
 my @process_list          = get_process_list();
 my %process; &get_process_pid_hash(\%process);
 my %port; &get_lsof_port_hash(\%port);
+my %ipcs; &get_ipcs_hash(\%ipcs);
 my %hostinfo              = get_hostinfo();
 my %cpuinfo               = get_cpuinfo();
 my %mysql_conf; &get_mysql_conf(\%mysql_conf);
@@ -325,6 +326,7 @@ check_sha1_sigs_ssh_add();                                      # malware
 check_sha1_sigs_sshd();                                         # malware
 check_for_ebury_ssh_G();                                        # malware
 check_for_ebury_ssh_banner();                                   # malware
+check_for_ebury_ssh_shmem();                                    # malware
 check_for_ebury_root_file();                                    # malware
 check_for_bg_botnet();                                          # malware
 
@@ -446,6 +448,7 @@ sub check_for_dnsonly {
         check_sha1_sigs_sshd();                                         # malware
         check_for_ebury_ssh_G();                                        # malware
         check_for_ebury_ssh_banner();                                   # malware
+        check_for_ebury_ssh_shmem();                                    # malware
         check_for_ebury_root_file();                                    # malware
         check_for_bg_botnet();                                          # malware
 
@@ -503,9 +506,11 @@ sub version_cmp { # should only be used by version_compare()
 
 sub version_compare {
     # example: return if version_compare($ver_string, qw( >= 1.2.3.3 ));
-    # Must be a four-digit version separated by periods.
+    # Must be no more than four version numbers separated by periods.
     my ($ver1, $mode, $ver2) = @_;
-  # Shamelessly copied the comparison logic out of Cpanel::Version::Compare
+    return if ( $ver1 =~ /[^\.0-9]/ );
+    return if ( $ver2 =~ /[^\.0-9]/ );
+    # Shamelessly copied the comparison logic out of Cpanel::Version::Compare
     my %modes = (
         '>' => sub {
               return if $_[0] eq $_[1];
@@ -545,13 +550,13 @@ sub timed_run { # Borrowed from Cpanel::SafeRun::Timed and modified
     open( my $save_stderr_fh, '>&STDERR' );
     open( STDERR, '>', '/dev/null' );
 
-    my $output = undef;
+    my $output = ""; # In the event of time-out or failure, return empty string instead of undef.
     my $complete = 0;
     my $pid;
     my $fh;    # Case 63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
     eval {
         local $SIG{'__DIE__'} = 'DEFAULT';
-        local $SIG{'ALRM'} = sub { $output = undef; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
+        local $SIG{'ALRM'} = sub { $output = ""; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
         alarm($timer);
         if ( $pid = open( $fh, '-|' ) ) {
             local $/;
@@ -566,7 +571,7 @@ sub timed_run { # Borrowed from Cpanel::SafeRun::Timed and modified
             warn 'Error while executing: [' . join( ' ', @PROGA ) . ']: ' . $!;
             alarm(0);
             open( STDERR, '>&=' . fileno($save_stderr_fh) );
-            return;
+            return "";
         }
         $complete = 1;
         alarm 0;
@@ -589,13 +594,13 @@ sub timed_run_trap_stderr { # Borrowed from Cpanel::SafeRun::Timed and modified
     open( my $save_stderr_fh, '>&STDERR' );
     open( STDERR, '>', '/dev/null' );
 
-    my $output = undef;
+    my $output = ""; # In the event of time-out or failure, return empty string instead of undef.
     my $complete = 0;
     my $pid;
     my $fh;    # Case 63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
     eval {
         local $SIG{'__DIE__'} = 'DEFAULT';
-        local $SIG{'ALRM'} = sub { $output = undef; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
+        local $SIG{'ALRM'} = sub { $output = ""; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
         alarm($timer);
         if ( $pid = open( $fh, '-|' ) ) {
             local $/;
@@ -611,7 +616,7 @@ sub timed_run_trap_stderr { # Borrowed from Cpanel::SafeRun::Timed and modified
             warn 'Error while executing: [' . join( ' ', @PROGA ) . ']: ' . $!;
             alarm(0);
             open( STDERR, '>&=' . fileno($save_stderr_fh) );
-            return;
+            return "";
         }
         $complete = 1;
         alarm 0;
@@ -797,6 +802,32 @@ sub get_lsof_port_hash ($) {
                 };
             }
         }
+    }
+}
+
+sub get_ipcs_hash ($) {
+    my ($href) = @_;
+    my $header = 0;
+    # For now, all we need is shared memory segment owner and creator-pid, but the data structure is extensible.
+    # ipcs -m -p
+    #
+    #------ Shared Memory Creator/Last-op --------
+    #shmid      owner      cpid       lpid
+    #2228224    root       992        992
+    #2588673    root       1309       1315
+    #2195458    root       985        985
+    #2621443    root       1309       1315
+    for ( split /\n/, timed_run( 0, 'ipcs', '-m', '-p' ) ) {
+        if ( $header == 0 ) {
+            $header = 1 if m/^ shmid \s+ owner \s+ cpid \s+ lpid \s* $/ix;
+            next;
+        }
+        my @ipcs = split(/\s+/, $_, 5);
+        push @{${$href}{$ipcs[1]}{'mp'}}, { # Key by owner, type 'mp' (-m -p output)
+            'shmid' => $ipcs[0],
+            'cpid' => $ipcs[2],
+            'lpid' => $ipcs[3]
+        };
     }
 }
 
@@ -1677,21 +1708,43 @@ sub print_mysql_version {
 
 sub print_backups_info {
     my %new = ();
+    my %new_dest = ();
     my %old = ();
     my ( $new_backups_cron, $new_backups_status ) = ( 0, 'No Config' );
     my ( $old_backups_cron, $old_backups_status ) = ( 0, 'No Config' );
     my $warning = 0;
+    my $new_backup_dir = '/var/cpanel/backups/';
+    my $new_backup_config = $new_backup_dir . 'config';
+    my $old_backup_config = '/etc/cpbackup.conf';
 
-    if ( -f '/var/cpanel/backups/config' && open( my $backupconf_fh, '<', '/var/cpanel/backups/config' ) ) {
+    if ( -f $new_backup_config && open( my $backupconf_fh, '<', $new_backup_config ) ) {
         local $/ = undef;
         %new = map { ( split( /:\s/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($backupconf_fh) );
         close $backupconf_fh;
     }
 
-    if ( -f '/etc/cpbackup.conf' && open( my $backupconf_fh, '<', '/etc/cpbackup.conf' ) ) {
+    if ( -f $old_backup_config && open( my $backupconf_fh, '<', $old_backup_config ) ) {
         local $/ = undef;
         %old = map { ( split( /\s/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($backupconf_fh) );
         close $backupconf_fh;
+    }
+
+    if ( defined($new{'BACKUPENABLE'}) && $new{'BACKUPENABLE'} =~ /yes/ ) {
+        my @dir_contents = ();
+        if ( opendir( my $dir_fh, $new_backup_dir ) ) {
+            @dir_contents = readdir $dir_fh;
+            closedir $dir_fh;
+        }
+
+        for my $dest (@dir_contents) {
+            if ( $dest =~ m{ \.backup_destination \z }xms ) {
+                if ( open( my $destconf_fh, '<', $new_backup_dir . $dest ) ) {
+                    local $/ = undef;
+                    %{$new_dest{$dest}} = map { ( split( /:\s/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($destconf_fh) );
+                    close $destconf_fh;
+                }
+            }
+        }
     }
 
     if ( ( defined($old{'BACKUPENABLE'}) and $old{'BACKUPENABLE'} eq 'yes' ) or ( defined($new{'BACKUPENABLE'}) and $new{'BACKUPENABLE'} =~ /yes/ ) ) {
@@ -1777,12 +1830,28 @@ sub print_backups_info {
         }
     }
 
+    if ( keys(%new_dest) ) {
+        if ( defined($new{'KEEPLOCAL'}) && $new{'KEEPLOCAL'} =~ /1/ ) {
+            $new_backups_status .= '/RetainLocal';
+        }
+        else {
+            $new_backups_status .= '/NoRetainLocal';
+        }
+    }
+
     print_info('Backups: ');
     if ( $warning ) {
         print_warning("[New: $new_backups_status] [Legacy: $old_backups_status]");
     }
     else {
         print_normal("[New: $new_backups_status] [Legacy: $old_backups_status]");
+    }
+
+    for my $dest ( keys(%new_dest) ) {
+        my $type = $new_dest{$dest}->{'type'} ? $new_dest{$dest}{'type'} : 'UNKNOWN';;
+        my $disabled = defined($new_dest{$dest}{'disabled'}) ? $new_dest{$dest}{'disabled'} : 'UNKNOWN';
+        my $name = $new_dest{$dest}{'name'} ? $new_dest{$dest}{'name'} : 'UNKNOWN';
+        print_normal("\t\t\\_ Remote dest: [Type: " . $type . "] [Disabled: " . $disabled . "] [Name: " . $name . "]")
     }
 }
 
@@ -5885,7 +5954,7 @@ sub check_for_unsupported_php {
     }
     if ( $phpversion == 5 ) {
         return if ! $php5version;
-        return if version_compare( $php5version, '>=', $min_php5 );
+        return if ! version_compare( $php5version, '<', $min_php5 );
     }
     print_critical();
     print_crit('!! RUNNING A VERSION OF PHP THAT IS NO LONGER SUPPORTED BY EASYAPACHE !! ');
@@ -6739,6 +6808,27 @@ sub check_for_ebury_ssh_banner {
         print_critical("\tsshd banner matches known signature from ebury infected machines: " . $ssh_banner);
         print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/");
         print_critical();
+    }
+}
+
+sub check_for_ebury_ssh_shmem {
+    # As far as we know, sshd sholudn't be using shared memory at all, so any usage is a strong sign of ebury.
+    return if ! defined($ipcs{root}{mp});
+
+    for my $href ( @{$ipcs{root}{mp}} ) {
+        my $shmid = $href->{shmid};
+        my $cpid = $href->{cpid};
+        if ( $process{$cpid}{CMD} && $process{$cpid}{CMD} =~ m{ \A /usr/sbin/sshd \b }x ) {
+            print_critical();
+            print_crit('!! [ EBURY ] !! ');
+            print_critical('L1/L2 escalate this ticket to L3');
+            print_critical("\tShared memory segment created by sshd process exists:");
+            print_critical("\t\tsshd PID: " . $cpid);
+            print_critical("\t\tshmid: " . $shmid);
+            print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/");
+            print_critical(timed_run( 0, "echo --- ps -p ${cpid} uww ---;ps -p ${cpid} uww; echo --- ipcs -m -i ${shmid} ---; ipcs -m -i ${shmid}; echo ---"));
+            last;
+        }
     }
 }
 
