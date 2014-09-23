@@ -14,6 +14,12 @@ use POSIX;
 use Time::Local;
 use IPC::Open3;
 use Cwd qw(abs_path);
+use Getopt::Long;
+
+my ( $bugreport );
+my $opts = Getopt::Long::GetOptions(
+    'bugreport' => \$bugreport
+);
 
 if ( !-d '/usr/local/cpanel' ) {
     die '/usr/local/cpanel not found';
@@ -29,7 +35,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.89';
+my $version = '4.99.90';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -99,6 +105,11 @@ my $crit_buffer; # Critical output to be printed at the end
 ##  END GLOBALS     ##
 ######################
 
+if ($bugreport) {
+    print_bug_report();
+    exit;
+}
+
 
 print "\n";
 for ( 1 .. 3 ) {
@@ -108,6 +119,7 @@ for ( 1 .. 3 ) {
 ## [CRIT] -- only stuff that we should check as early as possible
 check_for_hacked_server_touchfile();
 check_for_multiple_tech_logins();
+check_for_lve_environment();
 
 ## [INFO]
 print "\n";
@@ -145,7 +157,6 @@ check_valid_upcp();
 check_interface_lo();
 check_cpanelconfig_filetype();
 check_cpanelsync_exclude();
-check_for_lve_environment();
 check_for_rawopts();
 check_for_rawenv();
 check_for_custom_opt_mods();
@@ -347,6 +358,7 @@ check_for_percona_rpms();
 check_for_duplicate_rpms();
 check_for_better_linux();
 check_for_kernel_headers_rpm();
+check_for_broken_rpm();
 
 print_info2('Done.');
 
@@ -366,6 +378,7 @@ sub check_for_dnsonly {
         ## [CRIT] -- only stuff that we should check as early as possible
         check_for_hacked_server_touchfile();
         check_for_multiple_tech_logins();
+        check_for_lve_environment();
 
         ## [INFO]
         print_hostname();
@@ -386,7 +399,6 @@ sub check_for_dnsonly {
         check_interface_lo();
         check_cpanelconfig_filetype();
         check_cpanelsync_exclude();
-        check_for_lve_environment();
         check_perl_sanity();
         check_for_non_default_permissions();
         check_limitsconf();
@@ -731,7 +743,8 @@ sub print_tip {
         'System backups are not uploaded via FTP by default, requires manual config. See http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/SystemBackups',
         '$PATH may differ when executing something via cron rather than the command line. See ticket 4419531',
         '"failed to open scan directory /var/spool/exim/scan/[...]: Too many links" could mean a directory has reached limit of 32,000 files/dirs',
-        'If innodb_force_recovery is enabled in the MySQL configuration, this can sometimes prevent mysqldump from working (see ticket 5193581).'
+        'If innodb_force_recovery is enabled in the MySQL configuration, this can sometimes prevent mysqldump from working (see ticket 5193581).',
+        '"Spawned \'ossec-dbd\' with \'/sbin/service restart ossec-hids\'" is from ASL (Atomic Secured Linux). Have customer contact ASL Support if necessary.'
     );
 
     my $num  = int rand scalar @tips;
@@ -897,7 +910,7 @@ sub get_cpuinfo {
             $line =~ s/\(R\)//g;
             $line =~ s/\(tm\)//g;
             $line =~ s/\s{2,}/ /;
-            $line =~ s/ \@/\@/;
+            $line =~ s/\s*\@/ \@/;
             $cpuinfos{'model'} = $line;
             $cpuinfos{'numcores'}++;
         }
@@ -1051,6 +1064,37 @@ sub check_for_multiple_tech_logins {
     print_critical();
 }
 
+sub check_for_lve_environment {
+
+    # pam_lve 0.2 prints this after su or sudo:
+    #
+    # # /bin/su -
+    # Password:
+    # ***************************************************************************
+    # *                                                                         *
+    # *             !!!!  WARNING: YOU ARE INSIDE LVE !!!!                      *
+    # *IF YOU RESTART ANY SERVICES STABILITY OF YOUR SYSTEM WILL BE COMPROMIZED *
+    # *        CHANGE UID OF THE USER YOU ARE USING TO SU/SUDO                  *
+    # *                             MORE INFO:                                  *
+    # *http://www.cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php*
+    # *                                                                         *
+    # ***************************************************************************
+
+    # pam_lve 0.3 won't put wheel users in an LVE after su or sudo:
+    # http://cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php
+
+    if ( $hostinfo{'kernel'} =~ /\.lve/ and -x '/usr/sbin/lveps' ) {
+        my $lve_check = `/usr/sbin/lveps -p | grep " $$ "`;
+        if ($lve_check) {
+            print_critical();
+            print_crit(" You are inside a CloudLinux LVE - DO *NOT* RESTART ANY SERVICES!\n");
+            print_critical("          \\_ The pam_lve configuration may not be excluding the wheel group, or your ssh login user was not in the wheel group.");
+            print_critical("          \\_ http://docs.cloudlinux.com/index.html?lve_pam_module.html");
+            print_critical();
+        }
+    }
+}
+
 sub get_lsws_version {
     my $lshttpd = '/usr/local/lsws/bin/lshttpd';
     return if ! -x $lshttpd;
@@ -1085,11 +1129,8 @@ sub print_hostname {
     }
 }
 
-sub print_os {
+sub get_os_release {
     my $release_info;
-    my $os_info;
-    my $php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
-    my $php_selector_disabled = 0;
 
     if ( -e '/etc/redhat-release' ) {
         if ( open my $rr_fh, '<', '/etc/redhat-release' ) {
@@ -1098,11 +1139,19 @@ sub print_os {
             }
             close $rr_fh;
         }
-        $os_info = $release_info . " [$hostinfo{'environment'}]";
     }
     else {
-        $os_info = 'Unknown (no /etc/redhat-release)';
+        $release_info = 'Unknown (no /etc/redhat-release)';
     }
+
+    return $release_info
+}
+
+sub print_os {
+    my $release_info = get_os_release();
+    my $os_info = $release_info . " [$hostinfo{'environment'}]";
+    my $php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
+    my $php_selector_disabled = 0;
 
     if ( $release_info and $release_info =~ /cloudlinux/i ) {
         $is_cloudlinux = 1;
@@ -1330,7 +1379,7 @@ sub check_for_clustering {
     my $cluster_dir = '/var/cpanel/cluster/root/config';
     my @dir_contents;
     my @cluster_members;
-    my ( $cluster_member_ipaddr, $cluster_member_hostname, $cluster_member_role );
+    my ( $cluster_member, $cluster_member_hostname, $cluster_member_role );
 
     if ( -d $cluster_dir ) {
         opendir( my $dir_fh, $cluster_dir );
@@ -1343,10 +1392,10 @@ sub check_for_clustering {
     for my $dirent (@dir_contents) {
 
         # only active cluster members have -dnsrole files
-        if ( $dirent =~ m{ \A (\d+\.\d+\.\d+\.\d+)-dnsrole \z }xms ) {
-            $cluster_member_ipaddr = $1;
+        if ( $dirent =~ m{ \A (.+)-dnsrole \z }xms ) {
+            $cluster_member = $1;
 
-            if ( open my $file_fh, '<', "${cluster_member_ipaddr}.cache" ) {
+            if ( open my $file_fh, '<', "${cluster_member}.cache" ) {
                 my $cache_ref;
                 eval 'local $SIG{__DIE__}; local $SIG{__WARN__}; $cache_ref = Storable::fd_retrieve($file_fh);';    # from upcp.static
                 close $file_fh;
@@ -1362,8 +1411,11 @@ sub check_for_clustering {
             if ( !$cluster_member_hostname ) {
                 $cluster_member_hostname = '?';
             }
+            if ( ${cluster_member} =~ m{ \A (vps\.net|softlayer) \z}xmsi ) {
+                $cluster_member_hostname = '';
+            }
 
-            if ( open my $file_fh, '<', "${cluster_member_ipaddr}-dnsrole" ) {
+            if ( open my $file_fh, '<', "${cluster_member}-dnsrole" ) {
                 while (<$file_fh>) {
                     $cluster_member_role = $_;
                 }
@@ -1373,7 +1425,7 @@ sub check_for_clustering {
                 $cluster_member_role = '?';
             }
 
-            push @cluster_members, $cluster_member_hostname . '_SSP_' . $cluster_member_ipaddr . '_SSP_' . "[${cluster_member_role}]";
+            push @cluster_members, $cluster_member_hostname . '_SSP_' . $cluster_member . '_SSP_' . "[${cluster_member_role}]";
         }
     }
 
@@ -2146,37 +2198,6 @@ sub check_cpanelsync_exclude {
     }
 }
 
-sub check_for_lve_environment {
-
-    # pam_lve 0.2 prints this after su or sudo:
-    #
-    # # /bin/su -
-    # Password:
-    # ***************************************************************************
-    # *                                                                         *
-    # *             !!!!  WARNING: YOU ARE INSIDE LVE !!!!                      *
-    # *IF YOU RESTART ANY SERVICES STABILITY OF YOUR SYSTEM WILL BE COMPROMIZED *
-    # *        CHANGE UID OF THE USER YOU ARE USING TO SU/SUDO                  *
-    # *                             MORE INFO:                                  *
-    # *http://www.cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php*
-    # *                                                                         *
-    # ***************************************************************************
-
-    # pam_lve 0.3 won't put wheel users in an LVE after su or sudo:
-    # http://cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php
-
-    if ( $hostinfo{'kernel'} =~ /\.lve/ and -x '/usr/sbin/lveps' ) {
-        my $lve_check = `/usr/sbin/lveps -p | grep " $$ "`;
-        if ($lve_check) {
-            print "\n";
-            print_warning_underline(' !! YOU ARE IN AN LVE - DO *NOT* RESTART ANY SERVICES !!');
-            print_warning_underline(' !! YOU ARE IN AN LVE - DO *NOT* RESTART ANY SERVICES !!');
-            print_warning_underline(' !! YOU ARE IN AN LVE - DO *NOT* RESTART ANY SERVICES !!');
-            print "\n";
-        }
-    }
-}
-
 sub check_for_rawopts {
     my $rawopts_dir = '/var/cpanel/easy/apache/rawopts';
     my @dir_contents;
@@ -2475,6 +2496,7 @@ sub check_for_non_default_permissions {
         '/usr/local'                   => [ ['0755'], '', '', '' ],
         '/usr/local/apache'            => [ ['0755'], '', '', '' ],
         '/usr/local/apache/bin/httpd'  => [ ['0755'], '', '', '' ],
+        '/usr/local/apache/domlogs'    => [ ['0711'], '', 'wheel', ' - If users can\'t access logs, stats won\'t process.  See ticket 5413079.' ],
         '/usr/local/bin'               => [ ['0755', '0711', '0555'], '', '', '' ],
         '/usr/local/cpanel'                                                             => [ ['0711'], '', 'wheel', '' ],
         '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'                          => [ ['0644'], '', 'wheel', '' ],
@@ -3233,6 +3255,11 @@ sub check_php_libmysqlclient_mismatch {
             $mysql_shared_rpm_version      = $1 . $2;
             last;
         }
+        elsif ( $rpm =~ /^MySQL(\d\d)-shared/ ) {
+            $mysql_shared_rpm_version_orig = $rpm;
+            $mysql_shared_rpm_version      = $1;
+            last;
+        }
     }
 
     return if !$mysql_shared_rpm_version;
@@ -3275,12 +3302,13 @@ sub check_php_libmysqlclient_mismatch {
 
     ## Compare the linked libmysqlclient lib with the MySQL-shared rpm version
     ##
+    ## libmysqlclient.so.18 = MySQL-shared 5.6
     ## libmysqlclient.so.18 = MySQL-shared 5.5
     ## libmysqlclient.so.16 = MySQL-shared 5.1
     ## libmysqlclient.so.15 = MySQL-shared 5.0
 
     if ($php4_libmysqlclient_version) {
-        if ( $php4_libmysqlclient_version == 18 and $mysql_shared_rpm_version != 55 ) {
+        if ( $php4_libmysqlclient_version == 18 and !( $mysql_shared_rpm_version == 56 or $mysql_shared_rpm_version == 55 ) ) {
             $php4_mismatch = 1;
         }
         elsif ( $php4_libmysqlclient_version == 16 and $mysql_shared_rpm_version != 51 ) {
@@ -3297,7 +3325,7 @@ sub check_php_libmysqlclient_mismatch {
     }
 
     if ($php5_libmysqlclient_version) {
-        if ( $php5_libmysqlclient_version == 18 and $mysql_shared_rpm_version != 55 ) {
+        if ( $php5_libmysqlclient_version == 18 and !( $mysql_shared_rpm_version == 56 or $mysql_shared_rpm_version == 55 ) ) {
             $php5_mismatch = 1;
         }
         elsif ( $php5_libmysqlclient_version == 16 and $mysql_shared_rpm_version != 51 ) {
@@ -3364,8 +3392,9 @@ sub check_for_cpanel_files {
     my @files = qw(
       /usr/local/cpanel/cpanel
       /usr/local/cpanel/cpsrvd
-      /usr/local/cpanel/cpsrvd-ssl
     );
+
+    push @files, '/usr/local/cpanel/cpsrvd-ssl' if cpanel_version_is(qw( < 11.45.0.0 ));
 
     for my $file (@files) {
         if ( !-e $file ) {
@@ -3470,7 +3499,7 @@ sub check_roots_cron_for_certain_commands {
         next if ( $checksum && $cron_ignore{$checksum} );
         if ( open my $cron_fh, '<', $cron ) {
             while (<$cron_fh>) {
-                if (m{ \A [^#]* (?:^|\s|\/)(rm|unlink|chmod|chown|chattr|kill|pkill|skill|tmpwatch)\s }x) {
+                if (m{ \A [^#]* (?:^|\s|\/)(rm|unlink|ch(?:mod|own|attr)|(?:p|s)?kill(?:all)?5?|tmpwatch)\s }x) {
                     $found{$cron}{$1} = 1;
                 }
             }
@@ -4040,6 +4069,42 @@ sub check_for_kernel_headers_rpm {
         if ( @rpm_list && ! grep(/^kernel-headers-/, @rpm_list) ) {
             print_warn('kernel-headers RPM: ');
             print_warning('not found. This can cause problems with EA');
+        }
+    }
+}
+
+sub check_for_broken_rpm {
+    my %rpms = ( # 'rpm name' => [ ['check1', 'check2', ...], 'Additional info' ] # Check types should be ordered by dependency, first failure skips other checks for that RPM.
+        'cpp' => [ [ 'verify-fail' ], 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"']
+    );
+
+    my %rpm_checks = (
+        'missing-rpm' => [ 'Missing RPM', sub { # Only if care that the RPM is missing.
+            my $rpm = shift;
+            return 0 if ! @rpm_list;
+            return 0 if grep(/^${rpm}-/, @rpm_list);
+            return 1;
+        } ],
+        'verify-fail' => [ 'Verify Failed', sub { # Only checks if the RPM exists.
+            my $rpm = shift;
+            return 0 if ! @rpm_list;
+            return 0 if ! grep(/^${rpm}-/, @rpm_list);
+            my $output = timed_run(0, 'rpm', '-V', $rpm);
+            return 0 if $output eq "";
+            return 1 if $output =~ m{ \A missing }xms;
+            return 1 if $output =~ m{ \A ..5 }xms;
+            return 0;
+        } ]
+    );
+
+    for my $rpm ( sort keys %rpms ) {
+        for my $check ( @{$rpms{$rpm}[0]} ) {
+            if ( $rpm_checks{$check}[1]->( $rpm ) ) {
+                my $additional_info = $rpms{$rpm}[1] ? ( "(" . $rpms{$rpm}[1] . ")" ) : '';
+                print_warn('RPM check: ');
+                print_warning($rpm_checks{$check}[0] . " - [ " . $rpm . " ] " . $additional_info);
+                last;
+            }
         }
     }
 }
@@ -5830,7 +5895,7 @@ sub check_for_openssl_heartbleed_bug {
     print_critical('Send customer this premade: OpenSSL Heartbleed Vulnerability - Discovery');
     print_critical('The following check was used: rpm -q --changelog openssl | grep \' CVE-2014-0160 \'');
     print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
-    print_critical('This check does NOT take corrupt rpm dbs into account, and CAN false positive if corrupt');
+    print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
     print_critical();
 }
 
@@ -5877,7 +5942,7 @@ sub check_for_openssl_secadv_20140605 {
     print_critical('CVE-2014-0224');
     print_critical('Send customer this premade: "OpenSSL advisory 2014-06-05 - Discovery"');
     print_critical('!! BEFORE SENDING PREMADE VERIFY THE MISSING CVE PATCHES WITH: rpm -q --changelog openssl | egrep \' CVE-201(0|4)-\'');
-    print_critical('This check does NOT take corrupt rpm dbs into account, and CAN false positive if corrupt');
+    print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
     print_critical();
 }
 
@@ -6012,6 +6077,8 @@ sub check_for_bg_botnet {
     # /tmp/moni.lock
     # /tmp/notify.file
     # /bin/ps, /bin/netstat, and /usr/sbin/lsof have also been found to be modified
+    # This one is causing some rare false-positives:
+    # /root/aa
     my @bg_files = qw(
         /boot/pro
         /boot/proh
@@ -6038,7 +6105,6 @@ sub check_for_bg_botnet {
         /etc/skysapdd
         /etc/xfsdx
         /etc/xfsdxd
-        /root/aa
         /usr/bin/.sshd
         /usr/bin/bsd-port/getty
         /usr/lib/libamplify.so
@@ -6912,7 +6978,7 @@ sub check_for_immutable_files {
     return if !-x '/usr/bin/lsattr';
 
     my @path_dirs = split( m{:}, $ENV{'PATH'} );
-    push @path_dirs, '/etc/cpbackup.conf', '/etc/exim.conf';
+    push @path_dirs, qw( /etc/cpbackup.conf /etc/exim.conf /var/cpanel/cpanel.config );
 
     foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', @path_dirs ) ) ) ) {
         print_warn('Immutable file: ');
@@ -6921,7 +6987,7 @@ sub check_for_immutable_files {
     my @recursive_path_dirs = qw ( /usr/local/apache /var/cpanel/backups );
 
     foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', '-R', @recursive_path_dirs ) ) ) ) {
-        print_warn('Immutable file: ');
+        print_warn('Immutable file or directory: ');
         print_warning("$file");
     }
 }
@@ -6929,7 +6995,7 @@ sub check_for_immutable_files {
 sub check_for_immutable_dirs {
     return if !-x '/usr/bin/lsattr';
 
-    my @dirs = qw( / /usr/local/apache /usr/local/apache/conf /usr/local/apache/htdocs );
+    my @dirs = qw( / /usr/local/apache /usr/local/apache/conf /usr/local/apache/htdocs /var/cpanel );
 
     foreach my $dir ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', '-d', @dirs ) ) ) ) {
         print_warn('Immutable and/or append-only directory: ');
@@ -6984,5 +7050,70 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
     }
 }
 
+sub print_bug_report {
+    my $version = $cpanel_version ? $cpanel_version : 'Unknown';
+    my $os = get_os_release();
+    my $kernel = $hostinfo{'kernel'} ? $hostinfo{'kernel'} : 'Unknown';
+    my $arch = $hostinfo{'hardware'} ? $hostinfo{'hardware'} : 'Unknown';
+    my $environment = $hostinfo{'environment'} ? $hostinfo{'environment'} : 'Unknown';
+    my $cpu = $cpuinfo{'model'} ? $cpuinfo{'model'} : 'Unknown';
+    my $cores = $cpuinfo{'numcores'} ? $cpuinfo{'numcores'} : 'Unknown';
+
+    print <<END_OF_TEMPLATE
+==== BEGIN COPY BELOW ====
+--------------------------------------
+   1. cPanel Version(s) Affected
+--------------------------------------
+
+$version
+
+--------------------------------------
+   2. System Information 
+--------------------------------------
+
+OS: $os
+Kernel: $kernel
+Arch: $arch
+Environment: $environment
+CPU: $cpu w/ $cores core(s)
+
+--------------------------------------
+   3. Ticket Number(s)
+--------------------------------------
+
+
+
+--------------------------------------
+   4. Brief Description
+--------------------------------------
+
+
+
+--------------------------------------
+   5. Step by Step Instructions
+--------------------------------------
+
+
+
+--------------------------------------
+   6. Detailed Explanation
+--------------------------------------
+
+
+
+--------------------------------------
+   7. Suggested Resolution
+--------------------------------------
+
+
+
+--------------------------------------
+   8. Known work around(s)
+--------------------------------------
+
+
+==== END COPY ABOVE ====
+END_OF_TEMPLATE
+}
 
 1;
