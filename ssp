@@ -35,7 +35,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.91';
+my $version = '4.99.92';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -214,6 +214,7 @@ check_for_11_30_scripts_not_a_symlink();
 check_for_hooks_from_var_cpanel_hooks_yaml();
 check_mysqld_warnings_errors();
 check_mysql_config();
+check_for_extra_mysql_config_files();
 check_for_C_compiler_optimization();
 check_perl_version_less_than_588();
 check_for_low_ulimit_for_root();
@@ -248,6 +249,7 @@ check_for_immutable_dirs();
 check_for_cloudlinux_mysql_gov();
 check_cpanel_config_for_low_maxmem();
 check_pure_ftpd_conf_for_upload_script_and_dead();    #must come after check_cpanel_config_for_low_maxmem
+check_cpanel_config_for_bad_root();
 check_for_PERL5LIB_env_var();
 check_for_disabled_services();
 check_for_cpbackup_exclude_everything();
@@ -261,6 +263,7 @@ check_for_mysql_root_pass_with_single_quote();
 check_for_jailshell_additional_mounts_trailing_slash();
 check_for_allow_query_localhost();
 check_for_nocloudlinux_touchfile();
+check_for_mysql_upgrade_touchfile();
 check_for_phphandler_and_opcode_caching_incompatibility();
 check_for_invalid_HOMEDIR();
 check_for_unsupported_options_in_phpini(); # case 75397
@@ -418,7 +421,7 @@ sub check_for_dnsonly {
         check_bash_history_for_certain_commands();
         check_roots_cron_for_certain_commands();
         check_for_PERL5LIB_env_var();
-
+        check_cpanel_config_for_bad_root();
         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
         check_etc_hosts_sanity();
         check_for_C_compiler_optimization();
@@ -2633,17 +2636,15 @@ sub check_awstats_permissions {
 
 sub check_var_cpanel_users_files_ownership {
     my $var_cpanel_users = '/var/cpanel/users';
-
-    my @files;
-    if ( -d $var_cpanel_users ) {
-        opendir( my $dir_fh, $var_cpanel_users );
-        @files = grep { !m/^(?:\.\.?|root|system|nobody)$/ } readdir $dir_fh;
-        closedir $dir_fh;
-    }
+    return if !-d $var_cpanel_users;
+    return unless opendir( my $dir_fh, $var_cpanel_users );
+    my @files = grep { !m/^(?:\.\.?|root|system|nobody)$/ } readdir $dir_fh;
+    closedir $dir_fh;
 
     my $group_root_files;
     for my $file (@files) {
         next if ( $file !~ /^[a-z0-9]+$/ );
+        next if ( $file =~ /^cp[0-9]{7,8}[a-z]{6}$/ ); # ticket system creates temporary user in cp12345678abcdef format, ignore these
         my $gid = ( stat( '/var/cpanel/users/' . $file ) )[5];
         if ( $gid == 0 ) {
             $group_root_files .= " $file";
@@ -3756,7 +3757,9 @@ sub check_etc_hosts_sanity {
 }
 
 sub check_for_empty_or_missing_files {
-    opendir( my $dir_fh, '/var/cpanel/users' );
+    my $var_cpanel_users = '/var/cpanel/users';
+    return if !-d $var_cpanel_users;
+    return unless opendir( my $dir_fh, $var_cpanel_users );
     my @dir_contents = grep { !/^(\.\.?|cp\d+[a-z]+)$/ } readdir $dir_fh;
     closedir $dir_fh;
 
@@ -3902,6 +3905,26 @@ sub check_mysql_config {
             }
         }
     }
+}
+
+sub check_for_extra_mysql_config_files {
+    # It's silly how many locations mysqld looks for a configuration file.
+    # These locations are reported by mysqld --help and by looking through /usr/bin/mysqld_safe code
+    my @extra_locations = qw(
+        /etc/mysql/my.cnf
+        /usr/my.cnf
+        /usr/etc/my.cnf
+        /var/lib/mysql/my.cnf
+    );
+    my @found_locations = ();
+    for my $loc ( @extra_locations ) {
+        push @found_locations, $loc if -f $loc;
+    }
+
+    return if ! @found_locations;
+    print_warn('MySQL - extra my.cnf files found: ');
+    print_warning('[ ' . join(" ", @found_locations) . ' ]');
+    print_warning("\t " . '\_ These may replace or be merged with /etc/my.cnf settings!');
 }
 
 sub check_for_C_compiler_optimization {
@@ -5089,6 +5112,13 @@ sub check_for_nocloudlinux_touchfile {
     if ( -e '/var/cpanel/nocloudlinux' ) {
         print_warn('/var/cpanel/nocloudlinux: ');
         print_warning('exists! CloudLinux cannot be installed when this file is present.');
+    }
+}
+
+sub check_for_mysql_upgrade_touchfile { # Can be removed after case 113349 is resolved in all supported tiers.
+    if ( -e '/var/cpanel/mysql_upgrade_in_progress' ) {
+        print_warn('/var/cpanel/mysql_upgrade_in_progress: ');
+        print_warning('exists! See case 113349.');
     }
 }
 
@@ -7068,6 +7098,15 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
                 print_warning("CallUploadScript set to yes, and /var/run/pure-ftpd.upload.pipe does not seem to have anything listening on it. [might be broken ConfigServer's cxs ( http://configserver.com/cp/cxs.html )]");
             }
         }
+    }
+}
+
+sub check_cpanel_config_for_bad_root {
+    if ( $cpconf{'root'} && $cpconf{'root'} ne '/usr/local/cpanel' ) { # The default is used if it is missing, so only need to check if it is set
+        print_warn("/var/cpanel/cpanel.config: ");
+        print_warning("root set to \"" . $cpconf{'root'} . "\"");
+        print_warning("\t \\_ Default is \"/usr/local/cpanel\"");
+        print_warning("\t \\_ An invalid root setting can cause WHM to fail to start.  See ticket 5463121.");
     }
 }
 
