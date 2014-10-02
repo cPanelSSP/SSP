@@ -2524,6 +2524,7 @@ sub check_for_non_default_permissions {
         '/var/cpanel/datastore'        => [ ['0755'], '', '', '' ],
         '/var/cpanel/features'         => [ ['0755'], '', '', '' ],
         '/var/cpanel/locale'           => [ ['0755'], '', '', '' ],
+        '/var/cpanel/locale/themes'    => [ ['0755'], '', '', '' ],
         '/var/cpanel/resellers'        => [ ['0644'], '', '', '' ],
         '/var/lib'                     => [ ['0755'], '', '', '' ],
         '/var/lib/mysql'               => [ ['0751'], 'mysql', 'mysql', '' ],
