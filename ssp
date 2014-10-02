@@ -13,6 +13,13 @@ use Storable;
 use POSIX;
 use Time::Local;
 use IPC::Open3;
+use Cwd qw(abs_path);
+use Getopt::Long;
+
+my ( $bugreport );
+my $opts = Getopt::Long::GetOptions(
+    'bugreport' => \$bugreport
+);
 
 if ( !-d '/usr/local/cpanel' ) {
     die '/usr/local/cpanel not found';
@@ -28,7 +35,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.87';
+my $version = '4.99.92';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -48,6 +55,7 @@ my @local_ipaddrs_list    = get_local_ipaddrs();
 my @process_list          = get_process_list();
 my %process; &get_process_pid_hash(\%process);
 my %port; &get_lsof_port_hash(\%port);
+my %ipcs; &get_ipcs_hash(\%ipcs);
 my %hostinfo              = get_hostinfo();
 my %cpuinfo               = get_cpuinfo();
 my %mysql_conf; &get_mysql_conf(\%mysql_conf);
@@ -97,6 +105,11 @@ my $crit_buffer; # Critical output to be printed at the end
 ##  END GLOBALS     ##
 ######################
 
+if ($bugreport) {
+    print_bug_report();
+    exit;
+}
+
 
 print "\n";
 for ( 1 .. 3 ) {
@@ -106,6 +119,7 @@ for ( 1 .. 3 ) {
 ## [CRIT] -- only stuff that we should check as early as possible
 check_for_hacked_server_touchfile();
 check_for_multiple_tech_logins();
+check_for_lve_environment();
 
 ## [INFO]
 print "\n";
@@ -143,17 +157,18 @@ check_valid_upcp();
 check_interface_lo();
 check_cpanelconfig_filetype();
 check_cpanelsync_exclude();
-check_for_lve_environment();
 check_for_rawopts();
 check_for_rawenv();
 check_for_custom_opt_mods();
 check_for_local_apache_templates();
+check_for_missing_account_suspensions_conf();
 check_for_local_makecpphp_template();
 check_for_custom_apache_includes();
 check_for_tomcatoptions();
 check_for_sneaky_htaccess();
 check_perl_sanity();
 check_for_non_default_permissions();
+check_for_stale_lockfiles();
 check_awstats_permissions();
 check_var_cpanel_users_files_ownership();
 check_root_suspended();
@@ -199,6 +214,7 @@ check_for_11_30_scripts_not_a_symlink();
 check_for_hooks_from_var_cpanel_hooks_yaml();
 check_mysqld_warnings_errors();
 check_mysql_config();
+check_for_extra_mysql_config_files();
 check_for_C_compiler_optimization();
 check_perl_version_less_than_588();
 check_for_low_ulimit_for_root();
@@ -233,6 +249,7 @@ check_for_immutable_dirs();
 check_for_cloudlinux_mysql_gov();
 check_cpanel_config_for_low_maxmem();
 check_pure_ftpd_conf_for_upload_script_and_dead();    #must come after check_cpanel_config_for_low_maxmem
+check_cpanel_config_for_bad_root();
 check_for_PERL5LIB_env_var();
 check_for_disabled_services();
 check_for_cpbackup_exclude_everything();
@@ -246,6 +263,7 @@ check_for_mysql_root_pass_with_single_quote();
 check_for_jailshell_additional_mounts_trailing_slash();
 check_for_allow_query_localhost();
 check_for_nocloudlinux_touchfile();
+check_for_mysql_upgrade_touchfile();
 check_for_phphandler_and_opcode_caching_incompatibility();
 check_for_invalid_HOMEDIR();
 check_for_unsupported_options_in_phpini(); # case 75397
@@ -308,6 +326,7 @@ check_for_usr_local_mis();
 
 # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
 check_for_unsupported_php();                                    # Extreme care!
+check_for_bash_secadv_20140924();                               # advisory
 check_for_UMBREON_rootkit();                                    # malware
 check_for_jynx2_rootkit();                                      # malware
 check_for_cdorked_A();                                          # malware
@@ -322,6 +341,7 @@ check_sha1_sigs_ssh_add();                                      # malware
 check_sha1_sigs_sshd();                                         # malware
 check_for_ebury_ssh_G();                                        # malware
 check_for_ebury_ssh_banner();                                   # malware
+check_for_ebury_ssh_shmem();                                    # malware
 check_for_ebury_root_file();                                    # malware
 check_for_bg_botnet();                                          # malware
 
@@ -342,6 +362,7 @@ check_for_percona_rpms();
 check_for_duplicate_rpms();
 check_for_better_linux();
 check_for_kernel_headers_rpm();
+check_for_broken_rpm();
 
 print_info2('Done.');
 
@@ -361,6 +382,7 @@ sub check_for_dnsonly {
         ## [CRIT] -- only stuff that we should check as early as possible
         check_for_hacked_server_touchfile();
         check_for_multiple_tech_logins();
+        check_for_lve_environment();
 
         ## [INFO]
         print_hostname();
@@ -381,7 +403,6 @@ sub check_for_dnsonly {
         check_interface_lo();
         check_cpanelconfig_filetype();
         check_cpanelsync_exclude();
-        check_for_lve_environment();
         check_perl_sanity();
         check_for_non_default_permissions();
         check_limitsconf();
@@ -400,7 +421,7 @@ sub check_for_dnsonly {
         check_bash_history_for_certain_commands();
         check_roots_cron_for_certain_commands();
         check_for_PERL5LIB_env_var();
-
+        check_cpanel_config_for_bad_root();
         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
         check_etc_hosts_sanity();
         check_for_C_compiler_optimization();
@@ -429,12 +450,10 @@ sub check_for_dnsonly {
         check_for_symantec();
 
         ## [CRIT]
-        check_for_openssl_heartbleed_bug();
-        check_for_openssl_secadv_20140605();
+        check_for_bash_secadv_20140924();                               # advisory
         check_for_UMBREON_rootkit();                                    # malware
         check_for_jynx2_rootkit();                                      # malware
         check_for_libkeyutils_filenames();                              # malware
-#        check_for_unowned_libkeyutils_files($libkeyutils_files_ref);    # malware
         check_sha1_sigs_libkeyutils($libkeyutils_files_ref);            # malware
         check_sha1_sigs_httpd();                                        # malware
         check_sha1_sigs_named();                                        # malware
@@ -443,8 +462,17 @@ sub check_for_dnsonly {
         check_sha1_sigs_sshd();                                         # malware
         check_for_ebury_ssh_G();                                        # malware
         check_for_ebury_ssh_banner();                                   # malware
+        check_for_ebury_ssh_shmem();                                    # malware
         check_for_ebury_root_file();                                    # malware
         check_for_bg_botnet();                                          # malware
+
+        # These are run closer to the end since it has the potential to take the longest due to RPM usage
+        build_rpm_list();
+        my $openssl_rpm_changelog = get_openssl_rpm_changelog();
+
+        # These require build_rpm_list() to have been run, so that @rpm_list is populated
+        check_for_openssl_heartbleed_bug();
+        check_for_openssl_secadv_20140605();
 
         print_info2('Done.');
 
@@ -500,9 +528,11 @@ sub version_cmp { # should only be used by version_compare()
 
 sub version_compare {
     # example: return if version_compare($ver_string, qw( >= 1.2.3.3 ));
-    # Must be a four-digit version separated by periods.
+    # Must be no more than four version numbers separated by periods.
     my ($ver1, $mode, $ver2) = @_;
-  # Shamelessly copied the comparison logic out of Cpanel::Version::Compare
+    return if ( $ver1 =~ /[^\.0-9]/ );
+    return if ( $ver2 =~ /[^\.0-9]/ );
+    # Shamelessly copied the comparison logic out of Cpanel::Version::Compare
     my %modes = (
         '>' => sub {
               return if $_[0] eq $_[1];
@@ -542,13 +572,13 @@ sub timed_run { # Borrowed from Cpanel::SafeRun::Timed and modified
     open( my $save_stderr_fh, '>&STDERR' );
     open( STDERR, '>', '/dev/null' );
 
-    my $output = undef;
+    my $output = ""; # In the event of time-out or failure, return empty string instead of undef.
     my $complete = 0;
     my $pid;
     my $fh;    # Case 63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
     eval {
         local $SIG{'__DIE__'} = 'DEFAULT';
-        local $SIG{'ALRM'} = sub { $output = undef; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
+        local $SIG{'ALRM'} = sub { $output = ""; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
         alarm($timer);
         if ( $pid = open( $fh, '-|' ) ) {
             local $/;
@@ -563,7 +593,7 @@ sub timed_run { # Borrowed from Cpanel::SafeRun::Timed and modified
             warn 'Error while executing: [' . join( ' ', @PROGA ) . ']: ' . $!;
             alarm(0);
             open( STDERR, '>&=' . fileno($save_stderr_fh) );
-            return;
+            return "";
         }
         $complete = 1;
         alarm 0;
@@ -586,13 +616,13 @@ sub timed_run_trap_stderr { # Borrowed from Cpanel::SafeRun::Timed and modified
     open( my $save_stderr_fh, '>&STDERR' );
     open( STDERR, '>', '/dev/null' );
 
-    my $output = undef;
+    my $output = ""; # In the event of time-out or failure, return empty string instead of undef.
     my $complete = 0;
     my $pid;
     my $fh;    # Case 63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
     eval {
         local $SIG{'__DIE__'} = 'DEFAULT';
-        local $SIG{'ALRM'} = sub { $output = undef; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
+        local $SIG{'ALRM'} = sub { $output = ""; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
         alarm($timer);
         if ( $pid = open( $fh, '-|' ) ) {
             local $/;
@@ -608,7 +638,7 @@ sub timed_run_trap_stderr { # Borrowed from Cpanel::SafeRun::Timed and modified
             warn 'Error while executing: [' . join( ' ', @PROGA ) . ']: ' . $!;
             alarm(0);
             open( STDERR, '>&=' . fileno($save_stderr_fh) );
-            return;
+            return "";
         }
         $complete = 1;
         alarm 0;
@@ -723,7 +753,10 @@ sub print_tip {
         'System backups are not uploaded via FTP by default, requires manual config. See http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/SystemBackups',
         '$PATH may differ when executing something via cron rather than the command line. See ticket 4419531',
         '"failed to open scan directory /var/spool/exim/scan/[...]: Too many links" could mean a directory has reached limit of 32,000 files/dirs',
-        'If innodb_force_recovery is enabled in the MySQL configuration, this can sometimes prevent mysqldump from working (see ticket 5193581).'
+        'If innodb_force_recovery is enabled in the MySQL configuration, this can sometimes prevent mysqldump from working (see ticket 5193581).',
+        '"Spawned \'ossec-dbd\' with \'/sbin/service restart ossec-hids\'" is from ASL (Atomic Secured Linux). Have customer contact ASL Support if necessary.',
+        'You can run SSP with the --bugreport option to print a pre-filled template for submitting a WHM/cPanel bug report.'
+
     );
 
     my $num  = int rand scalar @tips;
@@ -797,6 +830,32 @@ sub get_lsof_port_hash ($) {
     }
 }
 
+sub get_ipcs_hash ($) {
+    my ($href) = @_;
+    my $header = 0;
+    # For now, all we need is shared memory segment owner and creator-pid, but the data structure is extensible.
+    # ipcs -m -p
+    #
+    #------ Shared Memory Creator/Last-op --------
+    #shmid      owner      cpid       lpid
+    #2228224    root       992        992
+    #2588673    root       1309       1315
+    #2195458    root       985        985
+    #2621443    root       1309       1315
+    for ( split /\n/, timed_run( 0, 'ipcs', '-m', '-p' ) ) {
+        if ( $header == 0 ) {
+            $header = 1 if m/^ shmid \s+ owner \s+ cpid \s+ lpid \s* $/ix;
+            next;
+        }
+        my @ipcs = split(/\s+/, $_, 5);
+        push @{${$href}{$ipcs[1]}{'mp'}}, { # Key by owner, type 'mp' (-m -p output)
+            'shmid' => $ipcs[0],
+            'cpid' => $ipcs[2],
+            'lpid' => $ipcs[3]
+        };
+    }
+}
+
 sub get_mysql_conf () {
     my ($href) = @_;
     my $lines = 0;
@@ -863,7 +922,7 @@ sub get_cpuinfo {
             $line =~ s/\(R\)//g;
             $line =~ s/\(tm\)//g;
             $line =~ s/\s{2,}/ /;
-            $line =~ s/ \@/\@/;
+            $line =~ s/\s*\@/ \@/;
             $cpuinfos{'model'} = $line;
             $cpuinfos{'numcores'}++;
         }
@@ -983,6 +1042,9 @@ sub check_for_multiple_tech_logins {
     #NAME     LINE         TIME             COMMENT
     #root     pts/0        2014-07-29 07:24 (192.168.130.1)
 
+    # we can sometimes get additional text after the IP or hostname
+    #root     pts/2        2014-08-07 07:17 (208.74.121.102:S.0)
+
     my $who = '/usr/bin/who';
     return if ! -x $who;
 
@@ -996,8 +1058,8 @@ sub check_for_multiple_tech_logins {
             next;
         }
         if ( $line =~ m{ \((.+)\)\Z }xms ) {
-            if ($1 =~ m{ \A (.*\.)?(cptxoffice\.net|cloudlinux\.com|litespeedtech.com) \z }xms ||
-                $1 =~ m{ \A (208\.74\.12[0-7]\.\d+|69\.175\.92\.(4[89]|5[0-9]|6[0-4])|69\.10\.42\.69) \z }xms ) {
+            if ($1 =~ m{ \A (.*\.)?(cptxoffice\.net|cloudlinux\.com|litespeedtech.com)(:|$) }xms ||
+                $1 =~ m{ \A (208\.74\.12[0-7]\.\d+|69\.175\.92\.(4[89]|5[0-9]|6[0-4])|69\.10\.42\.69)(:|$) }xms ) {
                 push (@tech_logins, $line);
                 $num_logins++;
             }
@@ -1012,6 +1074,37 @@ sub check_for_multiple_tech_logins {
     print_critical($header) if $header;
     print_critical(join("\n",@tech_logins));
     print_critical();
+}
+
+sub check_for_lve_environment {
+
+    # pam_lve 0.2 prints this after su or sudo:
+    #
+    # # /bin/su -
+    # Password:
+    # ***************************************************************************
+    # *                                                                         *
+    # *             !!!!  WARNING: YOU ARE INSIDE LVE !!!!                      *
+    # *IF YOU RESTART ANY SERVICES STABILITY OF YOUR SYSTEM WILL BE COMPROMIZED *
+    # *        CHANGE UID OF THE USER YOU ARE USING TO SU/SUDO                  *
+    # *                             MORE INFO:                                  *
+    # *http://www.cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php*
+    # *                                                                         *
+    # ***************************************************************************
+
+    # pam_lve 0.3 won't put wheel users in an LVE after su or sudo:
+    # http://cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php
+
+    if ( $hostinfo{'kernel'} =~ /\.lve/ and -x '/usr/sbin/lveps' ) {
+        my $lve_check = `/usr/sbin/lveps -p | grep " $$ "`;
+        if ($lve_check) {
+            print_critical();
+            print_crit(" You are inside a CloudLinux LVE - DO *NOT* RESTART ANY SERVICES!\n");
+            print_critical("          \\_ The pam_lve configuration may not be excluding the wheel group, or your ssh login user was not in the wheel group.");
+            print_critical("          \\_ http://docs.cloudlinux.com/index.html?lve_pam_module.html");
+            print_critical();
+        }
+    }
 }
 
 sub get_lsws_version {
@@ -1048,11 +1141,8 @@ sub print_hostname {
     }
 }
 
-sub print_os {
+sub get_os_release {
     my $release_info;
-    my $os_info;
-    my $php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
-    my $php_selector_disabled = 0;
 
     if ( -e '/etc/redhat-release' ) {
         if ( open my $rr_fh, '<', '/etc/redhat-release' ) {
@@ -1061,11 +1151,19 @@ sub print_os {
             }
             close $rr_fh;
         }
-        $os_info = $release_info . " [$hostinfo{'environment'}]";
     }
     else {
-        $os_info = 'Unknown (no /etc/redhat-release)';
+        $release_info = 'Unknown (no /etc/redhat-release)';
     }
+
+    return $release_info
+}
+
+sub print_os {
+    my $release_info = get_os_release();
+    my $os_info = $release_info . " [$hostinfo{'environment'}]";
+    my $php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
+    my $php_selector_disabled = 0;
 
     if ( $release_info and $release_info =~ /cloudlinux/i ) {
         $is_cloudlinux = 1;
@@ -1293,7 +1391,7 @@ sub check_for_clustering {
     my $cluster_dir = '/var/cpanel/cluster/root/config';
     my @dir_contents;
     my @cluster_members;
-    my ( $cluster_member_ipaddr, $cluster_member_hostname, $cluster_member_role );
+    my ( $cluster_member, $cluster_member_hostname, $cluster_member_role );
 
     if ( -d $cluster_dir ) {
         opendir( my $dir_fh, $cluster_dir );
@@ -1306,10 +1404,10 @@ sub check_for_clustering {
     for my $dirent (@dir_contents) {
 
         # only active cluster members have -dnsrole files
-        if ( $dirent =~ m{ \A (\d+\.\d+\.\d+\.\d+)-dnsrole \z }xms ) {
-            $cluster_member_ipaddr = $1;
+        if ( $dirent =~ m{ \A (.+)-dnsrole \z }xms ) {
+            $cluster_member = $1;
 
-            if ( open my $file_fh, '<', "${cluster_member_ipaddr}.cache" ) {
+            if ( open my $file_fh, '<', "${cluster_member}.cache" ) {
                 my $cache_ref;
                 eval 'local $SIG{__DIE__}; local $SIG{__WARN__}; $cache_ref = Storable::fd_retrieve($file_fh);';    # from upcp.static
                 close $file_fh;
@@ -1325,8 +1423,11 @@ sub check_for_clustering {
             if ( !$cluster_member_hostname ) {
                 $cluster_member_hostname = '?';
             }
+            if ( ${cluster_member} =~ m{ \A (vps\.net|softlayer) \z}xmsi ) {
+                $cluster_member_hostname = '';
+            }
 
-            if ( open my $file_fh, '<', "${cluster_member_ipaddr}-dnsrole" ) {
+            if ( open my $file_fh, '<', "${cluster_member}-dnsrole" ) {
                 while (<$file_fh>) {
                     $cluster_member_role = $_;
                 }
@@ -1336,7 +1437,7 @@ sub check_for_clustering {
                 $cluster_member_role = '?';
             }
 
-            push @cluster_members, $cluster_member_hostname . '_SSP_' . $cluster_member_ipaddr . '_SSP_' . "[${cluster_member_role}]";
+            push @cluster_members, $cluster_member_hostname . '_SSP_' . $cluster_member . '_SSP_' . "[${cluster_member_role}]";
         }
     }
 
@@ -1451,7 +1552,11 @@ sub print_apache_info {
 
 sub print_php_configuration {
     my $phpconf = '/usr/local/apache/conf/php.conf.yaml';
-    return if !-f $phpconf;
+    if (!-f $phpconf) {
+        print_info('PHP: ');
+        print_warning($phpconf . " missing.  PHP checks will be skipped.");
+        return;
+    }
 
     open my $phpconf_fh, '<', $phpconf;
     while (<$phpconf_fh>) {
@@ -1667,21 +1772,43 @@ sub print_mysql_version {
 
 sub print_backups_info {
     my %new = ();
+    my %new_dest = ();
     my %old = ();
     my ( $new_backups_cron, $new_backups_status ) = ( 0, 'No Config' );
     my ( $old_backups_cron, $old_backups_status ) = ( 0, 'No Config' );
     my $warning = 0;
+    my $new_backup_dir = '/var/cpanel/backups/';
+    my $new_backup_config = $new_backup_dir . 'config';
+    my $old_backup_config = '/etc/cpbackup.conf';
 
-    if ( -f '/var/cpanel/backups/config' && open( my $backupconf_fh, '<', '/var/cpanel/backups/config' ) ) {
+    if ( -f $new_backup_config && open( my $backupconf_fh, '<', $new_backup_config ) ) {
         local $/ = undef;
         %new = map { ( split( /:\s/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($backupconf_fh) );
         close $backupconf_fh;
     }
 
-    if ( -f '/etc/cpbackup.conf' && open( my $backupconf_fh, '<', '/etc/cpbackup.conf' ) ) {
+    if ( -f $old_backup_config && open( my $backupconf_fh, '<', $old_backup_config ) ) {
         local $/ = undef;
         %old = map { ( split( /\s/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($backupconf_fh) );
         close $backupconf_fh;
+    }
+
+    if ( defined($new{'BACKUPENABLE'}) && $new{'BACKUPENABLE'} =~ /yes/ ) {
+        my @dir_contents = ();
+        if ( opendir( my $dir_fh, $new_backup_dir ) ) {
+            @dir_contents = readdir $dir_fh;
+            closedir $dir_fh;
+        }
+
+        for my $dest (@dir_contents) {
+            if ( $dest =~ m{ \.backup_destination \z }xms ) {
+                if ( open( my $destconf_fh, '<', $new_backup_dir . $dest ) ) {
+                    local $/ = undef;
+                    %{$new_dest{$dest}} = map { ( split( /:\s/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($destconf_fh) );
+                    close $destconf_fh;
+                }
+            }
+        }
     }
 
     if ( ( defined($old{'BACKUPENABLE'}) and $old{'BACKUPENABLE'} eq 'yes' ) or ( defined($new{'BACKUPENABLE'}) and $new{'BACKUPENABLE'} =~ /yes/ ) ) {
@@ -1767,12 +1894,28 @@ sub print_backups_info {
         }
     }
 
+    if ( keys(%new_dest) ) {
+        if ( defined($new{'KEEPLOCAL'}) && $new{'KEEPLOCAL'} =~ /1/ ) {
+            $new_backups_status .= '/RetainLocal';
+        }
+        else {
+            $new_backups_status .= '/NoRetainLocal';
+        }
+    }
+
     print_info('Backups: ');
     if ( $warning ) {
         print_warning("[New: $new_backups_status] [Legacy: $old_backups_status]");
     }
     else {
         print_normal("[New: $new_backups_status] [Legacy: $old_backups_status]");
+    }
+
+    for my $dest ( keys(%new_dest) ) {
+        my $type = $new_dest{$dest}->{'type'} ? $new_dest{$dest}{'type'} : 'UNKNOWN';;
+        my $disabled = defined($new_dest{$dest}{'disabled'}) ? $new_dest{$dest}{'disabled'} : 'UNKNOWN';
+        my $name = $new_dest{$dest}{'name'} ? $new_dest{$dest}{'name'} : 'UNKNOWN';
+        print_normal("\t\t\\_ Remote dest: [Type: " . $type . "] [Disabled: " . $disabled . "] [Name: " . $name . "]")
     }
 }
 
@@ -2067,37 +2210,6 @@ sub check_cpanelsync_exclude {
     }
 }
 
-sub check_for_lve_environment {
-
-    # pam_lve 0.2 prints this after su or sudo:
-    #
-    # # /bin/su -
-    # Password:
-    # ***************************************************************************
-    # *                                                                         *
-    # *             !!!!  WARNING: YOU ARE INSIDE LVE !!!!                      *
-    # *IF YOU RESTART ANY SERVICES STABILITY OF YOUR SYSTEM WILL BE COMPROMIZED *
-    # *        CHANGE UID OF THE USER YOU ARE USING TO SU/SUDO                  *
-    # *                             MORE INFO:                                  *
-    # *http://www.cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php*
-    # *                                                                         *
-    # ***************************************************************************
-
-    # pam_lve 0.3 won't put wheel users in an LVE after su or sudo:
-    # http://cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php
-
-    if ( $hostinfo{'kernel'} =~ /\.lve/ and -x '/usr/sbin/lveps' ) {
-        my $lve_check = `/usr/sbin/lveps -p | grep " $$ "`;
-        if ($lve_check) {
-            print "\n";
-            print_warning_underline(' !! YOU ARE IN AN LVE - DO *NOT* RESTART ANY SERVICES !!');
-            print_warning_underline(' !! YOU ARE IN AN LVE - DO *NOT* RESTART ANY SERVICES !!');
-            print_warning_underline(' !! YOU ARE IN AN LVE - DO *NOT* RESTART ANY SERVICES !!');
-            print "\n";
-        }
-    }
-}
-
 sub check_for_rawopts {
     my $rawopts_dir = '/var/cpanel/easy/apache/rawopts';
     my @dir_contents;
@@ -2166,25 +2278,74 @@ sub find_custom_opt_mods {
 }
 
 sub check_for_local_apache_templates {
-    my $apache2_template_dir = '/var/cpanel/templates/apache2';
-    my @dir_contents;
+    my @templatedirs = qw(
+        /var/cpanel/templates/apache2_4
+        /var/cpanel/templates/apache2_2
+        /var/cpanel/templates/apache2_0
+        /var/cpanel/templates/apache2
+        /var/cpanel/templates/apache1_3
+        /var/cpanel/templates/apache1
+    ); # Order is somewhat important above for cosmetic reasons, due to symlinks
+    my %templatedirs = ();
+    for my $templatedir (@templatedirs) { # Canonicalize symlinks so we only check a real path once, but store original name for printing.
+        next if !-d $templatedir;
+        $templatedirs{abs_path($templatedir)} = $templatedir;
+    }
+    for my $templatedir (sort(keys(%templatedirs))) {
+        my @dir_contents = ();
+        if ( opendir( my $dir_fh, $templatedir ) ) {
+            @dir_contents = readdir $dir_fh;
+            closedir $dir_fh;
+        }
 
-    if ( -d $apache2_template_dir ) {
-        opendir( my $dir_fh, $apache2_template_dir );
-        @dir_contents = readdir $dir_fh;
-        closedir $dir_fh;
+        my $templates = undef;
+        for my $template (@dir_contents) {
+            if ( $template =~ m{ \.local \z }xms ) {
+                $templates .= " $template";
+            }
+        }
+        if ($templates) {
+            print_warn('Custom templates (' . $templatedirs{$templatedir} . '): ');
+            print_warning($templates);
+        }
+    }
+}
+
+sub check_for_missing_account_suspensions_conf {
+    return if ! -f '/usr/local/apache/conf/includes/account_suspensions.conf';
+    my @templates = qw(
+        /var/cpanel/templates/apache2_4/main.local
+        /var/cpanel/templates/apache2_2/main.local
+        /var/cpanel/templates/apache2_0/main.local
+        /var/cpanel/templates/apache2/main.local
+        /var/cpanel/templates/apache1_3/main.local
+        /var/cpanel/templates/apache1/main.local
+    ); # Order is somewhat important above for cosmetic reasons, due to symlinks
+
+    my %templates = ();
+    for my $template (@templates) { # Canonicalize symlinks so we only check a real path once, but store original name for printing.
+        next if !-f $template;
+        $templates{abs_path($template)}[0] = $template;
     }
 
-    my $templates;
-    for my $template (@dir_contents) {
-        if ( $template =~ m{ \.local \z }xms ) {
-            $templates .= " $template";
+    for my $template ( sort(keys(%templates)) ) {
+        next if !-f $template;
+        $templates{$template}[1] = 0;
+        if ( open my $template_fh, '<', $template ) {
+            while (<$template_fh>) {
+                if (m{ \A \s* Include \s+ \"? /usr/local/apache/conf/includes/account_suspensions.conf \"? }x) {
+                    $templates{$template}[1] = 1;
+                }
+            }
+            close $template_fh;
         }
     }
 
-    if ($templates) {
-        print_warn('Custom apache2 templates: ');
-        print_warning($templates);
+    for my $template (keys(%templates)) {
+        if (! $templates{$template}[1]) {
+            print_warn("Custom templates: ");
+            print_warning( $templates{$template}[0] . " is missing include for account_suspensions.conf!\n\t\\_ Use predefined \"03 - Suspensions Template Update\"");
+        }
     }
 }
 
@@ -2347,6 +2508,7 @@ sub check_for_non_default_permissions {
         '/usr/local'                   => [ ['0755'], '', '', '' ],
         '/usr/local/apache'            => [ ['0755'], '', '', '' ],
         '/usr/local/apache/bin/httpd'  => [ ['0755'], '', '', '' ],
+        '/usr/local/apache/domlogs'    => [ ['0711'], '', 'wheel', ' - If users can\'t access logs, stats won\'t process.  See ticket 5413079.' ],
         '/usr/local/bin'               => [ ['0755', '0711', '0555'], '', '', '' ],
         '/usr/local/cpanel'                                                             => [ ['0711'], '', 'wheel', '' ],
         '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'                          => [ ['0644'], '', 'wheel', '' ],
@@ -2437,6 +2599,25 @@ sub check_for_non_default_permissions {
     }
 }
 
+sub check_for_stale_lockfiles {
+    my %check = ( # '/path' => [ 'type', 'Additional info' ]; # type is pid, fcntl, touch, etc., for future use.
+        '/etc/digestshadow.lock'    => [ 'fcntl', 'Can prevent modifying system digestshadow file, check if active with lsof and MOVE ONLY IF STALE.' ],
+        '/etc/group.lock'           => [ 'fcntl', 'Can prevent modifying system group file, check if active with lsof and MOVE ONLY IF STALE.' ],
+        '/etc/gshadow.lock'         => [ 'fcntl', 'Can prevent modifying system gshadow file, check if active with lsof and MOVE ONLY IF STALE.' ],
+        '/etc/gtmp'                 => [ 'touch', 'Can prevent modifying system group file, check if active with lsof and MOVE ONLY IF STALE.' ],
+        '/etc/passwd.lock'          => [ 'fcntl', 'Can prevent modifying system passwd file, check if active with lsof and MOVE ONLY IF STALE.' ],
+        '/etc/ptmp'                 => [ 'touch', 'Can prevent modifying system passwd file, check if active with lsof and MOVE ONLY IF STALE. See ticket 5315853.' ],
+        '/etc/shadow.lock'          => [ 'fcntl', 'Can prevent modifying system shadow file, check if active with lsof and MOVE ONLY IF STALE.' ]
+    );
+
+    for my $resource ( sort keys %check ) {
+        if ( -e $resource ) {
+            print_warn('Lockfile exists: ');
+            print_warning($resource . ' (' . $check{$resource}[1] . ')');
+        }
+    }
+}
+
 sub check_awstats_permissions {
     ## if skipawstats doesn't exist, awstats is OFF
     return if ( ( exists $cpconf{'skipawstats'} and $cpconf{'skipawstats'} == 1 ) or ( not exists $cpconf{'skipawstats'} ));
@@ -2455,17 +2636,15 @@ sub check_awstats_permissions {
 
 sub check_var_cpanel_users_files_ownership {
     my $var_cpanel_users = '/var/cpanel/users';
-
-    my @files;
-    if ( -d $var_cpanel_users ) {
-        opendir( my $dir_fh, $var_cpanel_users );
-        @files = grep { !m/^(?:\.\.?|root|system|nobody)$/ } readdir $dir_fh;
-        closedir $dir_fh;
-    }
+    return if !-d $var_cpanel_users;
+    return unless opendir( my $dir_fh, $var_cpanel_users );
+    my @files = grep { !m/^(?:\.\.?|root|system|nobody)$/ } readdir $dir_fh;
+    closedir $dir_fh;
 
     my $group_root_files;
     for my $file (@files) {
         next if ( $file !~ /^[a-z0-9]+$/ );
+        next if ( $file =~ /^cp[0-9]{7,8}[a-z]{6}$/ ); # ticket system creates temporary user in cp12345678abcdef format, ignore these
         my $gid = ( stat( '/var/cpanel/users/' . $file ) )[5];
         if ( $gid == 0 ) {
             $group_root_files .= " $file";
@@ -3086,6 +3265,11 @@ sub check_php_libmysqlclient_mismatch {
             $mysql_shared_rpm_version      = $1 . $2;
             last;
         }
+        elsif ( $rpm =~ /^MySQL(\d\d)-shared/ ) {
+            $mysql_shared_rpm_version_orig = $rpm;
+            $mysql_shared_rpm_version      = $1;
+            last;
+        }
     }
 
     return if !$mysql_shared_rpm_version;
@@ -3128,12 +3312,13 @@ sub check_php_libmysqlclient_mismatch {
 
     ## Compare the linked libmysqlclient lib with the MySQL-shared rpm version
     ##
+    ## libmysqlclient.so.18 = MySQL-shared 5.6
     ## libmysqlclient.so.18 = MySQL-shared 5.5
     ## libmysqlclient.so.16 = MySQL-shared 5.1
     ## libmysqlclient.so.15 = MySQL-shared 5.0
 
     if ($php4_libmysqlclient_version) {
-        if ( $php4_libmysqlclient_version == 18 and $mysql_shared_rpm_version != 55 ) {
+        if ( $php4_libmysqlclient_version == 18 and !( $mysql_shared_rpm_version == 56 or $mysql_shared_rpm_version == 55 ) ) {
             $php4_mismatch = 1;
         }
         elsif ( $php4_libmysqlclient_version == 16 and $mysql_shared_rpm_version != 51 ) {
@@ -3150,7 +3335,7 @@ sub check_php_libmysqlclient_mismatch {
     }
 
     if ($php5_libmysqlclient_version) {
-        if ( $php5_libmysqlclient_version == 18 and $mysql_shared_rpm_version != 55 ) {
+        if ( $php5_libmysqlclient_version == 18 and !( $mysql_shared_rpm_version == 56 or $mysql_shared_rpm_version == 55 ) ) {
             $php5_mismatch = 1;
         }
         elsif ( $php5_libmysqlclient_version == 16 and $mysql_shared_rpm_version != 51 ) {
@@ -3217,8 +3402,9 @@ sub check_for_cpanel_files {
     my @files = qw(
       /usr/local/cpanel/cpanel
       /usr/local/cpanel/cpsrvd
-      /usr/local/cpanel/cpsrvd-ssl
     );
+
+    push @files, '/usr/local/cpanel/cpsrvd-ssl' if cpanel_version_is(qw( < 11.45.0.0 ));
 
     for my $file (@files) {
         if ( !-e $file ) {
@@ -3315,14 +3501,15 @@ sub check_roots_cron_for_certain_commands {
             makewhatis\.cron |
             maldet |
             modsecparse.pl |
-            prelink
+            prelink |
+            rpm
             ) $ }x); # Common false-positives to filter out entirely.
         chomp( my $checksum = timed_run( 0, 'md5sum', $cron ) );
         $checksum =~ s/\s.*//g;
         next if ( $checksum && $cron_ignore{$checksum} );
         if ( open my $cron_fh, '<', $cron ) {
             while (<$cron_fh>) {
-                if (m{ \A [^#]* (?:^|\s|\/)(rm|unlink|chmod|chown|chattr|kill|pkill|skill|tmpwatch)\s }x) {
+                if (m{ \A [^#]* (?:^|\s|\/)(rm|unlink|ch(?:mod|own|attr)|(?:p|s)?kill(?:all)?5?|tmpwatch)\s }x) {
                     $found{$cron}{$1} = 1;
                 }
             }
@@ -3491,10 +3678,8 @@ sub check_for_non_default_modsec_rules {
     return if ( $modsec_enabled == 0 );
 
     if ( -f $modsec2_conf ) {
-        ## On 11.32.5.9 with EA v3.14.13, default modsec2.conf is 650 bytes.
-        ## It's always been small in size.
         my $modsec2_conf_size     = ( stat($modsec2_conf) )[7];
-        my $modsec2_conf_max_size = 1447;
+        my $modsec2_conf_max_size = 1500;
         if ( $modsec2_conf_size > $modsec2_conf_max_size ) {
             print_warn('modsec: ');
             print_warning("$modsec2_conf is > $modsec2_conf_max_size bytes, may contain custom rules");
@@ -3567,12 +3752,14 @@ sub check_etc_hosts_sanity {
 
     if ( $hostname_entry == 0 ) {
         print_warn('/etc/hosts: ');
-        print_warning("no entry found for the server's hostname! [$hostname]");
+        print_warning("no entry found for the server's hostname! [$hostname] (Can break EA or Apache when mod_unique_id is enabled)");
     }
 }
 
 sub check_for_empty_or_missing_files {
-    opendir( my $dir_fh, '/var/cpanel/users' );
+    my $var_cpanel_users = '/var/cpanel/users';
+    return if !-d $var_cpanel_users;
+    return unless opendir( my $dir_fh, $var_cpanel_users );
     my @dir_contents = grep { !/^(\.\.?|cp\d+[a-z]+)$/ } readdir $dir_fh;
     closedir $dir_fh;
 
@@ -3718,6 +3905,26 @@ sub check_mysql_config {
             }
         }
     }
+}
+
+sub check_for_extra_mysql_config_files {
+    # It's silly how many locations mysqld looks for a configuration file.
+    # These locations are reported by mysqld --help and by looking through /usr/bin/mysqld_safe code
+    my @extra_locations = qw(
+        /etc/mysql/my.cnf
+        /usr/my.cnf
+        /usr/etc/my.cnf
+        /var/lib/mysql/my.cnf
+    );
+    my @found_locations = ();
+    for my $loc ( @extra_locations ) {
+        push @found_locations, $loc if -f $loc;
+    }
+
+    return if ! @found_locations;
+    print_warn('MySQL - extra my.cnf files found: ');
+    print_warning('[ ' . join(" ", @found_locations) . ' ]');
+    print_warning("\t " . '\_ These may replace or be merged with /etc/my.cnf settings!');
 }
 
 sub check_for_C_compiler_optimization {
@@ -3894,6 +4101,42 @@ sub check_for_kernel_headers_rpm {
         if ( @rpm_list && ! grep(/^kernel-headers-/, @rpm_list) ) {
             print_warn('kernel-headers RPM: ');
             print_warning('not found. This can cause problems with EA');
+        }
+    }
+}
+
+sub check_for_broken_rpm {
+    my %rpms = ( # 'rpm name' => [ ['check1', 'check2', ...], 'Additional info' ] # Check types should be ordered by dependency, first failure skips other checks for that RPM.
+        'cpp' => [ [ 'verify-fail' ], 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"']
+    );
+
+    my %rpm_checks = (
+        'missing-rpm' => [ 'Missing RPM', sub { # Only if care that the RPM is missing.
+            my $rpm = shift;
+            return 0 if ! @rpm_list;
+            return 0 if grep(/^${rpm}-/, @rpm_list);
+            return 1;
+        } ],
+        'verify-fail' => [ 'Verify Failed', sub { # Only checks if the RPM exists.
+            my $rpm = shift;
+            return 0 if ! @rpm_list;
+            return 0 if ! grep(/^${rpm}-/, @rpm_list);
+            my $output = timed_run(0, 'rpm', '-V', $rpm);
+            return 0 if $output eq "";
+            return 1 if $output =~ m{ \A missing }xms;
+            return 1 if $output =~ m{ \A ..5 }xms;
+            return 0;
+        } ]
+    );
+
+    for my $rpm ( sort keys %rpms ) {
+        for my $check ( @{$rpms{$rpm}[0]} ) {
+            if ( $rpm_checks{$check}[1]->( $rpm ) ) {
+                my $additional_info = $rpms{$rpm}[1] ? ( "(" . $rpms{$rpm}[1] . ")" ) : '';
+                print_warn('RPM check: ');
+                print_warning($rpm_checks{$check}[0] . " - [ " . $rpm . " ] " . $additional_info);
+                last;
+            }
         }
     }
 }
@@ -4333,6 +4576,7 @@ sub check_for_rpm_overrides {
                                   d56abe76c47853eceb706f0855e642a7
                                 | 89d631ef7c1d43475c20d7be7b7290ff
                                 | 600ff436e5939656a5645c6139cc0228
+                                | 657d59cc9627d30a95d0b84ef4245185
                                 ) \s }xms ) {
         $easy_is_default = 1;
     }
@@ -4871,6 +5115,13 @@ sub check_for_nocloudlinux_touchfile {
     }
 }
 
+sub check_for_mysql_upgrade_touchfile { # Can be removed after case 113349 is resolved in all supported tiers.
+    if ( -e '/var/cpanel/mysql_upgrade_in_progress' ) {
+        print_warn('/var/cpanel/mysql_upgrade_in_progress: ');
+        print_warning('exists! See case 113349.');
+    }
+}
+
 sub check_for_phphandler_and_opcode_caching_incompatibility {
     return if ( $php5handler && $php5handler ne 'suphp' );
 
@@ -5164,48 +5415,48 @@ sub check_for_processes_killed_by_lfd {
 }
 
 sub check_for_processes_killed_by_prm {
-    my $log  = '/usr/local/prm/log_prm';
-    return if !-e $log;
+    my @logfiles = qw( /usr/local/prm/prm_log /usr/local/prm/log_prm /usr/local/prm/logs/prm.log );
+    for my $log (@logfiles) {
+        next if -l $log;
+        next if !-f $log;
+        my $size = (stat($log))[7];
+        next if !$size;
+    
+        my $bytes_to_check = 10485760; # 10M
+        my $seek_position  = 0;
+        my $log_data = undef;
+        my @logs;
+        my $count = 0;
+        my @killed_by_prm = ();
 
-    my $size = (stat($log))[7];
-    return if !$size;
-
-    my $bytes_to_check = 10485760; # 10M
-    my $seek_position  = 0;
-    my $log_data;
-    my @logs;
-    my $count = 0;
-    my @killed_by_prm;
-
-    if ( $size > $bytes_to_check ) {
-        $seek_position = ( $size - $bytes_to_check );
-    }
-
-    open my $file_fh, '<', $log or return;
-    seek $file_fh, $seek_position, 0;
-    read $file_fh, $log_data, $bytes_to_check;
-    close $file_fh;
-
-    if ( $log_data =~ /\sKILLED\s/ ) {
-        @logs = split /\n/, $log_data;
-        undef $log_data;
-        @logs = reverse @logs;
-
-        for my $line (@logs) { 
-            if ( $line =~ /(\S+\s\d+\s\S+)\s(?:\S+)\s(?:\S+) proc pid:(?:\d+) \{user:(\S+) cmd:(\S+)\}.+(MAX_.+) KILLED/ ) {
-                push @killed_by_prm, "[$1] [user: $2] [cmd: $3] [$4]\n";
-                $count++;
-            }
-
-            last if $count >= 10;
+        if ( $size > $bytes_to_check ) {
+            $seek_position = ( $size - $bytes_to_check );
         }
-    }
 
-    if (@killed_by_prm) {
-        chomp @killed_by_prm;
-        print_warn("Last 10 processes killed by 3rd party software \"PRM\" (\"grep KILLED /usr/local/prm/log_prm\"):\n");
-        for my $killed_process (@killed_by_prm) {
-            print_magenta("\t \\_ $killed_process");
+        open my $file_fh, '<', $log or return;
+        seek $file_fh, $seek_position, 0;
+        read $file_fh, $log_data, $bytes_to_check;
+        close $file_fh;
+
+        if ( $log_data =~ /\sKILLED\s/ ) {
+            @logs = split /\n/, $log_data;
+            undef $log_data;
+            @logs = reverse @logs;
+    
+            for my $line (@logs) { 
+                if ( $line =~ /(\S+\s\d+\s\S+)\s(?:\S+)\s(?:\S+) proc pid:(?:\d+) \{user:(\S+) cmd:(\S+)\}.+(MAX_.+) KILLED/ ) {
+                    push @killed_by_prm, "[$1] [user: $2] [cmd: $3] [$4]";
+                    $count++;
+                }
+
+                last if $count >= 10;
+            }
+        }
+        if (@killed_by_prm) {
+            print_warn("Last 10 processes killed by 3rd party software \"PRM\" (\"grep KILLED " . $log . "\"):\n");
+            for my $killed_process (@killed_by_prm) {
+                print_magenta("\"\t \\_ $killed_process\"");
+            }
         }
     }
 }
@@ -5683,7 +5934,7 @@ sub check_for_openssl_heartbleed_bug {
     print_critical('Send customer this premade: OpenSSL Heartbleed Vulnerability - Discovery');
     print_critical('The following check was used: rpm -q --changelog openssl | grep \' CVE-2014-0160 \'');
     print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
-    print_critical('This check does NOT take corrupt rpm dbs into account, and CAN false positive if corrupt');
+    print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
     print_critical();
 }
 
@@ -5730,9 +5981,21 @@ sub check_for_openssl_secadv_20140605 {
     print_critical('CVE-2014-0224');
     print_critical('Send customer this premade: "OpenSSL advisory 2014-06-05 - Discovery"');
     print_critical('!! BEFORE SENDING PREMADE VERIFY THE MISSING CVE PATCHES WITH: rpm -q --changelog openssl | egrep \' CVE-201(0|4)-\'');
-    print_critical('This check does NOT take corrupt rpm dbs into account, and CAN false positive if corrupt');
+    print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
     print_critical();
 }
+
+sub check_for_bash_secadv_20140924 {
+    chomp( my $bash_output = timed_run( 0, 'env x=\'() { :;}; echo vulnerable\' bash -c ""' ) );
+    return if !( $bash_output =~ m{ vulnerable }xms );
+
+    print_critical();
+    print_crit('Installed \'bash\' shell is vulnerable to remote code injection.  Verify by running the following at a shell prompt, it should return "vulnerable":');
+    print_critical();
+    print_critical('    env x=\'() { :;}; echo vulnerable\' bash -c ""');
+    print_critical('Send customer this premade: "Bash advisory 2014-09-24 - Discovery"');
+    print_critical();
+};
 
 sub check_for_broken_mysqldump {
     my $md = '/usr/bin/mysqldump';
@@ -5807,7 +6070,7 @@ sub check_for_unsupported_php {
     }
     if ( $phpversion == 5 ) {
         return if ! $php5version;
-        return if version_compare( $php5version, '>=', $min_php5 );
+        return if ! version_compare( $php5version, '<', $min_php5 );
     }
     print_critical();
     print_crit('!! RUNNING A VERSION OF PHP THAT IS NO LONGER SUPPORTED BY EASYAPACHE !! ');
@@ -5865,6 +6128,8 @@ sub check_for_bg_botnet {
     # /tmp/moni.lock
     # /tmp/notify.file
     # /bin/ps, /bin/netstat, and /usr/sbin/lsof have also been found to be modified
+    # This one is causing some rare false-positives:
+    # /root/aa
     my @bg_files = qw(
         /boot/pro
         /boot/proh
@@ -5891,7 +6156,6 @@ sub check_for_bg_botnet {
         /etc/skysapdd
         /etc/xfsdx
         /etc/xfsdxd
-        /root/aa
         /usr/bin/.sshd
         /usr/bin/bsd-port/getty
         /usr/lib/libamplify.so
@@ -6664,6 +6928,27 @@ sub check_for_ebury_ssh_banner {
     }
 }
 
+sub check_for_ebury_ssh_shmem {
+    # As far as we know, sshd sholudn't be using shared memory at all, so any usage is a strong sign of ebury.
+    return if ! defined($ipcs{root}{mp});
+
+    for my $href ( @{$ipcs{root}{mp}} ) {
+        my $shmid = $href->{shmid};
+        my $cpid = $href->{cpid};
+        if ( $process{$cpid}{CMD} && $process{$cpid}{CMD} =~ m{ \A /usr/sbin/sshd \b }x ) {
+            print_critical();
+            print_crit('!! [ EBURY ] !! ');
+            print_critical('L1/L2 escalate this ticket to L3');
+            print_critical("\tShared memory segment created by sshd process exists:");
+            print_critical("\t\tsshd PID: " . $cpid);
+            print_critical("\t\tshmid: " . $shmid);
+            print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/");
+            print_critical(timed_run( 0, "echo --- ps -p ${cpid} uww ---;ps -p ${cpid} uww; echo --- ipcs -m -i ${shmid} ---; ipcs -m -i ${shmid}; echo ---"));
+            last;
+        }
+    }
+}
+
 sub check_for_ebury_root_file {
     my $file = '/home/ ./root';
 
@@ -6744,7 +7029,7 @@ sub check_for_immutable_files {
     return if !-x '/usr/bin/lsattr';
 
     my @path_dirs = split( m{:}, $ENV{'PATH'} );
-    push @path_dirs, '/etc/cpbackup.conf', '/etc/exim.conf';
+    push @path_dirs, qw( /etc/cpbackup.conf /etc/exim.conf /var/cpanel/cpanel.config );
 
     foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', @path_dirs ) ) ) ) {
         print_warn('Immutable file: ');
@@ -6753,7 +7038,7 @@ sub check_for_immutable_files {
     my @recursive_path_dirs = qw ( /usr/local/apache /var/cpanel/backups );
 
     foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', '-R', @recursive_path_dirs ) ) ) ) {
-        print_warn('Immutable file: ');
+        print_warn('Immutable file or directory: ');
         print_warning("$file");
     }
 }
@@ -6761,7 +7046,7 @@ sub check_for_immutable_files {
 sub check_for_immutable_dirs {
     return if !-x '/usr/bin/lsattr';
 
-    my @dirs = qw( / /usr/local/apache /usr/local/apache/conf /usr/local/apache/htdocs );
+    my @dirs = qw( / /usr/local/apache /usr/local/apache/conf /usr/local/apache/htdocs /var/cpanel );
 
     foreach my $dir ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', '-d', @dirs ) ) ) ) {
         print_warn('Immutable and/or append-only directory: ');
@@ -6816,5 +7101,83 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
     }
 }
 
+sub check_cpanel_config_for_bad_root {
+    if ( $cpconf{'root'} && $cpconf{'root'} ne '/usr/local/cpanel' ) { # The default is used if it is missing, so only need to check if it is set
+        print_warn("/var/cpanel/cpanel.config: ");
+        print_warning("root set to \"" . $cpconf{'root'} . "\"");
+        print_warning("\t \\_ Default is \"/usr/local/cpanel\"");
+        print_warning("\t \\_ An invalid root setting can cause WHM to fail to start.  See ticket 5463121.");
+    }
+}
+
+sub print_bug_report {
+    my $version = $cpanel_version ? $cpanel_version : 'Unknown';
+    my $os = get_os_release();
+    my $kernel = $hostinfo{'kernel'} ? $hostinfo{'kernel'} : 'Unknown';
+    my $arch = $hostinfo{'hardware'} ? $hostinfo{'hardware'} : 'Unknown';
+    my $environment = $hostinfo{'environment'} ? $hostinfo{'environment'} : 'Unknown';
+    my $cpu = $cpuinfo{'model'} ? $cpuinfo{'model'} : 'Unknown';
+    my $cores = $cpuinfo{'numcores'} ? $cpuinfo{'numcores'} : 'Unknown';
+    my $ticket = "";
+    if ( $ENV{HISTFILE} =~ /ticket.(\d+)$/ ) {
+        $ticket = $1;
+    }
+
+    print <<END_OF_TEMPLATE
+==== BEGIN COPY BELOW ====
+--------------------------------------
+   1. cPanel Version(s) Affected
+--------------------------------------
+
+$version
+
+--------------------------------------
+   2. System Information 
+--------------------------------------
+
+OS: $os
+Kernel: $kernel
+Arch: $arch
+Environment: $environment
+CPU: $cpu w/ $cores core(s)
+
+--------------------------------------
+   3. Ticket Number(s)
+--------------------------------------
+
+$ticket
+
+--------------------------------------
+   4. Brief Description
+--------------------------------------
+
+
+
+--------------------------------------
+   5. Step by Step Instructions
+--------------------------------------
+
+
+
+--------------------------------------
+   6. Detailed Explanation
+--------------------------------------
+
+
+
+--------------------------------------
+   7. Suggested Resolution
+--------------------------------------
+
+
+
+--------------------------------------
+   8. Known work around(s)
+--------------------------------------
+
+
+==== END COPY ABOVE ====
+END_OF_TEMPLATE
+}
 
 1;
