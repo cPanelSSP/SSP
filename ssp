@@ -35,7 +35,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.92';
+my $version = '4.99.93';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -343,6 +343,7 @@ check_for_ebury_ssh_G();                                        # malware
 check_for_ebury_ssh_banner();                                   # malware
 check_for_ebury_ssh_shmem();                                    # malware
 check_for_ebury_root_file();                                    # malware
+check_for_ebury_socket();                                       # malware
 check_for_bg_botnet();                                          # malware
 
 # These are run closer to the end since it has the potential to take the longest due to RPM usage
@@ -464,6 +465,7 @@ sub check_for_dnsonly {
         check_for_ebury_ssh_banner();                                   # malware
         check_for_ebury_ssh_shmem();                                    # malware
         check_for_ebury_root_file();                                    # malware
+        check_for_ebury_socket();                                       # malware
         check_for_bg_botnet();                                          # malware
 
         # These are run closer to the end since it has the potential to take the longest due to RPM usage
@@ -6564,7 +6566,7 @@ sub check_for_cdorked_A {
     if ( $has_cdorked == 1 ) {
         print_critical();
         print_crit('!! [ Linux/Cdorked ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3. L3 use 00 - Cdorked premade');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical("\tString found in $signature (see ticket 4482347)");
         print_critical();
     }    
@@ -6585,7 +6587,7 @@ sub check_for_cdorked_B {
     if ( $has_cdorked_b == 1 ) {
         print_critical();
         print_crit('!! [ Linux/Cdorked ] !! ');
-        print_critical('L1/L2: escalate this ticket to L3. L3 use 00 - eBury / CDorked - Free Migration [L3 only]');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical("\tThe following files were found (note the spaces at the end of the files):");
         print_critical("\t$cdorked_files");
         print_critical();
@@ -6601,6 +6603,7 @@ sub check_for_libkeyutils_filenames {
                     libkeyutils-1.2.so.2
                     libkeyutils.so.1.3.0
                     libkeyutils.so.1.3.2
+                    libns2.so
                 );
 
     for my $dir (@dirs) {
@@ -6615,7 +6618,7 @@ sub check_for_libkeyutils_filenames {
     if ($bad_libs) {
         print_critical();
         print_crit('!! [ LIBKEYUTILS ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical('The following file(s) were found:');
         print_critical($bad_libs);
         print_critical();
@@ -6671,7 +6674,7 @@ sub check_sha1_sigs_libkeyutils {
     if ( $trojaned_lib ) {
         print_critical();
         print_crit('!! [ LIBKEYUTILS ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical('The following file(s) were found:');
         print_critical("\t" . $trojaned_lib);
         print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/");
@@ -6696,7 +6699,7 @@ sub check_for_unowned_libkeyutils_files {
 
     print_critical();
     print_crit('!! [ EBURY ] !! ');
-    print_critical('L1/L2 escalate this ticket to L3');
+    print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
     print_critical("\tThe following libkeyutils files do not belong to a package (checked via 'rpm -qf'):");
     for my $file (@unowned_libs) {
         print_critical("\t" . $file);
@@ -6747,7 +6750,7 @@ sub check_sha1_sigs_httpd {
     if ( $infected == 1 ) {
         print_critical();
         print_crit('!! [ EBURY ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical("\t" . $httpd . " has a SHA-1 signature of " . $sha1sum);
         print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
         print_critical();
@@ -6778,7 +6781,7 @@ sub check_sha1_sigs_named {
     if ( $infected == 1 ) {
         print_critical();
         print_crit('!! [ EBURY ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical("\t" . $named . " has a SHA-1 signature of " . $sha1sum);
         print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
     }    
@@ -6808,7 +6811,7 @@ sub check_sha1_sigs_ssh {
     if ( $infected == 1 ) {
         print_critical();
         print_crit('!! [ EBURY ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical("\t" . $ssh . " has a SHA-1 signature of " . $sha1sum);
         print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
         print_critical();
@@ -6838,7 +6841,7 @@ sub check_sha1_sigs_ssh_add {
     if ( $infected == 1 ) {
         print "\n\n";
         print_crit('!! [ EBURY ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print "\t$ssh_add has a SHA-1 signature of $sha1sum\n";
         print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
     }    
@@ -6870,7 +6873,7 @@ sub check_sha1_sigs_sshd {
     if ( $infected == 1 ) {
         print_critical();
         print_crit('!! [ EBURY ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical("\t" . $sshd . " has a SHA-1 signature of " . $sha1sum);
         print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
         print_critical();
@@ -6888,7 +6891,7 @@ sub check_for_ebury_ssh_G {
     if ( $ssh_G !~ /illegal|unknown/ ) {
         print_critical();
         print_crit('!! [ EBURY ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical("\t'" . $ssh . " -G' did not return either 'illegal' or 'unknown'");
         print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/");
         print_critical();
@@ -6922,7 +6925,7 @@ sub check_for_ebury_ssh_banner {
     if ( $ssh_banner =~ m{ \A SSH-2\.0-[0-9a-f]{22,46} }xms ) {
         print_critical();
         print_crit('!! [ EBURY ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical("\tsshd banner matches known signature from ebury infected machines: " . $ssh_banner);
         print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/");
         print_critical();
@@ -6939,7 +6942,7 @@ sub check_for_ebury_ssh_shmem {
         if ( $process{$cpid}{CMD} && $process{$cpid}{CMD} =~ m{ \A /usr/sbin/sshd \b }x ) {
             print_critical();
             print_crit('!! [ EBURY ] !! ');
-            print_critical('L1/L2 escalate this ticket to L3');
+            print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
             print_critical("\tShared memory segment created by sshd process exists:");
             print_critical("\t\tsshd PID: " . $cpid);
             print_critical("\t\tshmid: " . $shmid);
@@ -6956,7 +6959,7 @@ sub check_for_ebury_root_file {
     if ( -e $file ) {
         print_critical();
         print_crit('!! [ EBURY ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical("\tFound file: " . $file);
         print_critical("\tReference: p24 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
         print_critical();
@@ -6986,10 +6989,25 @@ sub check_for_ebury_3_digit_rpms {
     if ($bad_rpms) {
         print_critical();
         print_crit('!! [ EBURY ] !! ');
-        print_critical('L1/L2 escalate this ticket to L3');
+        print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
         print_critical("The following rpm(s) were found:");
         print_critical($bad_rpms);
         print_critical();
+    }
+}
+
+sub check_for_ebury_socket {
+    return unless my $netstat_out = timed_run( 0, 'netstat', '-nap' );
+    for my $line ( split( '\n', $netstat_out ) ) {
+        if ( $line =~ m{@/proc/udevd} ) {
+            print_critical();
+            print_crit('!! [ EBURY ] !! ');
+            print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3".  L3 use "00 - eBury / CDorked - Free Migration [L3 only]"');
+            print_critical('"netstat -nap" output contains:');
+            print_critical($line);
+            print_critical();
+            last;
+        }
     }
 }
 
