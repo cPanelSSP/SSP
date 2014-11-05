@@ -144,6 +144,7 @@ print_if_using_modruid2();
 print_mysql_version();
 print_backups_info();
 print_mailserver_info();
+print_ftpserver_info();
 check_for_custom_zonetemplates();
 
 ## [WARN]
@@ -302,6 +303,7 @@ check_for_modruid2_warnings();
 check_for_broken_mysqldump();
 check_exim_log_sanity();
 check_for_readonly_filesystems();
+check_for_cl_unsupported_memory_limits();
 
 # [3RDP]
 check_smtp_processes();
@@ -1933,6 +1935,16 @@ sub print_mailserver_info {
     }
 }
 
+sub print_ftpserver_info {
+    print_info('FTP Server: ');
+    if ( exists $cpconf{'ftpserver'} ) {
+        print_normal($cpconf{'ftpserver'});
+    }
+    else {
+        print_warning('missing ftpserver setting in cpanel.config');
+    }
+}
+
 sub check_for_custom_zonetemplates {
     my $template_dir = '/var/cpanel/zonetemplates';
     return if !-e $template_dir;
@@ -2526,6 +2538,7 @@ sub check_for_non_default_permissions {
         '/var/cpanel'                  => [ ['0755', '0711', '0555'], '', '', '' ],
         '/var/cpanel/backups/config'   => [ ['0644'], '', '', '' ],
         '/var/cpanel/datastore'        => [ ['0755'], '', '', '' ],
+        '/var/cpanel/domain_keys_private'       => [ ['0640'], 'root', 'mail', '' ],
         '/var/cpanel/features'         => [ ['0755'], '', '', '' ],
         '/var/cpanel/locale'           => [ ['0755'], '', '', '' ],
         '/var/cpanel/locale/themes'    => [ ['0755'], '', '', '' ],
@@ -6093,6 +6106,63 @@ sub check_for_unsupported_php {
     print_critical();
 };
 
+sub check_for_cl_unsupported_memory_limits {
+    return if ! $is_cloudlinux;
+    my $cl_release_version;
+    if ( -e("/etc/redhat-release")) { 
+       $cl_release_version = qx[ cat /etc/redhat-release ];
+    }
+    else {
+       print_warn('CL Memory Limit Check Failure');
+       print_warning('Can\'t determine OS Release version');
+       return;
+    }
+    # See ticket # 5557825 - Several memory limits are not imposed: URL: https://helpdesk.cloudlinux.com/index.php?/Knowledgebase/Article/View/69/3/memory-limits-are-not-working
+    # Per Igor: 
+    # On CL 5 - It doesn't support memory limits for: mod_php, mod_ruid2, MPM ITK # & LiteSpeed. 
+    # On CL 6 - It doesn't support memory limits for mod_php & mod_ruid2
+    if ( $cl_release_version =~ m{ release 5 }xms ) { 
+       # Check for LiteSpeed
+       if ( $lsws_full_version ) { 
+          print_warn('LiteSpeed ');
+          print_warning('detected. Memory limits may not be imposed/supported [See ticket # 5557828]');
+       }
+       # Check for mod_php
+       if ( grep { /mod_php/ } @apache_modules_output ) { 
+          print_warn('mod_php: ');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
+       }
+       # Check for mod_ruid2
+       if ( grep { /mod_ruid2/ } @apache_modules_output ) { 
+          print_warn('mod_ruid2: ');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
+       }
+       # Check for MPM_ITK
+       my @httpd_V = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-V' );
+       for my $line (@httpd_V) {
+          if ( $line =~ /^Server MPM:\s+(.*)/ ) {
+             if ( $1 eq 'ITK' ) {
+                print_warn('MPM_ITK: ');
+                print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
+             }
+          }
+       }
+    }
+
+    if ( $cl_release_version =~ m{ release 6 }xms ) { 
+       # Check for mod_php
+       if ( grep { /mod_php/ } @apache_modules_output ) { 
+          print_warn('mod_php: ');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
+       }
+       # Check for mod_ruid2
+       if ( grep { /mod_ruid2/ } @apache_modules_output ) { 
+          print_warn('mod_ruid2: ');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
+       }
+    }
+}
+
 sub check_for_UMBREON_rootkit {
     my $dir = '/usr/local/__UMBREON__';
     if ( chdir $dir ) {
@@ -6203,6 +6273,7 @@ sub check_for_dragnet {
 
 sub check_smtp_processes {
     my $assp_running = 0;
+    my $powermta = 0;
 
     return if scalar keys(%port) == 0;
     if ( ! defined($port{"25"}) && ! -f '/etc/eximdisable' ) {
@@ -6222,11 +6293,18 @@ sub check_smtp_processes {
         if ( $cmd =~ m{ /assp\.pl \b }xms ) {
             $assp_running = $pid;
         }
+        if ( $cmd =~ m{ /pmtad \b }xms ) { 
+            $powermta = $pid;
+        }
     }
 
     if ( $assp_running ) {
         print_3rdp('ASSP: ');
         print_3rdp2('assp.pl is listening on port 25 [PID: ' . $assp_running . '] Vendor: http://assp.sourceforge.net');
+    }
+    if ( $powermta ) { 
+       print_3rdp('PowerMTA: ');
+       print_3rdp2('PowerMTA is listening on port 25 [PID: ' . $powermta . '] Vender: http://www.port25.com/powermta/powermta-overview/overview/');
     }
 }
 
