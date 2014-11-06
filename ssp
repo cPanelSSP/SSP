@@ -908,14 +908,8 @@ sub get_hostinfo {
 }
 
 sub get_environment {
-    if ( open my $envtype_fh, '<', '/var/cpanel/envtype' ) {
-        my $envtype = readline($envtype_fh);
-        close $envtype_fh;
-        return $envtype;
-    }
-    else {
-        return 'Unknown (could not open/read /var/cpanel/envtype ?)';
-    }
+    my $envtype = qx[ /usr/local/cpanel/bin/envtype ];
+    return $envtype; 
 }
 
 sub get_cpuinfo {
