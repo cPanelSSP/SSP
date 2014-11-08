@@ -304,12 +304,14 @@ check_for_broken_mysqldump();
 check_exim_log_sanity();
 check_for_readonly_filesystems();
 check_for_cl_unsupported_memory_limits();
+check_for_eblockers();
 
 # [3RDP]
 check_smtp_processes();
 check_for_varnish();
 check_for_nginx();
 check_for_mailscanner();
+check_for_powermta();
 check_for_apf();
 check_for_csf();
 check_for_prm();
@@ -6157,6 +6159,18 @@ sub check_for_cl_unsupported_memory_limits {
     }
 }
 
+sub check_for_eblockers { 
+	  return if (!(-e("/var/cpanel/update_blocks.config")));
+	  print_warn('E Blocker found: ');
+	  print "\n";
+          open my $file_fh, '<', '/var/cpanel/update_blocks.config' or return;
+          while (<$file_fh>) {
+	      chomp($_);
+              print_magenta("\t \\_ $_");
+	  }
+	  close $file_fh or return;
+}
+
 sub check_for_UMBREON_rootkit {
     my $dir = '/usr/local/__UMBREON__';
     if ( chdir $dir ) {
@@ -6267,7 +6281,6 @@ sub check_for_dragnet {
 
 sub check_smtp_processes {
     my $assp_running = 0;
-    my $powermta = 0;
 
     return if scalar keys(%port) == 0;
     if ( ! defined($port{"25"}) && ! -f '/etc/eximdisable' ) {
@@ -6287,18 +6300,11 @@ sub check_smtp_processes {
         if ( $cmd =~ m{ /assp\.pl \b }xms ) {
             $assp_running = $pid;
         }
-        if ( $cmd =~ m{ /pmtad \b }xms ) { 
-            $powermta = $pid;
-        }
     }
 
     if ( $assp_running ) {
         print_3rdp('ASSP: ');
         print_3rdp2('assp.pl is listening on port 25 [PID: ' . $assp_running . '] Vendor: http://assp.sourceforge.net');
-    }
-    if ( $powermta ) { 
-       print_3rdp('PowerMTA: ');
-       print_3rdp2('PowerMTA is listening on port 25 [PID: ' . $powermta . '] Vender: http://www.port25.com/powermta/powermta-overview/overview/');
     }
 }
 
@@ -6348,6 +6354,22 @@ sub check_for_mailscanner {
     if ( $mailscanner == 1 ) {
         print_3rdp('MailScanner: ');
         print_3rdp2('is running');
+    }
+}
+
+sub check_for_powermta {
+    my $powermta = 0;
+
+    for my $line (@process_list) {
+        if ( $line =~ m{ \A mailnull (?:.*) pmtad }xms ) {
+            $powermta = 1;
+            last;
+        }
+    }
+
+    if ( $powermta == 1 ) {
+        print_3rdp('PowerMTA: ');
+        print_3rdp2('is running - Vender: http://www.port25.com/powermta/powermta-overview/overview/');
     }
 }
 
