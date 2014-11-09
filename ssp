@@ -305,6 +305,7 @@ check_exim_log_sanity();
 check_for_readonly_filesystems();
 check_for_cl_unsupported_memory_limits();
 check_for_eblockers();
+check_for_frontpage_rpms();
 
 # [3RDP]
 check_smtp_processes();
@@ -6169,6 +6170,17 @@ sub check_for_eblockers {
               print_magenta("\t \\_ $_");
 	  }
 	  close $file_fh or return;
+}
+
+sub check_for_frontpage_rpms { 
+     return if (!(-e("/usr/local/frontpage/version5.0/bin/owsadm.exe")));
+     # Check for any FrontPage RPM's
+     my $fp_rpms_found=0;
+     my $grep_for_fp_rpms = qx[ rpm -qa | grep -i 'frontpage' ];
+     if (!($grep_for_fp_rpms)) { 
+         print_warn('FrontPage RPMS Not Found: ');
+         print_warning('but /usr/local/frontpage/version5.0/bin/owsadm.exe still exists. Will prevent update to 11.46');
+     }
 }
 
 sub check_for_UMBREON_rootkit {
