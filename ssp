@@ -1771,6 +1771,13 @@ sub print_mysql_version {
         print_info('MySQL Version: ');
         print_normal($mysql_output);
     }
+    # Add check here to verify that mysql-version in /var/cpanel/cpanel.config matches
+    my $mysql_distrib = "Distrib " . $cpconf{'mysql-version'};
+    chomp($mysql_distrib);
+    if ( !($mysql_output =~ m/$mysql_distrib/ )) {
+        print_warn('MySQL Version Mismatch: ');
+        print_warning('cpanel.config version (' . $cpconf{'mysql-version'} . ') does not match installed MySQL version');
+    }
 }
 
 sub print_backups_info {
