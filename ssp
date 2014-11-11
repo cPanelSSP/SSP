@@ -6380,7 +6380,7 @@ sub check_for_powermta {
     my $powermta = 0;
 
     for my $line (@process_list) {
-        if ( $line =~ m{ \A mailnull (?:.*) pmtad }xms ) {
+        if ( $line =~ m{ pmtad }xms ) {
             $powermta = 1;
             last;
         }
