@@ -301,6 +301,7 @@ check_for_MPM_ITK_and_suexec();
 check_for_modruid2_warnings();
 check_for_broken_mysqldump();
 check_exim_log_sanity();
+check_updatelog();
 check_for_readonly_filesystems();
 
 # [3RDP]
@@ -440,6 +441,7 @@ sub check_for_dnsonly {
         check_for_networkmanager();
         check_for_disabled_services();
         check_for_harmful_php_mode_600_cron();
+        check_updatelog();
         check_for_readonly_filesystems();
 
         ## [3RDP]
@@ -6192,6 +6194,35 @@ sub check_for_dragnet {
         close($fh);
     }
 };
+
+sub check_updatelog {
+    my $log = '/var/cpanel/updatelogs/last';
+    return if ! -e $log;
+
+    my $size = (stat($log))[7];
+    next if !$size;
+    my $bytes_to_read = 10485760; # 10M
+    $bytes_to_read = $size if $bytes_to_read > $size;
+
+    my $log_data = undef;
+
+    open my $file_fh, '<', $log or return;
+    read $file_fh, $log_data, $bytes_to_read;
+    close $file_fh;
+
+    my $found_rpm_needs_space;
+
+    foreach (split("\n", $log_data)) {
+        $found_rpm_needs_space = 1 if m{ installing .+ needs .+ on .+ filesystem }x;
+    }
+
+    undef $log_data;
+
+    if ( $found_rpm_needs_space ) {
+        print_warn("WHM update: ");
+        print_warning($log . ' contains errors which indicate that RPM installation had insufficient free disk space available');
+    }
+}
 
 ##############################
 #  END [WARN] CHECKS
