@@ -312,7 +312,6 @@ check_smtp_processes();
 check_for_varnish();
 check_for_nginx();
 check_for_mailscanner();
-check_for_powermta();
 check_for_apf();
 check_for_csf();
 check_for_prm();
@@ -911,7 +910,19 @@ sub get_hostinfo {
 }
 
 sub get_environment {
-    my $envtype = qx[ /usr/local/cpanel/bin/envtype ];
+     my $envtype;
+     if ( open my $envtype_fh, '<', '/var/cpanel/envtype' ) {
+        $envtype = readline($envtype_fh);
+        close $envtype_fh;
+    }
+    else {
+       open my $file_fh, '<', '/etc/redhat-release' or return;
+       $envtype = $_;
+       close $file_fh or return;
+    }
+    if (!($envtype)) {
+       return 'Unknown (could not open/read /var/cpanel/envtype ?)';
+    }
     return $envtype; 
 }
 
@@ -6112,15 +6123,9 @@ sub check_for_unsupported_php {
 
 sub check_for_cl_unsupported_memory_limits {
     return if ! $is_cloudlinux;
-    my $cl_release_version;
-    if ( -e("/etc/redhat-release")) { 
-       $cl_release_version = qx[ cat /etc/redhat-release ];
-    }
-    else {
-       print_warn('CL Memory Limit Check Failure');
-       print_warning('Can\'t determine OS Release version');
-       return;
-    }
+    open my $file_fh, '<', '/etc/redhat-release' or return;
+    my $cl_release_version = $_;
+    close $file_fh or return;
     # See ticket # 5557825 - Several memory limits are not imposed: URL: https://helpdesk.cloudlinux.com/index.php?/Knowledgebase/Article/View/69/3/memory-limits-are-not-working
     # Per Igor: 
     # On CL 5 - It doesn't support memory limits for: mod_php, mod_ruid2, MPM ITK # & LiteSpeed. 
@@ -6153,28 +6158,28 @@ sub check_for_cl_unsupported_memory_limits {
        }
     }
 
-    if ( $cl_release_version =~ m{ release 6 }xms ) { 
+    if ( $cl_release_version =~ m{ release 6 }xms ) {
        # Check for mod_php
-       if ( grep { /mod_php/ } @apache_modules_output ) { 
+       if ( grep { /mod_php/ } @apache_modules_output ) {
           print_warn('mod_php: ');
           print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
        }
        # Check for mod_ruid2
-       if ( grep { /mod_ruid2/ } @apache_modules_output ) { 
+       if ( grep { /mod_ruid2/ } @apache_modules_output ) {
           print_warn('mod_ruid2: ');
           print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
        }
     }
 }
 
-sub check_for_eblockers { 
+sub check_for_eblockers {
 	  return if (!(-e("/var/cpanel/update_blocks.config")));
 	  print_warn('E Blocker found: ');
 	  print "\n";
-          open my $file_fh, '<', '/var/cpanel/update_blocks.config' or return;
-          while (<$file_fh>) {
-	      chomp($_);
-              print_magenta("\t \\_ $_");
+     open my $file_fh, '<', '/var/cpanel/update_blocks.config' or return;
+     while (<$file_fh>) {
+         chomp($_);
+         print_magenta("\t \\_ $_");
 	  }
 	  close $file_fh or return;
 }
@@ -6182,11 +6187,11 @@ sub check_for_eblockers {
 sub check_for_frontpage_rpms { 
      return if (!(-e("/usr/local/frontpage/version5.0/bin/owsadm.exe")));
      # Check for any FrontPage RPM's
-     my $fp_rpms_found=0;
-     my $grep_for_fp_rpms = qx[ rpm -qa | grep -i 'frontpage' ];
-     if (!($grep_for_fp_rpms)) { 
-         print_warn('FrontPage RPMS Not Found: ');
-         print_warning('but /usr/local/frontpage/version5.0/bin/owsadm.exe still exists. Will prevent update to 11.46');
+     if ( my $grep_for_fp_rpms = grep ( m{frontpage}, @rpm_list ) ) {
+         if (!($grep_for_fp_rpms)) { 
+            print_warn('FrontPage RPMS Not Found: ');
+            print_warning('but /usr/local/frontpage/version5.0/bin/owsadm.exe still exists. Will prevent update to 11.46');
+         }
      }
 }
 
@@ -6373,22 +6378,6 @@ sub check_for_mailscanner {
     if ( $mailscanner == 1 ) {
         print_3rdp('MailScanner: ');
         print_3rdp2('is running');
-    }
-}
-
-sub check_for_powermta {
-    my $powermta = 0;
-
-    for my $line (@process_list) {
-        if ( $line =~ m{ pmtad }xms ) {
-            $powermta = 1;
-            last;
-        }
-    }
-
-    if ( $powermta == 1 ) {
-        print_3rdp('PowerMTA: ');
-        print_3rdp2('is running - Vender: http://www.port25.com/powermta/powermta-overview/overview/');
     }
 }
 
