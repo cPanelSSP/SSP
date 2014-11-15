@@ -731,7 +731,7 @@ sub print_tip {
         '[FB 42027] "Recently Uploaded Cgi Script Mail" scans and sends email alerts about downloaded files too',
         '[FB 21774] Pure-FTPd is not linked against libwrap. As such, Host Access Control does nothing for it',
         'The cpanel-postgresql* packages are for phpPgAdmin. The postgresql-* packages are for PostgreSQL',
-        'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)',
+        'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/pegpr78)',
         'For a list of obscure issues, see the RareIssues wiki article',
         '11.35+: Use /scripts/check_cpanel_rpms to fix problems in /usr/local/cpanel/3rdparty/  - not checkperlmodules',
         'php.ini for phpMyAdmin, phpPgAdmin, Horde, and RoundCube can be found in /usr/local/cpanel/3rdparty/etc/',
@@ -758,7 +758,7 @@ sub print_tip {
         'Use custom_vhost_template_ap(1|2) in userdata files to make changes for an individual vhost',
         'File Manager upload size limits can be adjusted at WHM >> Tweak Settings >> Max HTTP submission size',
         '/var/cpanel/conf/apache/local can potentially cause issues. See ticket 3915299 for an example',
-        'System backups are not uploaded via FTP by default, requires manual config. See http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/SystemBackups',
+        'System backups are not uploaded via FTP by default, requires manual config. See http://documentation.cpanel.net/display/1144Docs/System+Backups#SystemBackups-Manualconfigurationmethod',
         '$PATH may differ when executing something via cron rather than the command line. See ticket 4419531',
         '"failed to open scan directory /var/spool/exim/scan/[...]: Too many links" could mean a directory has reached limit of 32,000 files/dirs',
         'If innodb_force_recovery is enabled in the MySQL configuration, this can sometimes prevent mysqldump from working (see ticket 5193581).',
@@ -5044,14 +5044,14 @@ sub check_for_use_compiled_dnsadmin {
     my $setup_modules_dir = '/usr/local/cpanel/Cpanel/NameServer/Remote';
     my $remote_modules_dir = '/usr/local/cpanel/Cpanel/NameServer/Setup/Remote';
 
-    # http://docs.cpanel.net/twiki/bin/view/SoftwareDevelopmentKit/WritingSetupModules
+    # http://documentation.cpanel.net/display/SDK/How+to+Write+Setup+Modules
     if ( -d $setup_modules_dir ) {
         opendir( my $dir_fh, $setup_modules_dir );
         @setup_modules = grep { !/^\.\.?$/ } readdir $dir_fh;
         closedir $dir_fh;
     }
 
-    # http://docs.cpanel.net/twiki/bin/view/SoftwareDevelopmentKit/WritingRemoteModules
+    # http://documentation.cpanel.net/display/SDK/How+to+Write+Remote+Modules
     if ( -d $remote_modules_dir ) {
         opendir( my $dir_fh, $remote_modules_dir );
         @remote_modules = grep { !/^\.\.?$/ } readdir $dir_fh;
@@ -5671,7 +5671,7 @@ sub check_for_noquotafs {
     return if !-f $noquotafs or -z $noquotafs;
 
     print_warn("$noquotafs: ");
-    print_warning('exists. quota issues? See http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/QuotaFSConfig');
+    print_warning('exists. quota issues? See http://documentation.cpanel.net/pages/viewpage.action?pageId=363841');
 }
 
 sub check_for_mod_rpaf {
