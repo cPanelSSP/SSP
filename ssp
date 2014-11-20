@@ -35,7 +35,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.95';
+my $version = '4.99.96';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -572,7 +572,7 @@ sub cpanel_version_is {
 
 sub timed_run { # Borrowed from Cpanel::SafeRun::Timed and modified
     my ( $timer, @PROGA ) = @_;
-    $timer = $timer ? $timer : 15; # A timer value of 0 means use the default, currently 15.
+    $timer = $timer ? $timer : 25; # A timer value of 0 means use the default, currently 25.
     return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
 
     open( my $save_stderr_fh, '>&STDERR' );
@@ -616,7 +616,7 @@ sub timed_run { # Borrowed from Cpanel::SafeRun::Timed and modified
 
 sub timed_run_trap_stderr { # Borrowed from Cpanel::SafeRun::Timed and modified
     my ( $timer, @PROGA ) = @_;
-    $timer = $timer ? $timer : 15; # A timer value of 0 means use the default, currently 15.
+    $timer = $timer ? $timer : 25; # A timer value of 0 means use the default, currently 25.
     return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
 
     open( my $save_stderr_fh, '>&STDERR' );
@@ -6657,6 +6657,7 @@ sub check_for_libkeyutils_filenames {
                     libkeyutils.so.1.3.0
                     libkeyutils.so.1.3.2
                     libns2.so
+                    libns5.so
                 );
 
     for my $dir (@dirs) {
@@ -7039,7 +7040,7 @@ sub check_for_ebury_socket {
 ## END malware checks
 
 sub build_rpm_list {
-    my $timeout = 15;
+    my $timeout = 25;
 
     print_info2("RPM check (running \"rpm -qa ...\"). This will timeout after $timeout seconds.");
 
