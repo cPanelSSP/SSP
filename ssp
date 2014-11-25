@@ -1937,6 +1937,7 @@ sub print_backups_info {
     for my $dest ( keys(%new_dest) ) {
         my $type = $new_dest{$dest}->{'type'} ? $new_dest{$dest}{'type'} : 'UNKNOWN';;
         my $disabled = defined($new_dest{$dest}{'disabled'}) ? $new_dest{$dest}{'disabled'} : 'UNKNOWN';
+        if ($disabled) { $disabled = "Yes"; } else { $disabled="No"; }
         my $name = $new_dest{$dest}{'name'} ? $new_dest{$dest}{'name'} : 'UNKNOWN';
         print_normal("\t\t\\_ Remote dest: [Type: " . $type . "] [Disabled: " . $disabled . "] [Name: " . $name . "]")
     }
