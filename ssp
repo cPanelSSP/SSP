@@ -307,6 +307,7 @@ check_for_readonly_filesystems();
 check_for_cl_unsupported_memory_limits();
 check_for_eblockers();
 check_for_frontpage_rpms();
+check_for_disabled_skipmodseclog();
 
 # [3RDP]
 check_smtp_processes();
