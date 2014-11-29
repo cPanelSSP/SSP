@@ -5933,6 +5933,13 @@ sub check_for_modruid2_warnings {
     }
 }
 
+sub check_for_disabled_skipmodseclog { 
+      if ( exists $cpconf{'skipmodseclog'} and $cpconf{'skipmodseclog'} == 1 ) {
+            print_warn('ModSecurity Hits: ');
+            print_warning('ModSec logging disabled in Security Manager - causes no hits to be saved in modsec.hits table.');
+      }
+}
+
 sub check_for_openssl_heartbleed_bug {
     return if ! $openssl_rpm_changelog;
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
