@@ -308,6 +308,7 @@ check_for_cl_unsupported_memory_limits();
 check_for_eblockers();
 check_for_frontpage_rpms();
 check_for_disabled_skipmodseclog();
+check_for_modsec2_STAGE_files();
 
 # [3RDP]
 check_smtp_processes();
@@ -5939,6 +5940,12 @@ sub check_for_disabled_skipmodseclog {
             print_warn('ModSecurity Hits: ');
             print_warning('ModSec logging disabled in Security Manager - causes no hits to be saved in modsec.hits table.');
       }
+}
+
+sub check_for_modsec2_STAGE_files { 
+      return if(!(-e("/usr/local/apache/conf/modsec2.user.conf.STAGE");
+      print_warn('modsec2.user.conf.STAGE file found: ');
+      print_warning('This may prevent editing of Mod Security Rules in WHM => Security Center => ModSecurity Tools.');
 }
 
 sub check_for_openssl_heartbleed_bug {
