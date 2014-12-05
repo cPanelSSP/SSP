@@ -1795,7 +1795,6 @@ sub print_if_using_modITK {
     return if !$has_itk;
     print_info('mod_ITK: ');
     print_warning('is enabled (mod_userdir style URLs don\'t work with mod_ITK!)');
-    last;
 }
 
 sub print_mysql_version {
@@ -5962,7 +5961,7 @@ sub check_for_disabled_skipmodseclog {
 }
 
 sub check_for_modsec2_STAGE_files { 
-      return if(!(-e("/usr/local/apache/conf/modsec2.user.conf.STAGE");
+      return if(!(-e("/usr/local/apache/conf/modsec2.user.conf.STAGE")));
       print_warn('modsec2.user.conf.STAGE file found: ');
       print_warning('This may prevent editing of Mod Security Rules in WHM => Security Center => ModSecurity Tools.');
 }
