@@ -141,6 +141,7 @@ check_sysinfo();
 check_for_remote_mysql();
 print_if_using_mydns_or_nsd();
 print_if_using_modruid2();
+print_if_using_modITK();
 print_mysql_version();
 print_backups_info();
 print_mailserver_info();
@@ -1777,6 +1778,24 @@ sub print_if_using_modruid2 {
             last;
         }
     }
+}
+
+sub print_if_using_modITK { 
+   # As it turns out mod_userdir style URL's don't work with mod_itk either!
+    my $has_itk = 0;
+    my @httpd_V = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-V' );
+    for my $line (@httpd_V) {
+        if ( $line =~ /^Server MPM:\s+(.*)/ ) {
+            if ( $1 eq 'ITK' ) {
+                $has_itk = 1;
+                last;
+            }
+        }
+    }
+    return if !$has_itk;
+    print_info('mod_ITK: ');
+    print_warning('is enabled (mod_userdir style URLs don\'t work with mod_ITK!)');
+    last;
 }
 
 sub print_mysql_version {
