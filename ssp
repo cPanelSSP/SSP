@@ -768,8 +768,8 @@ sub print_tip {
         '"failed to open scan directory /var/spool/exim/scan/[...]: Too many links" could mean a directory has reached limit of 32,000 files/dirs',
         'If innodb_force_recovery is enabled in the MySQL configuration, this can sometimes prevent mysqldump from working (see ticket 5193581).',
         '"Spawned \'ossec-dbd\' with \'/sbin/service restart ossec-hids\'" is from ASL (Atomic Secured Linux). Have customer contact ASL Support if necessary.',
-        'You can run SSP with the --bugreport option to print a pre-filled template for submitting a WHM/cPanel bug report.'
-
+        'You can run SSP with the --bugreport option to print a pre-filled template for submitting a WHM/cPanel bug report.',
+        'whm-server-status is incompatible with LiteSpeed?'
     );
 
     my $num  = int rand scalar @tips;
@@ -2030,6 +2030,7 @@ sub print_lsws_info {
     }
     print_info('LiteSpeed Web Server: ');
     print_normal('is now supported, see http://cpanel.wiki/display/LS/LiteSpeed'); 
+    print_normal('Note: whm-server-status is incompatible with LiteSpeed');
 }
 
 sub check_for_lsws_update {
