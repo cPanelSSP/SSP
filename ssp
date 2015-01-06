@@ -921,9 +921,7 @@ sub get_environment {
         close $envtype_fh;
     }
     else {
-       open my $file_fh, '<', '/etc/redhat-release' or return;
-       $envtype = $_;
-       close $file_fh or return;
+       $envtype = timed_run( 0, '/usr/local/cpanel/bin/envtype');
     }
     if (!($envtype)) {
        return 'Unknown (could not open/read /var/cpanel/envtype ?)';
