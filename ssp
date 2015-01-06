@@ -146,6 +146,7 @@ print_mysql_version();
 print_backups_info();
 print_mailserver_info();
 print_ftpserver_info();
+print_dnsserver_info();
 check_for_custom_zonetemplates();
 
 ## [WARN]
@@ -1978,6 +1979,16 @@ sub print_ftpserver_info {
     }
     else {
         print_warning('missing ftpserver setting in cpanel.config');
+    }
+}
+
+sub print_dnsserver_info {
+    print_info('DNS Server: ');
+    if ( exists $cpconf{'local_nameserver_type'} ) {
+        print_normal($cpconf{'local_nameserver_type'});
+    }
+    else {
+        print_warning('missing local_nameserver_type setting in cpanel.config');
     }
 }
 
