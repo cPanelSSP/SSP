@@ -5942,7 +5942,7 @@ sub check_for_modruid2_warnings {
                 print_warn('mod_ruid2: ');
                 print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see cases 84393, 104017, and tickets 5015613, 5227891');
             }
-            if ( $php5handler && $php5handler eq 'suphp' ) {
+            if ( $php5handler && $php5handler eq 'suphp' and $cpconf{'jailapache'} == 1 ) {
                 print_warn('mod_ruid2: ');
                 print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see cases 70561, 105901');
             }
