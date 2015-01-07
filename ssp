@@ -770,6 +770,8 @@ sub print_tip {
         'If innodb_force_recovery is enabled in the MySQL configuration, this can sometimes prevent mysqldump from working (see ticket 5193581).',
         '"Spawned \'ossec-dbd\' with \'/sbin/service restart ossec-hids\'" is from ASL (Atomic Secured Linux). Have customer contact ASL Support if necessary.',
         'You can run SSP with the --bugreport option to print a pre-filled template for submitting a WHM/cPanel bug report.',
+        'The path for the modsec_audit.log changes with mod_ruid2 or mod_itk installed to /usr/local/apache/conf/modsec_audit/[user]/YYYYMMDD/YYYYMMDD-HHmm/YYYYMMDD-HHmmSS-[unique-id]',
+        'LiteSpeed (lsws) does NOT support the Apache web status page - see: http://www.litespeedtech.com/support/forum/threads/solved-cpanel-after-litespeed-installation-whm-server-status-gives-a-404-error.5536/',
         'whm-server-status is incompatible with LiteSpeed?'
     );
 
@@ -6181,17 +6183,17 @@ sub check_for_cl_unsupported_memory_limits {
        # Check for LiteSpeed
        if ( $lsws_full_version ) { 
           print_warn('LiteSpeed ');
-          print_warning('detected. Memory limits may not be imposed/supported [See ticket # 5557828]');
+          print_warning('detected. Memory limits may not be imposed/supported [See ticket # 5557825]');
        }
        # Check for mod_php
        if ( grep { /mod_php/ } @apache_modules_output ) { 
           print_warn('mod_php: ');
-          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
        }
        # Check for mod_ruid2
        if ( grep { /mod_ruid2/ } @apache_modules_output ) { 
           print_warn('mod_ruid2: ');
-          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
        }
        # Check for MPM_ITK
        my @httpd_V = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-V' );
@@ -6199,7 +6201,7 @@ sub check_for_cl_unsupported_memory_limits {
           if ( $line =~ /^Server MPM:\s+(.*)/ ) {
              if ( $1 eq 'ITK' ) {
                 print_warn('MPM_ITK: ');
-                print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
+                print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
              }
           }
        }
@@ -6209,12 +6211,12 @@ sub check_for_cl_unsupported_memory_limits {
        # Check for mod_php
        if ( grep { /mod_php/ } @apache_modules_output ) {
           print_warn('mod_php: ');
-          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
        }
        # Check for mod_ruid2
        if ( grep { /mod_ruid2/ } @apache_modules_output ) {
           print_warn('mod_ruid2: ');
-          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557828]');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
        }
     }
 }
