@@ -1960,8 +1960,18 @@ sub print_backups_info {
         my $disabled = defined($new_dest{$dest}{'disabled'}) ? $new_dest{$dest}{'disabled'} : 'UNKNOWN';
         if ($disabled) { $disabled = "Yes"; } else { $disabled="No"; }
         my $name = $new_dest{$dest}{'name'} ? $new_dest{$dest}{'name'} : 'UNKNOWN';
-        print_normal("\t\t\\_ Remote dest: [Type: " . $type . "] [Disabled: " . $disabled . "] [Name: " . $name . "]")
-    }
+        print_normal("\t\t\\_ Remote dest: [Type: " . $type . "] [Disabled: " . $disabled . "] [Name: " . $name . "]");
+		if ($type eq "SFTP") { 
+			my $privatekey_path = $new_dest{$dest}->{'privatekey'} ? $new_dest{$dest}{'privatekey'} : 'UNKNOWN';;
+			my $passphrase = $new_dest{$dest}->{'passphrase'} ? $new_dest{$dest}{'passphrase'} : 'UNKNOWN';;
+			my $key_is_encrypted = timed_run( 0, 'grep', 'ENCRYPTED', $privatekey_path );
+			chomp($passphrase);
+			if ($passphrase ne "UNKNOWN" and !($key_is_encrypted)) { 
+				print_warn("Your private key is not encrypted ");
+				print_warning("but your backup config contains a passphrase")
+			}
+    	}
+	}
 }
 
 sub print_mailserver_info {
@@ -6172,8 +6182,12 @@ sub check_for_unsupported_php {
 
 sub check_for_cl_unsupported_memory_limits {
     return if ! $is_cloudlinux;
+    my $cl_release_version = "";
     open my $file_fh, '<', '/etc/redhat-release' or return;
-    my $cl_release_version = $_;
+    while (<$file_fh>) {
+    	chomp($_);
+    	$cl_release_version = $_;
+    }
     close $file_fh or return;
     # See ticket # 5557825 - Several memory limits are not imposed: URL: https://helpdesk.cloudlinux.com/index.php?/Knowledgebase/Article/View/69/3/memory-limits-are-not-working
     # Per Igor: 
