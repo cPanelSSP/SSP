@@ -308,6 +308,7 @@ check_updatelog();
 check_for_readonly_filesystems();
 check_for_cl_unsupported_memory_limits();
 check_for_eblockers();
+check_for_php_selector_incompatibilities();
 check_for_frontpage_rpms();
 check_for_disabled_skipmodseclog();
 check_for_modsec2_STAGE_files();
@@ -1796,13 +1797,6 @@ sub print_if_using_modITK {
     return if !$has_itk;
     print_info('mod_ITK: ');
     print_warning('is enabled (mod_userdir style URLs don\'t work with mod_ITK!)');
-    # http://docs.cloudlinux.com/php_selector.html - states that php selector will
-    # not work with mod_ITK
-    if ($php_selector_disabled == 0) { 
-       # php_selector is enabled
-       print_info('mod_ITK: ');
-       print_warning('php_selector will not work with mod_ITK - See http://docs.cloudlinux.com/php_selector.html');
-    }
 }
 
 sub print_mysql_version {
@@ -5700,6 +5694,7 @@ sub check_for_missing_groups {
 
     for my $group (@groups) {
         next if ( $group eq 'cpses' and cpanel_version_is(qw( < 11.40.0.0 )) ); # was cpses added in 11.40?
+        next if ( $group eq 'cpanellogaholic' and cpanel_version_is(qw( > 11.47.0.0)) ); # cpanellogaholic was removed in 11.47.9999
         my $gid = getgrnam($group);
         next if ( defined $gid and $gid =~ /^\d+$/ );
         $missing_groups .= "[$group] ";
@@ -5978,10 +5973,6 @@ sub check_for_modruid2_warnings {
                 print_warn('mod_ruid2: ');
                 print_warning('could cause file permission problems when using LiteSpeed Web Server (see ticket 5154193)');
             }
-            if ( $php5handler && $php5handler eq 'dso' and $php_selector_disabled == 0 ) {
-                print_warn('mod_ruid2: ');
-                print_warning('is enabled with DSO PHP Handler. php_selector will not work with mod_ruid2 and DSO - See http://docs.cloudlinux.com/php_selector.html');
-            }
             last;
         }
     }
@@ -6214,13 +6205,6 @@ sub check_for_cl_unsupported_memory_limits {
        if ( grep { /mod_php/ } @apache_modules_output ) { 
           print_warn('mod_php: ');
           print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
-          # http://docs.cloudlinux.com/php_selector.html - states that php selector will
-          # not work with mod_ITK
-          if ($php_selector_disabled == 0) { 
-             # php_selector is enabled
-             print_info('mod_php: ');
-             print_warning('php_selector will not work with mod_php - See http://docs.cloudlinux.com/php_selector.html');
-          }
        }
        # Check for mod_ruid2
        if ( grep { /mod_ruid2/ } @apache_modules_output ) { 
@@ -6274,6 +6258,80 @@ sub check_for_frontpage_rpms {
             print_warning('but /usr/local/frontpage/version5.0/bin/owsadm.exe still exists. Will prevent update to 11.46');
          }
      }
+}
+
+sub check_for_php_selector_incompatibilities { 
+    # http://docs.cloudlinux.com/php_selector.html - states that php selector will
+    # not work with mod_ITK, mod_ruid2, mod_php or the DSO php handler
+
+	# First check and see if php_selector is enabled
+    my $php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
+    my $php_selector_disabled = 0;
+    my $release_info;
+    if ( -e '/etc/redhat-release' ) {
+        if ( open my $rr_fh, '<', '/etc/redhat-release' ) {
+            while (<$rr_fh>) {
+                chomp( $release_info = $_ );
+            }
+            close $rr_fh;
+        }
+    }
+    if ( $release_info and $release_info =~ /cloudlinux/i ) {
+        $is_cloudlinux = 1;
+        if ( -f $php_selector_conf ) {
+            if ( open my $file_fh, '<', $php_selector_conf ) {
+                while (<$file_fh>) {
+                    if (/^file=>lvephpsel,skipobj=>1/) {
+                        $php_selector_disabled = 1;
+                        last;
+                    }
+                }
+                close $file_fh;
+            }
+        }
+        else {
+            $php_selector_disabled = 'status unknown';
+        }
+    }
+	return if $php_selector_disabled; 
+	# Check for mpm_ITK
+	if ( $php_selector_disabled == 0 ) { 
+    	my $has_itk = 0;
+    	my @httpd_V = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-V' );
+    	for my $line (@httpd_V) {
+        	if ( $line =~ /^Server MPM:\s+(.*)/ ) {
+            	if ( $1 eq 'ITK' ) {
+                	$has_itk = 1;
+                	last;
+            	}
+        	}
+    	}
+		if ( $has_itk ) { 	
+    	   	print_warn('mod_ITK: ');
+       		print_warning('is enabled. PHP Selector will not work with mod_ITK - See http://docs.cloudlinux.com/php_selector.html');
+		}
+		# Check for mod_ruid2
+		my $has_ruid2 = 0;
+    	for (@apache_modules_output) {
+        	if (/ruid2_module/) {
+				$has_ruid2=1;
+        	}
+    	}
+		if ( $has_ruid2 ) {
+			print_warn('mod_ruid2: ');
+			print_warning('is enabled. PHP Selector will not work with mod_ruid2 - See http://docs.cloudlinux.com/php_selector.html');
+		}
+		# Check for DSO PHP Handler
+		if ( $php5handler && $php5handler eq 'dso' ) {
+			print_warn('DSO PHP Handler: ');
+			print_warning('is enabled. PHP Selector will not work with DSO - See http://docs.cloudlinux.com/php_selector.html');
+		}
+		# Check for mod_php
+		if ( grep { /mod_php/ } @apache_modules_output ) { 
+			print_info('mod_php: ');
+			print_warning('is enabled. PHP Selector will not work with mod_php - See http://docs.cloudlinux.com/php_selector.html');
+		}
+	}
 }
 
 sub check_for_UMBREON_rootkit {
