@@ -1796,6 +1796,13 @@ sub print_if_using_modITK {
     return if !$has_itk;
     print_info('mod_ITK: ');
     print_warning('is enabled (mod_userdir style URLs don\'t work with mod_ITK!)');
+    # http://docs.cloudlinux.com/php_selector.html - states that php selector will
+    # not work with mod_ITK
+    if ($php_selector_disabled == 0) { 
+       # php_selector is enabled
+       print_info('mod_ITK: ');
+       print_warning('php_selector will not work with mod_ITK - See http://docs.cloudlinux.com/php_selector.html');
+    }
 }
 
 sub print_mysql_version {
@@ -5971,6 +5978,10 @@ sub check_for_modruid2_warnings {
                 print_warn('mod_ruid2: ');
                 print_warning('could cause file permission problems when using LiteSpeed Web Server (see ticket 5154193)');
             }
+            if ( $php5handler && $php5handler eq 'dso' and $php_selector_disabled == 0 ) {
+                print_warn('mod_ruid2: ');
+                print_warning('is enabled with DSO PHP Handler. php_selector will not work with mod_ruid2 and DSO - See http://docs.cloudlinux.com/php_selector.html');
+            }
             last;
         }
     }
@@ -6203,6 +6214,13 @@ sub check_for_cl_unsupported_memory_limits {
        if ( grep { /mod_php/ } @apache_modules_output ) { 
           print_warn('mod_php: ');
           print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
+          # http://docs.cloudlinux.com/php_selector.html - states that php selector will
+          # not work with mod_ITK
+          if ($php_selector_disabled == 0) { 
+             # php_selector is enabled
+             print_info('mod_php: ');
+             print_warning('php_selector will not work with mod_php - See http://docs.cloudlinux.com/php_selector.html');
+          }
        }
        # Check for mod_ruid2
        if ( grep { /mod_ruid2/ } @apache_modules_output ) { 
