@@ -6276,6 +6276,7 @@ sub check_for_php_selector_incompatibilities {
             close $rr_fh;
         }
     }
+    my $is_cloudlinux = 0;
     if ( $release_info and $release_info =~ /cloudlinux/i ) {
         $is_cloudlinux = 1;
         if ( -f $php_selector_conf ) {
@@ -6293,7 +6294,7 @@ sub check_for_php_selector_incompatibilities {
             $php_selector_disabled = 'status unknown';
         }
     }
-	return if $php_selector_disabled; 
+	return if $php_selector_disabled or $is_cloudlinux = 0; 
 	# Check for mpm_ITK
 	if ( $php_selector_disabled == 0 ) { 
     	my $has_itk = 0;
