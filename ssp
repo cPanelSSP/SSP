@@ -6294,7 +6294,8 @@ sub check_for_php_selector_incompatibilities {
             $php_selector_disabled = 'status unknown';
         }
     }
-	return if $php_selector_disabled or $is_cloudlinux = 0; 
+	return if $php_selector_disabled == 0 or $is_cloudlinux == 0; 
+   
 	# Check for mpm_ITK
 	if ( $php_selector_disabled == 0 ) { 
     	my $has_itk = 0;
