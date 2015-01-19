@@ -69,6 +69,7 @@ my @extended_rpm_list;         # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERS
 my @rpm_list;                  # rpm -qa
 my %cpconf;                    # cpanel.config
 my %pureftpdconf;              # /etc/pure-ftpd.conf
+my %proftpdconf;               # /etc/proftpd.conf
 my @apache_version_output;     # httpd -v
 my @apache_modules_output;     # httpd -M
 my ( $lsws_full_version, $lsws_numeric_version ) = get_lsws_version();
@@ -1994,6 +1995,44 @@ sub print_ftpserver_info {
     else {
         print_warning('missing ftpserver setting in cpanel.config');
     }
+	if ( $cpconf{'ftpserver'} eq 'pure-ftpd') { 
+    	if ( open( my $pureftpdconf_fh, '<', '/etc/pure-ftpd.conf' ) ) {
+        	local $/ = undef;
+        	%pureftpdconf = map { ( split( /\s+/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($pureftpdconf_fh) );
+    	}
+    	if ( $pureftpdconf{'PassivePortRange'} ) {
+			my $FWPP = $pureftpdconf{'PassivePortRange'};
+			$FWPP =~ s/\s+/:/;
+			my @FWCommand = timed_run( 0, '/sbin/iptables', '-L' );
+			my $FWLine;
+			my $FWPPActive=0;
+			foreach $FWLine(@FWCommand) { chomp($FWLine); if ($FWLine =~ m/$FWPP/ and $FWLine =~ m/ACCEPT/ ) { $FWPPActive = 1; last; } }
+			if ($FWPPActive) { $FWPPActive = "IPTABLES open"; } else { $FWPPActive = "IPTABLES closed"; }
+       		print_magenta("\t \\_ Passive Ports Active: $pureftpdconf{'PassivePortRange'} - $FWPPActive");
+		}
+		else { 
+         	print_magenta("\t \\_ Passive Ports Not Active");
+		}
+	}
+	if ( $cpconf{'ftpserver'} eq 'proftpd') { 
+    	if ( open( my $proftpdconf_fh, '<', '/etc/proftpd.conf' ) ) {
+        	local $/ = undef;
+        	%proftpdconf = map { ( split( /\s+/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($proftpdconf_fh) );
+    	}
+    	if ( $proftpdconf{'PassivePorts'} ) {
+			my $FWPP = $proftpdconf{'PassivePorts'};
+			$FWPP =~ s/\s+/:/;
+			my @FWCommand = timed_run( 0, '/sbin/iptables', '-L' );
+			my $FWLine;
+			my $FWPPActive=0;
+			foreach $FWLine(@FWCommand) { chomp($FWLine); if ($FWLine =~ m/$FWPP/ and $FWLine =~ m/ACCEPT/ ) { $FWPPActive = 1; last; } }
+			if ($FWPPActive) { $FWPPActive = "IPTABLES open"; } else { $FWPPActive = "IPTABLES closed"; }
+       		print_magenta("\t \\_ Passive Ports Active: $proftpdconf{'PassivePorts'} - $FWPPActive");
+		}
+		else { 
+         	print_magenta("\t \\_ Passive Ports Not Active");
+		}
+	}
 }
 
 sub print_dnsserver_info {
