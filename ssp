@@ -312,6 +312,7 @@ check_for_php_selector_incompatibilities();
 check_for_frontpage_rpms();
 check_for_disabled_skipmodseclog();
 check_for_modsec2_STAGE_files();
+check_for_cronallow_and_crondeny();
 
 # [3RDP]
 check_smtp_processes();
@@ -5989,6 +5990,17 @@ sub check_for_modsec2_STAGE_files {
       return if(!(-e("/usr/local/apache/conf/modsec2.user.conf.STAGE")));
       print_warn('modsec2.user.conf.STAGE file found: ');
       print_warning('This may prevent editing of Mod Security Rules in WHM => Security Center => ModSecurity Tools.');
+}
+
+sub check_for_cronallow_and_crondeny { 
+	  if (-e("/etc/cron.allow")) { 
+		my $ETCCRONALLOWEMPTY="";
+		if (!(-s("/etc/cron.allow"))) { 
+			$ETCCRONALLOWEMPTY=" and is empty";
+		}
+	  	print_warn('/etc/cron.allow exists' . $ETCCRONALLOWEMPTY . '. ');
+	  	print_warning('This can prevent cron jobs from showing up in the cPanel UI.');
+	  }
 }
 
 sub check_for_openssl_heartbleed_bug {
