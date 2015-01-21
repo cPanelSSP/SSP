@@ -2003,7 +2003,7 @@ sub print_ftpserver_info {
     	if ( $pureftpdconf{'PassivePortRange'} ) {
 			my $FWPP = $pureftpdconf{'PassivePortRange'};
 			$FWPP =~ s/\s+/:/;
-			my @FWCommand = timed_run( 0, '/sbin/iptables', '-L' );
+			my @FWCommand = timed_run( 10, '/sbin/iptables', '-L' );
 			my $FWLine;
 			my $FWPPActive=0;
 			foreach $FWLine(@FWCommand) { chomp($FWLine); if ($FWLine =~ m/$FWPP/ and $FWLine =~ m/ACCEPT/ ) { $FWPPActive = 1; last; } }
@@ -2022,7 +2022,7 @@ sub print_ftpserver_info {
     	if ( $proftpdconf{'PassivePorts'} ) {
 			my $FWPP = $proftpdconf{'PassivePorts'};
 			$FWPP =~ s/\s+/:/;
-			my @FWCommand = timed_run( 0, '/sbin/iptables', '-L' );
+			my @FWCommand = timed_run( 10, '/sbin/iptables', '-L' );
 			my $FWLine;
 			my $FWPPActive=0;
 			foreach $FWLine(@FWCommand) { chomp($FWLine); if ($FWLine =~ m/$FWPP/ and $FWLine =~ m/ACCEPT/ ) { $FWPPActive = 1; last; } }
