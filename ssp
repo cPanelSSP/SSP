@@ -6342,7 +6342,7 @@ sub check_for_php_selector_incompatibilities {
             }
         }
         else {
-            $php_selector_disabled = 'status unknown';
+            $php_selector_disabled = 0;
         }
     }
 	return if $php_selector_disabled == 0 or $is_cloudlinux == 0; 
