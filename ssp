@@ -2007,7 +2007,7 @@ sub print_ftpserver_info {
 			my $FWLine;
 			my $FWPPActive=0;
 			foreach $FWLine(@FWCommand) { chomp($FWLine); if ($FWLine =~ m/$FWPP/ and $FWLine =~ m/ACCEPT/ ) { $FWPPActive = 1; last; } }
-			if ($FWPPActive) { $FWPPActive = "IPTABLES open"; } else { $FWPPActive = "IPTABLES closed"; }
+			if ($FWPPActive) { $FWPPActive = "IPTABLES status: open"; } else { $FWPPActive = "IPTABLES status: closed (or unknown)"; }
        		print_magenta("\t \\_ Passive Ports Active: $pureftpdconf{'PassivePortRange'} - $FWPPActive");
 		}
 		else { 
