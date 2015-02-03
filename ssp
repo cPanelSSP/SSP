@@ -69,6 +69,7 @@ my @extended_rpm_list;         # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERS
 my @rpm_list;                  # rpm -qa
 my %cpconf;                    # cpanel.config
 my %pureftpdconf;              # /etc/pure-ftpd.conf
+my %proftpdconf;               # /etc/proftpd.conf
 my @apache_version_output;     # httpd -v
 my @apache_modules_output;     # httpd -M
 my ( $lsws_full_version, $lsws_numeric_version ) = get_lsws_version();
@@ -141,9 +142,12 @@ check_sysinfo();
 check_for_remote_mysql();
 print_if_using_mydns_or_nsd();
 print_if_using_modruid2();
+print_if_using_modITK();
 print_mysql_version();
 print_backups_info();
 print_mailserver_info();
+print_ftpserver_info();
+print_dnsserver_info();
 check_for_custom_zonetemplates();
 
 ## [WARN]
@@ -303,6 +307,13 @@ check_for_broken_mysqldump();
 check_exim_log_sanity();
 check_updatelog();
 check_for_readonly_filesystems();
+check_for_cl_unsupported_memory_limits();
+check_for_eblockers();
+check_for_php_selector_incompatibilities();
+check_for_frontpage_rpms();
+check_for_disabled_skipmodseclog();
+check_for_modsec2_STAGE_files();
+check_for_cronallow_and_crondeny();
 
 # [3RDP]
 check_smtp_processes();
@@ -729,7 +740,7 @@ sub print_tip {
         '[FB 42027] "Recently Uploaded Cgi Script Mail" scans and sends email alerts about downloaded files too',
         '[FB 21774] Pure-FTPd is not linked against libwrap. As such, Host Access Control does nothing for it',
         'The cpanel-postgresql* packages are for phpPgAdmin. The postgresql-* packages are for PostgreSQL',
-        'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/bbd8fn2)',
+        'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/pegpr78)',
         'For a list of obscure issues, see the RareIssues wiki article',
         '11.35+: Use /scripts/check_cpanel_rpms to fix problems in /usr/local/cpanel/3rdparty/  - not checkperlmodules',
         'php.ini for phpMyAdmin, phpPgAdmin, Horde, and RoundCube can be found in /usr/local/cpanel/3rdparty/etc/',
@@ -756,13 +767,15 @@ sub print_tip {
         'Use custom_vhost_template_ap(1|2) in userdata files to make changes for an individual vhost',
         'File Manager upload size limits can be adjusted at WHM >> Tweak Settings >> Max HTTP submission size',
         '/var/cpanel/conf/apache/local can potentially cause issues. See ticket 3915299 for an example',
-        'System backups are not uploaded via FTP by default, requires manual config. See http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/SystemBackups',
+        'System backups are not uploaded via FTP by default, requires manual config. See http://documentation.cpanel.net/display/1144Docs/System+Backups#SystemBackups-Manualconfigurationmethod',
         '$PATH may differ when executing something via cron rather than the command line. See ticket 4419531',
         '"failed to open scan directory /var/spool/exim/scan/[...]: Too many links" could mean a directory has reached limit of 32,000 files/dirs',
         'If innodb_force_recovery is enabled in the MySQL configuration, this can sometimes prevent mysqldump from working (see ticket 5193581).',
         '"Spawned \'ossec-dbd\' with \'/sbin/service restart ossec-hids\'" is from ASL (Atomic Secured Linux). Have customer contact ASL Support if necessary.',
-        'You can run SSP with the --bugreport option to print a pre-filled template for submitting a WHM/cPanel bug report.'
-
+        'You can run SSP with the --bugreport option to print a pre-filled template for submitting a WHM/cPanel bug report.',
+        'The path for the modsec_audit.log changes with mod_ruid2 or mod_itk installed to /usr/local/apache/conf/modsec_audit/[user]/YYYYMMDD/YYYYMMDD-HHmm/YYYYMMDD-HHmmSS-[unique-id]',
+        'LiteSpeed (lsws) does NOT support the Apache web status page - see: http://www.litespeedtech.com/support/forum/threads/solved-cpanel-after-litespeed-installation-whm-server-status-gives-a-404-error.5536/',
+        'whm-server-status is incompatible with LiteSpeed?'
     );
 
     my $num  = int rand scalar @tips;
@@ -908,14 +921,18 @@ sub get_hostinfo {
 }
 
 sub get_environment {
-    if ( open my $envtype_fh, '<', '/var/cpanel/envtype' ) {
-        my $envtype = readline($envtype_fh);
+     my $envtype;
+     if ( open my $envtype_fh, '<', '/var/cpanel/envtype' ) {
+        $envtype = readline($envtype_fh);
         close $envtype_fh;
-        return $envtype;
     }
     else {
-        return 'Unknown (could not open/read /var/cpanel/envtype ?)';
+       $envtype = timed_run( 0, '/usr/local/cpanel/bin/envtype');
     }
+    if (!($envtype)) {
+       return 'Unknown (could not open/read /var/cpanel/envtype ?)';
+    }
+    return $envtype; 
 }
 
 sub get_cpuinfo {
@@ -1767,12 +1784,36 @@ sub print_if_using_modruid2 {
     }
 }
 
+sub print_if_using_modITK { 
+   # As it turns out mod_userdir style URL's don't work with mod_itk either!
+    my $has_itk = 0;
+    my @httpd_V = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-V' );
+    for my $line (@httpd_V) {
+        if ( $line =~ /^Server MPM:\s+(.*)/ ) {
+            if ( $1 eq 'ITK' ) {
+                $has_itk = 1;
+                last;
+            }
+        }
+    }
+    return if !$has_itk;
+    print_info('mod_ITK: ');
+    print_warning('is enabled (mod_userdir style URLs don\'t work with mod_ITK!)');
+}
+
 sub print_mysql_version {
     my $mysql_output = timed_run( 0, 'mysql', '-V' );
     if ( $mysql_output ) {
         chomp $mysql_output;
         print_info('MySQL Version: ');
         print_normal($mysql_output);
+    }
+    # Add check here to verify that mysql-version in /var/cpanel/cpanel.config matches
+    my $mysql_distrib = "Distrib " . $cpconf{'mysql-version'};
+    chomp($mysql_distrib);
+    if ( !($mysql_output =~ m/$mysql_distrib/ )) {
+        print_warn('MySQL Version Mismatch: ');
+        print_warning('cpanel.config version (' . $cpconf{'mysql-version'} . ') does not match installed MySQL version');
     }
 }
 
@@ -1920,9 +1961,20 @@ sub print_backups_info {
     for my $dest ( keys(%new_dest) ) {
         my $type = $new_dest{$dest}->{'type'} ? $new_dest{$dest}{'type'} : 'UNKNOWN';;
         my $disabled = defined($new_dest{$dest}{'disabled'}) ? $new_dest{$dest}{'disabled'} : 'UNKNOWN';
+        if ($disabled) { $disabled = "Yes"; } else { $disabled="No"; }
         my $name = $new_dest{$dest}{'name'} ? $new_dest{$dest}{'name'} : 'UNKNOWN';
-        print_normal("\t\t\\_ Remote dest: [Type: " . $type . "] [Disabled: " . $disabled . "] [Name: " . $name . "]")
-    }
+        print_normal("\t\t\\_ Remote dest: [Type: " . $type . "] [Disabled: " . $disabled . "] [Name: " . $name . "]");
+		if ($type eq "SFTP") { 
+			my $privatekey_path = $new_dest{$dest}->{'privatekey'} ? $new_dest{$dest}{'privatekey'} : 'UNKNOWN';;
+			my $passphrase = $new_dest{$dest}->{'passphrase'} ? $new_dest{$dest}{'passphrase'} : 'UNKNOWN';;
+			my $key_is_encrypted = timed_run( 0, 'grep', 'ENCRYPTED', $privatekey_path );
+			chomp($passphrase);
+			if ($passphrase ne "UNKNOWN" and !($key_is_encrypted)) { 
+				print_warn("Your private key is not encrypted ");
+				print_warning("but your backup config contains a passphrase")
+			}
+    	}
+	}
 }
 
 sub print_mailserver_info {
@@ -1932,6 +1984,64 @@ sub print_mailserver_info {
     }
     else {
         print_warning('missing setting in cpanel.config');
+    }
+}
+
+sub print_ftpserver_info {
+    print_info('FTP Server: ');
+    if ( exists $cpconf{'ftpserver'} ) {
+        print_normal($cpconf{'ftpserver'});
+    }
+    else {
+        print_warning('missing ftpserver setting in cpanel.config');
+    }
+	if ( $cpconf{'ftpserver'} eq 'pure-ftpd') { 
+    	if ( open( my $pureftpdconf_fh, '<', '/etc/pure-ftpd.conf' ) ) {
+        	local $/ = undef;
+        	%pureftpdconf = map { ( split( /\s+/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($pureftpdconf_fh) );
+    	}
+    	if ( $pureftpdconf{'PassivePortRange'} ) {
+			my $FWPP = $pureftpdconf{'PassivePortRange'};
+			$FWPP =~ s/\s+/:/;
+			my @FWCommand = timed_run( 10, '/sbin/iptables', '-L' );
+			my $FWLine;
+			my $FWPPActive=0;
+			foreach $FWLine(@FWCommand) { chomp($FWLine); if ($FWLine =~ m/$FWPP/ and $FWLine =~ m/ACCEPT/ ) { $FWPPActive = 1; last; } }
+			if ($FWPPActive) { $FWPPActive = "IPTABLES status: open"; } else { $FWPPActive = "IPTABLES status: closed (or unknown)"; }
+       		print_magenta("\t \\_ Passive Ports Active: $pureftpdconf{'PassivePortRange'} - $FWPPActive");
+		}
+		else { 
+         	print_magenta("\t \\_ Passive Ports Not Active");
+		}
+	}
+	if ( $cpconf{'ftpserver'} eq 'proftpd') { 
+    	if ( open( my $proftpdconf_fh, '<', '/etc/proftpd.conf' ) ) {
+        	local $/ = undef;
+        	%proftpdconf = map { ( split( /\s+/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($proftpdconf_fh) );
+    	}
+    	if ( $proftpdconf{'PassivePorts'} ) {
+			my $FWPP = $proftpdconf{'PassivePorts'};
+			$FWPP =~ s/\s+/:/;
+			my @FWCommand = timed_run( 10, '/sbin/iptables', '-L' );
+			my $FWLine;
+			my $FWPPActive=0;
+			foreach $FWLine(@FWCommand) { chomp($FWLine); if ($FWLine =~ m/$FWPP/ and $FWLine =~ m/ACCEPT/ ) { $FWPPActive = 1; last; } }
+			if ($FWPPActive) { $FWPPActive = "IPTABLES open"; } else { $FWPPActive = "IPTABLES closed"; }
+       		print_magenta("\t \\_ Passive Ports Active: $proftpdconf{'PassivePorts'} - $FWPPActive");
+		}
+		else { 
+         	print_magenta("\t \\_ Passive Ports Not Active");
+		}
+	}
+}
+
+sub print_dnsserver_info {
+    print_info('DNS Server: ');
+    if ( exists $cpconf{'local_nameserver_type'} ) {
+        print_normal($cpconf{'local_nameserver_type'});
+    }
+    else {
+        print_warning('missing local_nameserver_type setting in cpanel.config');
     }
 }
 
@@ -1982,6 +2092,7 @@ sub print_lsws_info {
     }
     print_info('LiteSpeed Web Server: ');
     print_normal('is now supported, see http://cpanel.wiki/display/LS/LiteSpeed'); 
+    print_normal('Note: whm-server-status is incompatible with LiteSpeed');
 }
 
 sub check_for_lsws_update {
@@ -2516,8 +2627,9 @@ sub check_for_non_default_permissions {
         '/usr/local/apache/bin/httpd'  => [ ['0755'], '', '', '' ],
         '/usr/local/apache/domlogs'    => [ ['0711'], '', 'wheel', ' - If users can\'t access logs, stats won\'t process.  See ticket 5413079.' ],
         '/usr/local/bin'               => [ ['0755', '0711', '0555'], '', '', '' ],
-        '/usr/local/cpanel'                                                             => [ ['0711'], '', 'wheel', '' ],
+        '/usr/local/cpanel'            => [ ['0711'], '', 'wheel', '' ],
         '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'                          => [ ['0644'], '', 'wheel', '' ],
+	'/usr/local/cpanel/3rdparty/bin/webalizer_lang/english'                                 => [ ['0755'], 'bin', 'bin', ' - Seeing cannot find a valid webalizer binary for language...' ],
         '/usr/local/cpanel/base/3rdparty/phpPgAdmin/index.php'                          => [ ['0644'], '', 'wheel', '' ],
         '/usr/local/cpanel/base/3rdparty/roundcube/index.php'                           => [ ['0644'], '', 'wheel', '' ],
         '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => [ ['0644'], '', 'wheel', '' ],
@@ -2528,6 +2640,7 @@ sub check_for_non_default_permissions {
         '/var/cpanel'                  => [ ['0755', '0711', '0555'], '', '', '' ],
         '/var/cpanel/backups/config'   => [ ['0644'], '', '', '' ],
         '/var/cpanel/datastore'        => [ ['0755'], '', '', '' ],
+        '/var/cpanel/domain_keys_private'       => [ ['0640'], 'root', 'mail', '' ],
         '/var/cpanel/features'         => [ ['0755'], '', '', '' ],
         '/var/cpanel/locale'           => [ ['0755'], '', '', '' ],
         '/var/cpanel/locale/themes'    => [ ['0755'], '', '', '' ],
@@ -5018,14 +5131,14 @@ sub check_for_use_compiled_dnsadmin {
     my $setup_modules_dir = '/usr/local/cpanel/Cpanel/NameServer/Remote';
     my $remote_modules_dir = '/usr/local/cpanel/Cpanel/NameServer/Setup/Remote';
 
-    # http://docs.cpanel.net/twiki/bin/view/SoftwareDevelopmentKit/WritingSetupModules
+    # http://documentation.cpanel.net/display/SDK/How+to+Write+Setup+Modules
     if ( -d $setup_modules_dir ) {
         opendir( my $dir_fh, $setup_modules_dir );
         @setup_modules = grep { !/^\.\.?$/ } readdir $dir_fh;
         closedir $dir_fh;
     }
 
-    # http://docs.cpanel.net/twiki/bin/view/SoftwareDevelopmentKit/WritingRemoteModules
+    # http://documentation.cpanel.net/display/SDK/How+to+Write+Remote+Modules
     if ( -d $remote_modules_dir ) {
         opendir( my $dir_fh, $remote_modules_dir );
         @remote_modules = grep { !/^\.\.?$/ } readdir $dir_fh;
@@ -5621,6 +5734,7 @@ sub check_for_missing_groups {
 
     for my $group (@groups) {
         next if ( $group eq 'cpses' and cpanel_version_is(qw( < 11.40.0.0 )) ); # was cpses added in 11.40?
+        next if ( $group eq 'cpanellogaholic' and cpanel_version_is(qw( > 11.47.0.0)) ); # cpanellogaholic was removed in 11.47.9999
         my $gid = getgrnam($group);
         next if ( defined $gid and $gid =~ /^\d+$/ );
         $missing_groups .= "[$group] ";
@@ -5645,7 +5759,7 @@ sub check_for_noquotafs {
     return if !-f $noquotafs or -z $noquotafs;
 
     print_warn("$noquotafs: ");
-    print_warning('exists. quota issues? See http://docs.cpanel.net/twiki/bin/view/AllDocumentation/WHMDocs/QuotaFSConfig');
+    print_warning('exists. quota issues? See http://documentation.cpanel.net/pages/viewpage.action?pageId=363841');
 }
 
 sub check_for_mod_rpaf {
@@ -5891,7 +6005,7 @@ sub check_for_modruid2_warnings {
                 print_warn('mod_ruid2: ');
                 print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see cases 84393, 104017, and tickets 5015613, 5227891');
             }
-            if ( $php5handler && $php5handler eq 'suphp' ) {
+            if ( $php5handler && $php5handler eq 'suphp' and $cpconf{'jailapache'} == 1 ) {
                 print_warn('mod_ruid2: ');
                 print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see cases 70561, 105901');
             }
@@ -5902,6 +6016,30 @@ sub check_for_modruid2_warnings {
             last;
         }
     }
+}
+
+sub check_for_disabled_skipmodseclog { 
+      if ( exists $cpconf{'skipmodseclog'} and $cpconf{'skipmodseclog'} == 1 ) {
+            print_warn('ModSecurity Hits: ');
+            print_warning('ModSec logging disabled in Security Manager - causes no hits to be saved in modsec.hits table.');
+      }
+}
+
+sub check_for_modsec2_STAGE_files { 
+      return if(!(-e("/usr/local/apache/conf/modsec2.user.conf.STAGE")));
+      print_warn('modsec2.user.conf.STAGE file found: ');
+      print_warning('This may prevent editing of Mod Security Rules in WHM => Security Center => ModSecurity Tools.');
+}
+
+sub check_for_cronallow_and_crondeny { 
+	  if (-e("/etc/cron.allow")) { 
+		my $ETCCRONALLOWEMPTY="";
+		if (!(-s("/etc/cron.allow"))) { 
+			$ETCCRONALLOWEMPTY=" and is empty";
+		}
+	  	print_warn('/etc/cron.allow exists' . $ETCCRONALLOWEMPTY . '. ');
+	  	print_warning('This can prevent cron jobs from showing up in the cPanel UI.');
+	  }
 }
 
 sub check_for_openssl_heartbleed_bug {
@@ -6094,6 +6232,160 @@ sub check_for_unsupported_php {
     }
     print_critical();
 };
+
+sub check_for_cl_unsupported_memory_limits {
+    return if ! $is_cloudlinux;
+    my $cl_release_version = "";
+    open my $file_fh, '<', '/etc/redhat-release' or return;
+    while (<$file_fh>) {
+    	chomp($_);
+    	$cl_release_version = $_;
+    }
+    close $file_fh or return;
+    # See ticket # 5557825 - Several memory limits are not imposed: URL: https://helpdesk.cloudlinux.com/index.php?/Knowledgebase/Article/View/69/3/memory-limits-are-not-working
+    # Per Igor: 
+    # On CL 5 - It doesn't support memory limits for: mod_php, mod_ruid2, MPM ITK # & LiteSpeed. 
+    # On CL 6 - It doesn't support memory limits for mod_php & mod_ruid2
+    if ( $cl_release_version =~ m{ release 5 }xms ) { 
+       # Check for LiteSpeed
+       if ( $lsws_full_version ) { 
+          print_warn('LiteSpeed ');
+          print_warning('detected. Memory limits may not be imposed/supported [See ticket # 5557825]');
+       }
+       # Check for mod_php
+       if ( grep { /mod_php/ } @apache_modules_output ) { 
+          print_warn('mod_php: ');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
+       }
+       # Check for mod_ruid2
+       if ( grep { /mod_ruid2/ } @apache_modules_output ) { 
+          print_warn('mod_ruid2: ');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
+       }
+       # Check for MPM_ITK
+       my @httpd_V = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-V' );
+       for my $line (@httpd_V) {
+          if ( $line =~ /^Server MPM:\s+(.*)/ ) {
+             if ( $1 eq 'ITK' ) {
+                print_warn('MPM_ITK: ');
+                print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
+             }
+          }
+       }
+    }
+
+    if ( $cl_release_version =~ m{ release 6 }xms ) {
+       # Check for mod_php
+       if ( grep { /mod_php/ } @apache_modules_output ) {
+          print_warn('mod_php: ');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
+       }
+       # Check for mod_ruid2
+       if ( grep { /mod_ruid2/ } @apache_modules_output ) {
+          print_warn('mod_ruid2: ');
+          print_warning('loaded. Memory limits may not be imposed/supported [See ticket # 5557825]');
+       }
+    }
+}
+
+sub check_for_eblockers {
+	  return if (!(-e("/var/cpanel/update_blocks.config")));
+	  print_warn('E Blocker found: ');
+	  print "\n";
+     open my $file_fh, '<', '/var/cpanel/update_blocks.config' or return;
+     while (<$file_fh>) {
+         chomp($_);
+         print_magenta("\t \\_ $_");
+	  }
+	  close $file_fh or return;
+}
+
+sub check_for_frontpage_rpms { 
+     return if (!(-e("/usr/local/frontpage/version5.0/bin/owsadm.exe")));
+     # Check for any FrontPage RPM's
+     if ( my $grep_for_fp_rpms = grep ( m{frontpage}, @rpm_list ) ) {
+         if (!($grep_for_fp_rpms)) { 
+            print_warn('FrontPage RPMS Not Found: ');
+            print_warning('but /usr/local/frontpage/version5.0/bin/owsadm.exe still exists. Will prevent update to 11.46');
+         }
+     }
+}
+
+sub check_for_php_selector_incompatibilities { 
+    # http://docs.cloudlinux.com/php_selector.html - states that php selector will
+    # not work with mod_ITK, mod_ruid2, mod_php or the DSO php handler
+
+	# First check and see if php_selector is enabled
+    my $php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
+    my $php_selector_disabled = 0;
+    my $release_info;
+    if ( -e '/etc/redhat-release' ) {
+        if ( open my $rr_fh, '<', '/etc/redhat-release' ) {
+            while (<$rr_fh>) {
+                chomp( $release_info = $_ );
+            }
+            close $rr_fh;
+        }
+    }
+    my $is_cloudlinux = 0;
+    if ( $release_info and $release_info =~ /cloudlinux/i ) {
+        $is_cloudlinux = 1;
+        if ( -f $php_selector_conf ) {
+            if ( open my $file_fh, '<', $php_selector_conf ) {
+                while (<$file_fh>) {
+                    if (/^file=>lvephpsel,skipobj=>1/) {
+                        $php_selector_disabled = 1;
+                        last;
+                    }
+                }
+                close $file_fh;
+            }
+        }
+        else {
+            $php_selector_disabled = 0;
+        }
+    }
+	return if $php_selector_disabled == 0 or $is_cloudlinux == 0; 
+   
+	# Check for mpm_ITK
+	if ( $php_selector_disabled == 0 ) { 
+    	my $has_itk = 0;
+    	my @httpd_V = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-V' );
+    	for my $line (@httpd_V) {
+        	if ( $line =~ /^Server MPM:\s+(.*)/ ) {
+            	if ( $1 eq 'ITK' ) {
+                	$has_itk = 1;
+                	last;
+            	}
+        	}
+    	}
+		if ( $has_itk ) { 	
+    	   	print_warn('mod_ITK: ');
+       		print_warning('is enabled. PHP Selector will not work with mod_ITK - See http://docs.cloudlinux.com/php_selector.html');
+		}
+		# Check for mod_ruid2
+		my $has_ruid2 = 0;
+    	for (@apache_modules_output) {
+        	if (/ruid2_module/) {
+				$has_ruid2=1;
+        	}
+    	}
+		if ( $has_ruid2 ) {
+			print_warn('mod_ruid2: ');
+			print_warning('is enabled. PHP Selector will not work with mod_ruid2 - See http://docs.cloudlinux.com/php_selector.html');
+		}
+		# Check for DSO PHP Handler
+		if ( $php5handler && $php5handler eq 'dso' ) {
+			print_warn('DSO PHP Handler: ');
+			print_warning('is enabled. PHP Selector will not work with DSO - See http://docs.cloudlinux.com/php_selector.html');
+		}
+		# Check for mod_php
+		if ( grep { /mod_php/ } @apache_modules_output ) { 
+			print_info('mod_php: ');
+			print_warning('is enabled. PHP Selector will not work with mod_php - See http://docs.cloudlinux.com/php_selector.html');
+		}
+	}
+}
 
 sub check_for_UMBREON_rootkit {
     my $dir = '/usr/local/__UMBREON__';
