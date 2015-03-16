@@ -16,9 +16,16 @@ use IPC::Open3;
 use Cwd qw(abs_path);
 use Getopt::Long;
 
-my ( $bugreport );
-my $opts = Getopt::Long::GetOptions(
-    'bugreport' => \$bugreport
+my %opts = (
+    'bugreport' => undef,
+    'csi'       => undef,
+    'timeout'   => undef,
+);
+
+Getopt::Long::GetOptions(
+    'bugreport' => \$opts{'bugreport'},
+    'csi'       => \$opts{'csi'},
+    'timeout=i' => \$opts{'timeout'},
 );
 
 if ( !-d '/usr/local/cpanel' ) {
@@ -35,7 +42,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.97';
+my $version = '4.99.98';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -128,15 +135,26 @@ $SIG{'INT'} = sub {
     die;
 };
 
+if ( $opts{'timeout'} ) {
+    $opts{'timeout'} = int $opts{'timeout'};
+    if ($opts{'timeout'} < 5) {
+        $opts{'timeout'} = 5;
+    }
+}
+
 ######################
 ##  END GLOBALS     ##
 ######################
 
-if ($bugreport) {
+if ($opts{'bugreport'}) {
     print_bug_report();
     exit;
 }
 
+if ($opts{'csi'}) {
+    csi_checks_only();
+    exit;
+}
 
 print "\n";
 for ( 1 .. 3 ) {
@@ -334,7 +352,6 @@ check_for_cl_unsupported_memory_limits();
 check_for_eblockers();
 check_for_php_selector_incompatibilities();
 check_for_missing_cloudlinux_files();
-check_for_skipmodseclog();
 check_for_modsec2_stage_files();
 check_for_cron_allow();
 
@@ -526,6 +543,38 @@ sub check_for_dnsonly {
     }
 }
 
+sub csi_checks_only {
+    check_port_hash();
+    check_for_bash_secadv_20140924();                               # advisory
+    check_for_UMBREON_rootkit();                                    # malware
+    check_for_jynx2_rootkit();                                      # malware
+    check_for_cdorked_A();                                          # malware
+    check_for_cdorked_B();                                          # malware
+    check_for_libkeyutils_filenames();                              # malware
+    check_sha1_sigs_libkeyutils($libkeyutils_files_ref);            # malware
+    check_sha1_sigs_httpd();                                        # malware
+    check_sha1_sigs_named();                                        # malware
+    check_sha1_sigs_ssh();                                          # malware
+    check_sha1_sigs_ssh_add();                                      # malware
+    check_sha1_sigs_sshd();                                         # malware
+    check_for_ebury_ssh_G();                                        # malware
+    check_for_ebury_ssh_banner();                                   # malware
+    check_for_ebury_ssh_shmem();                                    # malware
+    check_for_ebury_root_file();                                    # malware
+    check_for_ebury_socket();                                       # malware
+    check_for_bg_botnet();                                          # malware
+    check_for_dragnet();                                            # malware
+
+    # These are run closer to the end since it has the potential to take the longest due to RPM usage
+    build_rpm_list();
+    my $openssl_rpm_changelog = get_openssl_rpm_changelog();
+
+    # These require build_rpm_list() to have been run, so that @rpm_list is populated
+    check_for_openssl_heartbleed_bug();
+    check_for_openssl_secadv_20140605();
+    print_info2('SSP checks done.');
+}
+
 sub get_phpini {
     my $phpini = '/usr/local/lib/php.ini';
     return if !-f $phpini;
@@ -609,6 +658,7 @@ sub cpanel_version_is {
 sub timed_run { # Borrowed from Cpanel::SafeRun::Timed and modified
     my ( $timer, @PROGA ) = @_;
     $timer = $timer ? $timer : 25; # A timer value of 0 means use the default, currently 25.
+    $timer = $opts{'timeout'} ? $opts{'timeout'} : $timer;
     return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
 
     open( my $save_stderr_fh, '>&STDERR' );
@@ -653,6 +703,7 @@ sub timed_run { # Borrowed from Cpanel::SafeRun::Timed and modified
 sub timed_run_trap_stderr { # Borrowed from Cpanel::SafeRun::Timed and modified
     my ( $timer, @PROGA ) = @_;
     $timer = $timer ? $timer : 25; # A timer value of 0 means use the default, currently 25.
+    $timer = $opts{'timeout'} ? $opts{'timeout'} : $timer;
     return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
 
     open( my $save_stderr_fh, '>&STDERR' );
@@ -2036,8 +2087,10 @@ sub print_ftpserver_info {
         }
     }
 
+    my $passivetext = $passiveports ?  "enabled - " . ( $fwppactive ? "allowed in iptables" : "not found in iptables" ) : "not enabled";
+
     if ( exists $cpconf{'ftpserver'} ) {
-        print_normal($cpconf{'ftpserver'} . ( $passiveports ? " (Passive ports " . $passiveports . " - " . ( $fwppactive ? "allowed in iptables)" : "not found in iptables)" ) : "" ) );
+        print_normal($cpconf{'ftpserver'} . " ( Passive ports " . $passivetext . " )" );
     }
     else {
         print_warning('missing ftpserver setting in cpanel.config');
@@ -2647,6 +2700,9 @@ sub check_for_non_default_permissions {
         '/var/cpanel/locale'           => [ ['0755'], '', '', '' ],
         '/var/cpanel/locale/themes'    => [ ['0755'], '', '', '' ],
         '/var/cpanel/resellers'        => [ ['0644'], '', '', '' ],
+        '/var/cpanel/userhomes'        => [ ['0755', '0711'], '', '', '' ],
+        '/var/cpanel/userhomes/cpanelhorde'     => [ ['0711'], 'cpanelhorde', 'cpanelhorde', ' - might affect Horde attachments.  See ticket 6139315.' ],
+        '/var/cpanel/userhomes/cpanelroundcube' => [ ['0711'], 'cpanelroundcube', 'cpanelroundcube', '' ],
         '/var/lib'                     => [ ['0755'], '', '', '' ],
         '/var/lib/mysql'               => [ ['0751'], 'mysql', 'mysql', '' ],
         '/var/lib/mysql/mysql.sock'    => [ ['0777'], 'mysql', 'mysql', '' ],
@@ -4911,42 +4967,57 @@ sub check_for_disabled_services {
     my $disabled;
 
     my %touchfiles = (
+        '/etc/antirelayddisable'    => 'antirelayd',
+        '/etc/rrdtooldisable'       => 'bandwidth stats',
+        '/var/run/chkservd.suspend' => 'chksrvd',
+        '/etc/clamddisable'         => 'clamd',
+        '/etc/cppopdisable'         => 'courier',
+        '/etc/popdisable'           => 'courier',
+        '/etc/cpanellogddisable'    => 'cpanellogd',
+        '/etc/cpdavddisable'        => 'cpdavd',
+        '/etc/cpsrvdddisable'       => 'cpsrvd',
+        '/etc/eximdisable'          => 'exim',
+        '/etc/disablehackcheck'     => 'hackcheck',
         '/etc/ftpddisable'          => 'ftpd',
         '/etc/ftpserverdisable'     => 'ftpd',
-        '/etc/sshddisable'          => 'sshd',
-        '/etc/eximdisable'          => 'exim',
         '/etc/apachedisable'        => 'httpd',
-        '/etc/httpdisable'          => 'httpd',
         '/etc/httpddisable'         => 'httpd',
+        '/etc/httpdisable'          => 'httpd',
         '/etc/httpdisevil'          => 'httpd',
-        '/etc/imapdisable'          => 'imapd',
+        '/etc/cpimapdisable'        => 'imapd',
         '/etc/imapddisable'         => 'imapd',
-        '/etc/nameddisable'         => 'named',
-        '/etc/binddisable'          => 'named',
-        '/etc/dnsdisable'           => 'named',
-        '/etc/nsddisable'           => 'nsd',
+        '/etc/imapdisable'          => 'imapd',
+        '/etc/ipaliasesdisable'     => 'ipaliases',
+        '/etc/mailmandisable'       => 'mailman',
         '/etc/mydnsdisable'         => 'mydns',
         '/etc/mysqldisable'         => 'mysql',
+        '/etc/binddisable'          => 'named',
+        '/etc/dnsdisable'           => 'named',
+        '/etc/nameddisable'         => 'named',
+        '/etc/nsddisable'           => 'nsd',
         '/etc/postgresdisable'      => 'postgresql',
         '/etc/postgresqldisable'    => 'postgresql',
         '/etc/postmasterdisable'    => 'postgresql',
-        '/etc/clamddisable'         => 'clamd',
-        '/etc/antirelayddisable'    => 'antirelayd',
-        '/etc/tailwatchddisable'    => 'tailwatchd',
-        '/var/cpanel/version/securetmp_disabled'    => 'securetmp',
+        '/etc/proftpddisable'       => 'proftpd',
+        '/etc/pureftpddisable'      => 'pureftpd',
+        '/etc/pure-ftpddisable'     => 'pureftpd',
         '/etc/queueprocddisable'    => 'queueprocd',
-        '/etc/spamdisable'          => 'spamd',
-        '/etc/mailmandisable'       => 'mailman',
-        '/etc/ipaliasesdisable'     => 'ipaliases',
-        '/etc/cpsrvdddisable'       => 'cpsrvd',
-        '/etc/cpdavddisable'        => 'cpdavd',
-        '/etc/cpanellogddisable'    => 'cpanellogd',
         '/etc/rsyslogdisable'       => 'rsyslogd',
+        '/var/cpanel/version/securetmp_disabled'    => 'securetmp',
+        '/etc/spamddisable'         => 'spamd',
+        '/etc/spamdisable'          => 'spamd',
+        '/etc/sshddisable'          => 'sshd',
         '/etc/syslogdisable'        => 'syslogd',
-        '/etc/disablehackcheck'     => 'hackcheck',
-        '/etc/rrdtooldisable'       => 'bandwidth stats',
+        '/etc/tailwatchddisable'    => 'tailwatchd',
         '/etc/tomcatdisable'        => 'tomcat',
-        '/var/run/chkservd.suspend' => 'chksrvd',
+    );
+    
+    my %cpconfcheck = (
+        'skipcpbandwd'      => 'cpbandwd',
+        'skipchkservd'      => 'chkservd',
+        'skipeximstats'     => 'eximstats',
+        'skipmailman'       => 'mailman',
+        'skipmodseclog'     => 'modseclog',
     );
 
     while ( my ( $touchfile, $service ) = each ( %touchfiles ) ) {
@@ -4957,9 +5028,15 @@ sub check_for_disabled_services {
         }
     }
 
+    foreach my $skip ( keys(%cpconfcheck) ) {
+        if ( $cpconf{$skip} ) {
+            push @disabled_services, $cpconfcheck{$skip};
+        }
+    }
+
     return if !@disabled_services;
 
-    for my $service ( @disabled_services ) {
+    for my $service ( sort(@disabled_services) ) {
         $disabled .= "[$service] ";
     }
 
@@ -4979,13 +5056,13 @@ sub check_for_license_info {
         PeerAddr    => $host,
         PeerPort    => 80,
         Proto       => 'tcp',
-        Timeout     => 3,
+        Timeout     => 5,
     ) or return;
 
     local $SIG{'ALRM'} = sub { return (); };
 
+    alarm 5;
     print $sock "GET $url HTTP/1.1\r\nHost: verify.cpanel.net\r\n\r\n";
-    alarm 3;
     read $sock, my $buffer, 50_000;
     alarm 0;
     close $sock;
@@ -6001,15 +6078,6 @@ sub check_for_modruid2_warnings {
         }
 }
 
-sub check_for_skipmodseclog { 
-    return unless $apache_modsec;
-    return unless exists $cpconf{'skipmodseclog'};
-    if ( $cpconf{'skipmodseclog'} ) {
-        print_info('Mod Security: ');
-        print_normal('ModSecLog disabled in WHM Service Manager - no hits will be saved in modsec.hits table.');
-    }
-}
-
 sub check_for_modsec2_stage_files { 
     return if(! -e "/usr/local/apache/conf/modsec2.user.conf.STAGE" );
     print_warn('Mod Security: ');
@@ -6360,11 +6428,6 @@ sub check_for_jynx2_rootkit {
 
 sub check_for_bg_botnet {
     my @found_bg_files = ();
-    # Not including the following /tmp files in the list because any non-root user can create them and trigger a false-positive just for the lolz.
-    # /tmp/bill.lock
-    # /tmp/gates.lock
-    # /tmp/moni.lock
-    # /tmp/notify.file
     # /bin/ps, /bin/netstat, and /usr/sbin/lsof have also been found to be modified
     # This one is causing some rare false-positives:
     # /root/aa
@@ -6400,8 +6463,19 @@ sub check_for_bg_botnet {
         /etc/rc.d/init.d/DbSecuritySpt
         /etc/rc.d/init.d/selinux
     );
+    # Because tmp, we must check that these are owned by root. Leaving "/tmp/notify.file" out of this list due to potential false-positives.
+    my @root_bg_files = qw(
+        /tmp/bill.lock
+        /tmp/gates.lock
+        /tmp/moni.lock
+    );
     for my $file (@bg_files) {
         if ( -e $file ) {
+            push(@found_bg_files, $file);
+        }
+    }
+    for my $file (@root_bg_files) {
+        if ( -e $file && (stat $file)[4] eq 0 ) {
             push(@found_bg_files, $file);
         }
     }
@@ -7274,7 +7348,7 @@ sub check_for_ebury_socket {
 ## END malware checks
 
 sub build_rpm_list {
-    my $timeout = 25;
+    my $timeout = $opts{'timeout'} ? $opts{'timeout'} : 25;
 
     print_info2("RPM check (running \"rpm -qa ...\"). This will timeout after $timeout seconds.");
 
@@ -7297,7 +7371,7 @@ sub build_rpm_list {
 }
 
 sub get_openssl_rpm_changelog {
-    my $timeout = 15;
+    my $timeout = $opts{'timeout'} ? $opts{'timeout'} : 15;
 
     print_info2("RPM query OpenSSL changelog (running \"rpm -q ...\"). This will timeout after $timeout seconds.");
 
