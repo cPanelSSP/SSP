@@ -2019,7 +2019,8 @@ sub print_backups_info {
         my $type = exists $new_dest{$dest}->{'type'} ? $new_dest{$dest}{'type'} : 'UNKNOWN';;
         my $disabled = exists $new_dest{$dest}{'disabled'} ? ($new_dest{$dest}{'disabled'} ? "Yes" : "No") : 'UNKNOWN';
         my $name = exists $new_dest{$dest}{'name'} ? $new_dest{$dest}{'name'} : 'UNKNOWN';
-        print_normal("\t\t\\_ Remote dest: [Type: " . $type . "] [Disabled: " . $disabled . "] [Name: " . $name . "]");
+        my $timeoutdest = exists $new_dest{$dest}->{'timeout'} ? $new_dest{$dest}{'timeout'} : 'UNKNOWN';;
+        print_normal("\t\t\\_ Remote dest: [Type: " . $type . "] [Disabled: " . $disabled . "] [Name: " . $name . "] [Timeout: " . $timeoutdest . "]");
         if ( $type eq "SFTP" && exists $new_dest{$dest}{'privatekey'} && exists $new_dest{$dest}{'passphrase'} ) {
             my $key_is_encrypted = 0;
             if ( open my $privatekey_fh, '<', $new_dest{$dest}->{'privatekey'} ) {
