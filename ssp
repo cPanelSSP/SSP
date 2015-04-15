@@ -42,7 +42,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.98';
+my $version = '4.99.99';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -65,6 +65,7 @@ my %port;                       &get_lsof_port_hash(\%port);
 my %ipcs;                       &get_ipcs_hash(\%ipcs);
 my %hostinfo                    = get_hostinfo();
 my %cpuinfo                     = get_cpuinfo();
+my %sysctl                      = get_sysctl();
 my ( $os_release, $os_ises )    = get_release_version();
 my %mysql_conf;                 &get_mysql_conf(\%mysql_conf);
 my $mysql_datadir               = get_mysql_datadir(); # needs %mysql_conf
@@ -214,6 +215,7 @@ check_for_tomcatoptions();
 check_for_sneaky_htaccess();
 check_perl_sanity();
 check_for_non_default_permissions();
+check_for_non_default_sysctl();
 check_for_stale_lockfiles();
 check_var_cpanel_users_files_ownership();
 check_root_suspended();
@@ -289,19 +291,16 @@ check_for_networkmanager();
 check_for_dhclient();
 check_for_var_cpanel_roundcube_install();
 check_for_missing_etc_localtime();
-check_for_immutable_files();
-check_for_immutable_dirs();
 check_for_cloudlinux_mysql_gov();
 check_cpanel_config_for_low_maxmem();
 check_pure_ftpd_conf_for_upload_script_and_dead();    #must come after check_cpanel_config_for_low_maxmem
 check_cpanel_config_for_bad_root();
-check_for_PERL5LIB_env_var();
+check_for_perl_env_var();
 check_for_disabled_services();
 check_for_cpbackup_exclude_everything();
 check_for_usr_local_include_jpeglib_h();
 check_for_bw_module_and_more_than_1024_vhosts();
 check_for_uppercase_chars_in_hostname();
-check_for_stale_upgrade_in_progress_txt();
 check_for_bad_permissions_on_named_ca();
 check_for_use_compiled_dnsadmin();
 check_for_mysql_root_pass_with_single_quote();
@@ -375,6 +374,7 @@ check_for_cpremote();
 check_for_els();
 check_for_whmxtra();
 check_for_usr_local_mis();
+check_for_opt_gsi_tools();
 
 # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
 check_for_unsupported_php();                                    # Extreme care!
@@ -398,6 +398,7 @@ check_for_ebury_root_file();                                    # malware
 check_for_ebury_socket();                                       # malware
 check_for_bg_botnet();                                          # malware
 check_for_dragnet();                                            # malware
+check_for_xor_ddos();                                           # malware
 
 # These are run closer to the end since it has the potential to take the longest due to RPM usage
 build_rpm_list();
@@ -417,6 +418,7 @@ check_for_duplicate_rpms();
 check_for_better_linux();
 check_for_kernel_headers_rpm();
 check_for_frontpage_rpms();
+check_for_prelink();
 check_for_broken_rpm();
 
 print_info2('Done.');
@@ -523,6 +525,7 @@ sub check_for_dnsonly {
         check_for_ebury_socket();                                       # malware
         check_for_bg_botnet();                                          # malware
         check_for_dragnet();                                            # malware
+        check_for_xor_ddos();                                           # malware
 
         # These are run closer to the end since it has the potential to take the longest due to RPM usage
         build_rpm_list();
@@ -564,7 +567,8 @@ sub csi_checks_only {
     check_for_ebury_socket();                                       # malware
     check_for_bg_botnet();                                          # malware
     check_for_dragnet();                                            # malware
-
+    check_for_xor_ddos();                                           # malware
+    
     # These are run closer to the end since it has the potential to take the longest due to RPM usage
     build_rpm_list();
     my $openssl_rpm_changelog = get_openssl_rpm_changelog();
@@ -850,10 +854,11 @@ sub print_tip {
         '"Spawned \'ossec-dbd\' with \'/sbin/service restart ossec-hids\'" is from ASL (Atomic Secured Linux). Have customer contact ASL Support if necessary.',
         'You can run SSP with the --bugreport option to print a pre-filled template for submitting a WHM/cPanel bug report.',
         'The path for the modsec_audit.log changes with Mod Ruid2 or MPM ITK installed to /usr/local/apache/conf/modsec_audit/[user]/YYYYMMDD/YYYYMMDD-HHmm/YYYYMMDD-HHmmSS-[unique-id]',
-        'LiteSpeed (lsws) does NOT support the Apache web status page - see: http://www.litespeedtech.com/support/forum/threads/solved-cpanel-after-litespeed-installation-whm-server-status-gives-a-404-error.5536/'
+        'LiteSpeed (lsws) does NOT support the Apache web status page - see: http://www.litespeedtech.com/support/forum/threads/solved-cpanel-after-litespeed-installation-whm-server-status-gives-a-404-error.5536/',
+        'You can submit new ideas or bug reports for SSP by emailing ssp-requests(at)cpanel.net'
     );
 
-    my $num  = int rand scalar @tips;
+    my $num  = int rand scalar $#tips;
     print BOLD WHITE ON_BLACK "\tDid you know? $tips[$num]" . RESET . "\n\n";
 }
 
@@ -869,7 +874,7 @@ sub get_tiers_file {
     );
 
     if ($sock) {
-        print $sock "GET /cpanelsync/TIERS HTTP/1.1\r\nHost: httpupdate.cpanel.net\r\n\r\n";
+        print $sock "GET /cpanelsync/TIERS HTTP/1.1\r\nUser-Agent: SSP/" . $version . "\r\nHost: httpupdate.cpanel.net\r\n\r\n";
         sysread $sock, $TIERS, 1000;
         close $sock;
     }
@@ -883,7 +888,7 @@ sub get_process_list { # Usage of this needs to be deprecated in favor of the %p
     return split /\n/, timed_run( 0, 'ps', 'axwwwf', '-o', 'user,pid,cmd' );
 }
 
-sub get_process_pid_hash ($) {
+sub get_process_pid_hash {
     my ($href) = @_;
     for ( split /\n/, timed_run( 0, 'ps', 'axwww', '-o', 'user,pid,ppid,cmd' ) ) {
         # nobody    5403  1666 /usr/local/apache/bin/httpd -k start -DSSL
@@ -895,7 +900,7 @@ sub get_process_pid_hash ($) {
     }
 }
 
-sub get_lsof_port_hash ($) {
+sub get_lsof_port_hash {
     my ($href) = @_;
     for ( split /\n/, timed_run( 0, 'lsof', '+c15', '-n', '-P', '-i' ) ) {
         # cmd will be max 15 characaters due to lsof limitation
@@ -924,7 +929,7 @@ sub get_lsof_port_hash ($) {
     }
 }
 
-sub get_ipcs_hash ($) {
+sub get_ipcs_hash {
     my ($href) = @_;
     my $header = 0;
     # For now, all we need is shared memory segment owner and creator-pid, but the data structure is extensible.
@@ -950,7 +955,7 @@ sub get_ipcs_hash ($) {
     }
 }
 
-sub get_mysql_conf () {
+sub get_mysql_conf {
     my ($href) = @_;
     my $lines = 0;
     if ( open( my $mycnf_fh, '<', '/etc/my.cnf' ) ) {
@@ -1034,6 +1039,10 @@ sub get_cpuinfo {
 
     chomp %cpuinfos;
     return %cpuinfos;
+}
+
+sub get_sysctl {
+    return map { split(/\s=\s/, $_, 2) } split(/\n/, timed_run( 0, 'sysctl', '-a' ));
 }
 
 sub print_info {
@@ -1692,13 +1701,16 @@ sub print_php_configuration {
                 $php5version = '(version unknown)';
             }
 
-            if ( $php5handler && $php5handler eq 'fcgi' ) {
+            my $additional_text = "";
+            if ( $php5handler ) {
+                if ( $php5handler eq 'fcgi' ) {
+                    $additional_text .= " (mod_userdir style URLs don't work with fcgi!)";
+                }
+                if ( $php5handler eq 'cgi' ) {
+                    $additional_text .= " (mod_userdir style URLs don't work with cgi!)";
+                }
                 print_info('PHP Default: ');
-                print_warning("PHP $php5version $php5handler $suexec (mod_userdir style URLs don't work with fcgi!)");
-            }
-            elsif ( $php5handler ) {
-                print_info('PHP Default: ');
-                print_normal("PHP $php5version $php5handler $suexec");
+                print_normal("PHP $php5version $php5handler $suexec" . $additional_text);
             }
         }
 
@@ -2019,7 +2031,8 @@ sub print_backups_info {
         my $type = exists $new_dest{$dest}->{'type'} ? $new_dest{$dest}{'type'} : 'UNKNOWN';;
         my $disabled = exists $new_dest{$dest}{'disabled'} ? ($new_dest{$dest}{'disabled'} ? "Yes" : "No") : 'UNKNOWN';
         my $name = exists $new_dest{$dest}{'name'} ? $new_dest{$dest}{'name'} : 'UNKNOWN';
-        print_normal("\t\t\\_ Remote dest: [Type: " . $type . "] [Disabled: " . $disabled . "] [Name: " . $name . "]");
+        my $timeoutdest = exists $new_dest{$dest}->{'timeout'} ? $new_dest{$dest}{'timeout'} : 'UNKNOWN';;
+        print_normal("\t\t\\_ Remote dest: [Type: " . $type . "] [Disabled: " . $disabled . "] [Name: " . $name . "] [Timeout: " . $timeoutdest . "]");
         if ( $type eq "SFTP" && exists $new_dest{$dest}{'privatekey'} && exists $new_dest{$dest}{'passphrase'} ) {
             my $key_is_encrypted = 0;
             if ( open my $privatekey_fh, '<', $new_dest{$dest}->{'privatekey'} ) {
@@ -2166,7 +2179,7 @@ sub check_for_lsws_update {
     );
 
     if ($sock) {
-        print $sock "GET /ws/latest.php HTTP/1.1\r\nHost: update.litespeedtech.com\r\n\r\n";
+        print $sock "GET /ws/latest.php HTTP/1.1\r\nUser-Agent: SSP/" . $version . "\r\nHost: update.litespeedtech.com\r\n\r\n";
         sysread $sock, $LSWS_DATA, 1000;
         close $sock;
     }
@@ -2260,6 +2273,7 @@ sub check_for_missing_usr_bin_crontab {
 
 sub check_if_upcp_is_running {
     my $upcp_running = 0;
+    my $upcp_touchfile = 0;
 
     for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) cPanel \s Update \s \(upcp\) }xms ) {
@@ -2268,9 +2282,17 @@ sub check_if_upcp_is_running {
         }
     }
 
+    if ( -e '/usr/local/cpanel/upgrade_in_progress.txt' ) {
+        $upcp_touchfile = 1;
+    }
+
     if ( $upcp_running == 1 ) {
         print_warn('upcp check: ');
         print_warning('upcp is currently running');
+    }
+    elsif ( $upcp_touchfile == 1 ) {
+        print_warn('upcp check: ');
+        print_warning('/usr/local/cpanel/upgrade_in_progress.txt found, but upcp doesn\'t appear to be running. Last run failed? If Tweak Settings is not loading, this may be why.');
     }
 }
 
@@ -2550,7 +2572,7 @@ sub check_for_custom_apache_includes {
 
     my $custom_includes;
     for my $include (@includes) {
-        if ( !-z "${include_dir}/${include}" ) {
+        if ( -s "${include_dir}/${include}" ) {
             if ( $include eq 'pre_virtualhost_global.conf' ) {
                 my $md5 = timed_run( 0, 'md5sum', '/usr/local/apache/conf/includes/pre_virtualhost_global.conf' );
                 next if ( $md5 && $md5 =~ m{ \A 1693b9075fa54ede224bfeb8ad42a182 \s }xms );
@@ -2639,148 +2661,216 @@ sub check_perl_sanity {
     }
 }
 
-sub check_for_non_default_permissions {
-    my %check = ( # '/path' => [ ['default1', 'default2', ...], user, group, 'Additional info' ] # user/group is root if empty
-        '/'                            => [ ['0755', '0555'], '', '', ' - .ftpquota issues? see ticket 4429843' ],
-        '/bin'                         => [ ['0755', '0711', '0555'], '', '', '' ],
-        '/bin/bash'                    => [ ['0755'], '', '', '' ],
-        '/bin/ln'                      => [ ['0755', '0555'], '', '', '' ],
-        '/bin/rm'                      => [ ['0755', '0555'], '', '', ' - File Manager unable to delete files?  This may be why.' ],
-        '/dev/log'                     => [ ['0666'], '', '', ' - CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog.' ],
-        '/dev/null'                    => [ ['0666'], '', '', ' - Breaks many things if non-root users can\'t write to this.' ],
-        '/dev/random'                  => [ ['0666', '0664', '0644', '0444'], '', '', ' - Breaks many things if non-root users can\'t read this.' ],
-        '/dev/urandom'                 => [ ['0666', '0664', '0644', '0444'], '', '', ' - Breaks many things if non-root users can\'t read this.' ],
-        '/etc'                         => [ ['0755'], '', '', '' ],
-        '/etc/cpbackup.conf'           => [ ['0644'], '', '', '' ],
-        '/etc/group'                   => [ ['0644'], '', '', '' ],
-        '/etc/hosts'                   => [ ['0644'], '', '', '' ],
-        '/etc/localdomains'            => [ ['0640'], '', 'mail', ' - Failing to properly create an email forwarder? See ticket 5234627.' ],
-        '/etc/nsswitch.conf'           => [ ['0644'], '', '', '' ],
-        '/etc/passwd'                  => [ ['0644'], '', '', '' ],
-        '/etc/shadow'                  => [ ['0600', '0400', '0200'], '', '', '' ],
-        '/etc/stats.conf'              => [ ['0644'], '', '', '' ],
-        '/home'                        => [ ['0755', '0711'], '', '', '' ],
-        '/home1'                       => [ ['0755', '0711'], '', '', '' ],
-        '/home2'                       => [ ['0755', '0711'], '', '', '' ],
-        '/home3'                       => [ ['0755', '0711'], '', '', '' ],
-        '/home4'                       => [ ['0755', '0711'], '', '', '' ],
-        '/home5'                       => [ ['0755', '0711'], '', '', '' ],
-        '/opt'                         => [ ['0755'], '', '', '' ],
-        '/root/cpanel3-skel'           => [ ['0755'], '', '', '' ],
-        '/sbin'                        => [ ['0755', '0711', '0555'], '', '', '' ],
-        '/sbin/ifconfig'               => [ ['0755', '0555'], '', '', '' ],
-        '/tmp'                         => [ ['1777'], '', '', '' ],
-        '/usr'                         => [ ['0755'], '', '', '' ],
-        '/usr/bin'                     => [ ['0755', '0711', '0555'], '', '', '' ],
-        '/usr/bin/crontab'             => [ ['6755', '4755', '4711', '4555'], '', '', '' ],
-        '/usr/bin/passwd'              => [ ['6755', '4755', '4555', '4511'], '', '', '' ],
-        '/usr/sbin'                    => [ ['0755', '0711', '0555'], '', '', '' ],
-        '/usr/sbin/exim'               => [ ['4755'], '', '', '' ],
-        '/usr/share'                   => [ ['0755'], '', '', '' ],
-        '/usr/share/zoneinfo'          => [ ['0755'], '', '', '' ],
-        '/usr/local'                   => [ ['0755'], '', '', '' ],
-        '/usr/local/apache'            => [ ['0755'], '', '', '' ],
-        '/usr/local/apache/bin/httpd'  => [ ['0755'], '', '', '' ],
-        '/usr/local/apache/domlogs'    => [ ['0711'], '', 'wheel', ' - If users can\'t access logs, stats won\'t process.  See ticket 5413079.' ],
-        '/usr/local/bin'               => [ ['0755', '0711', '0555'], '', '', '' ],
-        '/usr/local/cpanel'            => [ ['0711'], '', 'wheel', '' ],
-        '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'                          => [ ['0644'], '', 'wheel', '' ],
-        '/usr/local/cpanel/base/3rdparty/phpPgAdmin/index.php'                          => [ ['0644'], '', 'wheel', '' ],
-        '/usr/local/cpanel/base/3rdparty/roundcube/index.php'                           => [ ['0644'], '', 'wheel', '' ],
-        '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => [ ['0644'], '', 'wheel', '' ],
-        '/usr/local/cpanel/base/3rdparty/squirrelmail/index.php'                        => [ ['0644'], '', 'wheel', '' ],
-        '/usr/local/cpanel/php/cpanel.php'                                              => [ ['0644'], '', '', '' ],
-        '/usr/local/sbin'              => [ ['0755', '0711', '0555'], '', '', '' ],
-        '/var'                         => [ ['0755'], '', '', '' ],
-        '/var/cpanel'                  => [ ['0755', '0711', '0555'], '', '', '' ],
-        '/var/cpanel/backups/config'   => [ ['0644'], '', '', '' ],
-        '/var/cpanel/datastore'        => [ ['0755'], '', '', '' ],
-        '/var/cpanel/domain_keys_private'       => [ ['0640'], 'root', 'mail', '' ],
-        '/var/cpanel/features'         => [ ['0755'], '', '', '' ],
-        '/var/cpanel/locale'           => [ ['0755'], '', '', '' ],
-        '/var/cpanel/locale/themes'    => [ ['0755'], '', '', '' ],
-        '/var/cpanel/resellers'        => [ ['0644'], '', '', '' ],
-        '/var/cpanel/userhomes'        => [ ['0755', '0711'], '', '', '' ],
-        '/var/cpanel/userhomes/cpanelhorde'     => [ ['0711'], 'cpanelhorde', 'cpanelhorde', ' - might affect Horde attachments.  See ticket 6139315.' ],
-        '/var/cpanel/userhomes/cpanelroundcube' => [ ['0711'], 'cpanelroundcube', 'cpanelroundcube', '' ],
-        '/var/lib'                     => [ ['0755'], '', '', '' ],
-        '/var/lib/mysql'               => [ ['0751'], 'mysql', 'mysql', '' ],
-        '/var/lib/mysql/mysql.sock'    => [ ['0777'], 'mysql', 'mysql', '' ],
-        '/var/log/exim_mainlog'        => [ ['0640'], 'mailnull', 'mail', '' ],
-        '/var/log/exim_paniclog'       => [ ['0640'], 'mailnull', 'mail', '' ],
-        '/var/log/exim_rejectlog'      => [ ['0640'], 'mailnull', 'mail', '' ],
-        '/var/tmp'                     => [ ['1777'], '', '', '' ]
+sub check_for_non_default_permissions { 
+    # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', immutable_recursive => 1, immutable_help => 'Additional info if immutable' },
+    # Attributes are always checked, mode is only checked if specified.
+    # User and group is always checked if mode is specified. If not explicitly specified, it is assumed to be 'root'.
+    # immutable_recursive only works on directories, default is 0 (do not recurse).
+    my %check = (
+        '/'                                     => { mode => ['0755', '0555'], perms_help => '.ftpquota issues? see ticket 4429843', immutable_help => 'This can break EA. See ticket 4929961' },
+        '/bin'                                  => { mode => ['0755', '0711', '0555'] },
+        '/bin/bash'                             => { mode => ['0755'] },
+        '/bin/ln'                               => { mode => ['0755', '0555'] },
+        '/bin/rm'                               => { mode => ['0755', '0555'], perms_help => 'File Manager unable to delete files?  This may be why.' },
+        '/dev/log'                              => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog.' },
+        '/dev/null'                             => { mode => ['0666'], perms_help => 'Breaks many things if non-root users can\'t write to this.' },
+        '/dev/random'                           => { mode => ['0666', '0664', '0644', '0444'], perms_help => 'Breaks many things if non-root users can\'t read this.' },
+        '/dev/urandom'                          => { mode => ['0666', '0664', '0644', '0444'], perms_help => 'Breaks many things if non-root users can\'t read this.' },
+        '/etc'                                  => { mode => ['0755'] },
+        '/etc/cpbackup.conf'                    => { mode => ['0644'] },
+        '/etc/exim.conf'                        => { mode => ['0644'] },
+        '/etc/group'                            => { mode => ['0644'] },
+        '/etc/hosts'                            => { mode => ['0644'] },
+        '/etc/localdomains'                     => { mode => ['0640'], group=>'mail', perms_help => 'Failing to properly create an email forwarder? See ticket 5234627.' },
+        '/etc/nsswitch.conf'                    => { mode => ['0644'] },
+        '/etc/passwd'                           => { mode => ['0644'] },
+        '/etc/shadow'                           => { mode => ['0600', '0400', '0200'] },
+        '/etc/stats.conf'                       => { mode => ['0644'] },
+        '/home'                                 => { mode => ['0755', '0711'] },
+        '/home1'                                => { mode => ['0755', '0711'] },
+        '/home2'                                => { mode => ['0755', '0711'] },
+        '/home3'                                => { mode => ['0755', '0711'] },
+        '/home4'                                => { mode => ['0755', '0711'] },
+        '/home5'                                => { mode => ['0755', '0711'] },
+        '/opt'                                  => { mode => ['0755'] },
+        '/root/cpanel3-skel'                    => { mode => ['0755'] },
+        '/sbin'                                 => { mode => ['0755', '0711', '0555'] },
+        '/sbin/ifconfig'                        => { mode => ['0755', '0555'] },
+        '/tmp'                                  => { mode => ['1777'] },
+        '/usr'                                  => { mode => ['0755'] },
+        '/usr/bin'                              => { mode => ['0755', '0711', '0555'] },
+        '/usr/bin/crontab'                      => { mode => ['6755', '4755', '4711', '4555'] },
+        '/usr/bin/passwd'                       => { mode => ['6755', '4755', '4555', '4511'] },
+        '/usr/local'                            => { mode => ['0755'] },
+        '/usr/local/apache'                     => { mode => ['0755'], immutable_recursive => 1 },
+        '/usr/local/apache/bin/httpd'           => { mode => ['0755'] },
+        '/usr/local/apache/conf'                => { mode => ['0755'] },
+        '/usr/local/apache/domlogs'             => { mode => ['0711'], group => 'wheel', perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' },
+        '/usr/local/apache/htdocs'              => { mode => ['0755'] },
+        '/usr/local/bin'                        => { mode => ['0755', '0711', '0555'] },
+        '/usr/local/cpanel'                     => { mode => ['0711'], group => 'wheel' },
+        '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'                          => { mode => ['0644'], group => 'wheel' },
+        '/usr/local/cpanel/base/3rdparty/phpPgAdmin/index.php'                          => { mode => ['0644'], group => 'wheel' },
+        '/usr/local/cpanel/base/3rdparty/roundcube/index.php'                           => { mode => ['0644'], group => 'wheel' },
+        '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => { mode => ['0644'], group => 'wheel' },
+        '/usr/local/cpanel/base/3rdparty/squirrelmail/index.php'                        => { mode => ['0644'], group => 'wheel' },
+        '/usr/local/cpanel/base/horde/index.php'                                        => { mode => ['0644'] },
+        '/usr/local/cpanel/bin/cpwrap'          => { mode => ['0755'], group => 'wheel' },
+        '/usr/local/cpanel/bin/sendmail'        => { mode => ['0755'] },
+        '/usr/local/cpanel/php/cpanel.php'      => { mode => ['0644'] },
+        '/usr/local/sbin'                       => { mode => ['0755', '0711', '0555'] },
+        '/usr/sbin'                             => { mode => ['0755', '0711', '0555'] },
+        '/usr/sbin/exim'                        => { mode => ['4755'] },
+        '/usr/share'                            => { mode => ['0755'] },
+        '/usr/share/zoneinfo'                   => { mode => ['0755'] },
+        '/var'                                  => { mode => ['0755'] },
+        '/var/cpanel'                           => { mode => ['0755', '0711', '0555'], immutable_recursive => 1 },
+        '/var/cpanel/backups'                   => { mode => ['0755'] },
+        '/var/cpanel/backups/config'            => { mode => ['0644'] },
+        '/var/cpanel/cpanel.config'             => { mode => ['0644'] },
+        '/var/cpanel/datastore'                 => { mode => ['0755'] },
+        '/var/cpanel/domain_keys_private'       => { mode => ['0640'], group => 'wheel' },
+        '/var/cpanel/features'                  => { mode => ['0755'] },
+        '/var/cpanel/locale'                    => { mode => ['0755'] },
+        '/var/cpanel/locale/themes'             => { mode => ['0755'] },
+        '/var/cpanel/resellers'                 => { mode => ['0644'] },
+        '/var/cpanel/userhomes'                 => { mode => ['0755', '0711'] },
+        '/var/cpanel/userhomes/cpanelhorde'     => { mode => ['0711'], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' },
+        '/var/cpanel/userhomes/cpanelroundcube' => { mode => ['0711'], user => 'cpanelroundcube', group => 'cpanelroundcube' },
+        '/var/lib'                              => { mode => ['0755'] },
+        '/var/lib/mysql'                        => { mode => ['0751'], user => 'mysql', group => 'mysql' },
+        '/var/lib/mysql/mysql.sock'             => { mode => ['0777'], user => 'mysql', group => 'mysql' },
+        '/var/log/exim_mainlog'                 => { mode => ['0640'], user => 'mailnull', group => 'mail' },
+        '/var/log/exim_paniclog'                => { mode => ['0640'], user => 'mailnull', group => 'mail' },
+        '/var/log/exim_rejectlog'               => { mode => ['0640'], user => 'mailnull', group => 'mail' },
+        '/var/tmp'                              => { mode => ['1777'] },
     );
 
     my $wwwacctconf = '/etc/wwwacct.conf';
     if ( open my $wwwacctconf_fh, '<', $wwwacctconf ) {
         while (<$wwwacctconf_fh>) {
             if (m{ ^ HOMEDIR \s ([/\-_A-Za-z0-9]+) $ }x) {
-                $check{$1} = [ ['0755', '0711'], '', '', '' ];
+                $check{$1} = { mode => ['0755', '0711'] };
                 last;
             }
         }
         close $wwwacctconf_fh;
     }
 
+    if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
+        $check{'/etc/localdomains'} = { group => 'root' };
+    }
     if ( cpanel_version_is(qw( < 11.42.0.0 )) ) {
-        $check{'/usr/local/cpanel/base/horde/index.php'} = [ ['0644'], '', 'wheel', '' ];
+        $check{'/usr/local/cpanel/base/horde/index.php'} = { group => 'wheel' };
     }
-    else {
-        $check{'/usr/local/cpanel/base/horde/index.php'} = [ ['0644'], '', '', '' ];
-    }
-
     if ( cpanel_version_is(qw( <= 11.36.0.0 )) ) {
-        $check{'/usr/local/cpanel/bin/cpwrap'} = [ ['4755'], '', 'wheel', '' ];
+        $check{'/usr/local/cpanel/bin/cpwrap'} = { mode => ['4755'] };
     }
-    else {
-        $check{'/usr/local/cpanel/bin/cpwrap'} = [ ['0755'], '', 'wheel', '' ];
-    }
-
     if ( ( cpanel_version_is(qw( >= 11.44.0.0 )) && cpanel_version_is(qw( < 11.44.0.8 )) ) || ( cpanel_version_is(qw( >= 11.42.0.0 )) && cpanel_version_is(qw( < 11.42.1.18 )) ) ) {
-        $check{'/usr/local/cpanel/bin/sendmail'} = [ ['4755'], '', '', ' - CGIEmail wants suid /u/l/cpanel/bin/sendmail (case 86561)' ];
-    }
-    else {
-        $check{'/usr/local/cpanel/bin/sendmail'} = [ ['0755'], '', '', '' ];
+        $check{'/usr/local/cpanel/bin/sendmail'} = { mode => ['4755'], perms_help => 'CGIEmail wants suid /u/l/cpanel/bin/sendmail (case 86561)' };
     }
     if ( exists $cpconf{'skipawstats'} && $cpconf{'skipawstats'} == 0 ) {
-        $check{'/usr/local/cpanel/3rdparty/bin/awstats.pl'} = [ ['0755'], '', '', '' ];
+        $check{'/usr/local/cpanel/3rdparty/bin/awstats.pl'} = { mode => ['0755'] };
     }
     if ( exists $cpconf{'skipwebalizer'} && $cpconf{'skipwebalizer'} == 0 ) {
-        $check{'/usr/local/cpanel/3rdparty/bin/webalizer_lang/english'} = [ ['0755'], 'bin', 'bin', '' ],
+        $check{'/usr/local/cpanel/3rdparty/bin/webalizer_lang/english'} = { mode => ['0755'], user => 'bin', group => 'bin' };
     }
     if ( $is_cloudlinux ) {
-        $check{'/usr/bin/python'} = [ ['0755'], '', '', ' - If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' ];
+        $check{'/usr/bin/python'} = { mode => ['0755'], perms_help => 'If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' };
     }
 
-    for my $resource ( sort keys %check ) {
-        if ( -l $resource ) {
+    for my $path ( sort keys %check ) {
+        if ( -l $path ) {
             print_warn('Non-default Location: ');
-            print_warning($resource . " is a symlink to [ " . readlink($resource) . " ]");
+            print_warning($path . " is a symlink to [ " . readlink($path) . " ]");
         }
-        if ( -e $resource ) {
-            my ($mode, $uid, $gid) = ( stat($resource) )[2,4,5];
-            $mode &= 07777;
-            $mode = sprintf "%lo", $mode;
-            my $user = getpwuid($uid);
-            $user = $user ? $user : $uid;
-            my $group = getgrgid($gid);
-            $group = $group ? $group : $gid;
-            my $checkuser = $check{$resource}[1] ? $check{$resource}[1] : 'root';
-            my $checkgroup = $check{$resource}[2] ? $check{$resource}[2] : 'root';
-            if ( ! ($user eq $checkuser) || ! ($group eq $checkgroup) ) {
-                print_warn('Non-default Ownership: ');
-                print_warning($resource . ' (owner: [ ' . $user . ':' . $group . ' ] | default: [ ' . $checkuser . ':' . $checkgroup . ' ])' . $check{$resource}[3] );
+        if ( -e $path ) {
+            if (exists $check{$path}->{mode}) {
+                my ($mode, $uid, $gid) = ( stat($path) )[2,4,5];
+                $mode &= 07777;
+                $mode = sprintf "%lo", $mode;
+                my $user = getpwuid($uid);
+                $user = $user || $uid;
+                my $group = getgrgid($gid);
+                $group = $group || $gid;
+                my $checkuser = $check{$path}->{user} // 'root';
+                my $checkgroup = $check{$path}->{group} // 'root';
+                my $perms_help = exists $check{$path}->{perms_help} ? ' - ' . $check{$path}->{perms_help} : '';
+                if ( ! ($user eq $checkuser) || ! ($group eq $checkgroup) ) {
+                    print_warn('Non-default Perms: ');
+                    print_warning($path . ' [owner ' . $user . ':' . $group . '] (default ' . $checkuser . ':' . $checkgroup . ')' . $perms_help );
+                }
+                my $default = 0;
+                for my $checkmode ( @{$check{$path}->{mode}} ) {
+                    if ( $mode == $checkmode ) {
+                        $default = 1;
+                    }
+                }
+                if ( ! $default == 1 ) {
+                        print_warn('Non-default Perms: ');
+                        print_warning($path . ' [mode ' . sprintf("%04d", $mode) . '] (default ' . join(' or ', @{$check{$path}->{mode}}) . ')' . $perms_help );
+                }
             }
+            my $immutable_help = exists $check{$path}->{immutable_help} ? ' - ' . $check{$path}->{immutable_help} : '';
+            my $is_recursive = exists $check{$path}->{immutable_recursive} ? $check{$path}->{immutable_recursive} : 0;
+            my $test_ref = sub {
+                return if $is_recursive && exists $check{$_} && ! exists $check{$_}->{immutable_recursive}; # If we check a path directly then we don't need to check it in a recursive sweep.
+                if ( ( -f $_ || -d _ ) && ( my %attr = get_attributes($_, qw ( APPEND-ONLY IMMUTABLE UNDELETABLE )) ) ) {
+                    my $attributes = join(' & ', keys(%attr) ) ;
+                    print_warn('Non-default Perms: ');
+                    print_warning($_ . ' [' . $attributes . '] ' . $immutable_help);
+                }
+            };
+            if ( $is_recursive ) {
+                find( { wanted => $test_ref, no_chdir => 1 }, $path );
+            }
+            else {
+                local $_ = $path;
+                &$test_ref();
+            }
+        }
+    }
+}
+
+sub get_attributes {
+    # @want is optional, not specifying anything returns all checked attributes
+    my ( $path, @want ) = @_;
+    open my $fh, $path or return;
+    my %attributes = (
+        'APPEND-ONLY'   => 0x00000020,  # EXT2_APPEND_FL in ext2fs/ext2_fs.h
+        'IMMUTABLE'     => 0x00000010,  # EXT2_IMMUTABLE_FL in ext2fs/ext2_fs.h
+        'UNDELETABLE'   => 0x00000002,  # EXT2_UNRM_FL in ext2fs/ext2_fs.h
+    );
+    my $EXT2_IOC_GETFLAGS = 0x80086601; # Tested on CentOS 6.6 using: strace -e trace=ioctl -e raw=ioctl lsattr -d /
+    my $flags = pack 'i', 0;
+    return unless defined ioctl($fh, $EXT2_IOC_GETFLAGS, $flags);
+    close $fh;
+    $flags = unpack 'i', $flags;
+    @want = keys(%attributes) if ! scalar @want;
+    my %result;
+    foreach my $attr ( @want ) {
+        next unless exists $attributes{$attr};
+        $result{$attr} = 1 if $flags & $attributes{$attr};
+    }
+    return %result;
+}
+
+sub check_for_non_default_sysctl {
+    my %check = ( # 'sysctl_key' => [ ['default1', 'default2', ...], 'Additional info' ]
+        'kernel.user_ptrace'                        => [ ['1'], ' - Disabling this is known to break remote logins from WHM Transfer Tool - see case 167393'],
+    );
+
+    for my $key ( sort keys %check ) {
+        if ( exists $sysctl{$key} ) {
             my $default = 0;
-            for my $checkmode ( @{$check{$resource}[0]} ) {
-                if ( $mode == $checkmode ) {
+            for my $checksysctl ( @{$check{$key}[0]} ) {
+                if ( $sysctl{$key} eq $checksysctl ) {
                     $default = 1;
                 }
             }
             if ( ! $default == 1 ) {
-                    print_warn('Non-default Permissions: ');
-                    print_warning($resource . ' (mode: ' . sprintf("%04d", $mode) . ' | default: ' . join(' or ', @{$check{$resource}[0]}) . ')' . $check{$resource}[3] );
+                    print_warn('Non-default sysctl: ');
+                    print_warning($key . ' (current: ' . $sysctl{$key} . ' | default: ' . join(' or ', @{$check{$key}[0]}) . ')' . $check{$key}[1] );
             }
         }
     }
@@ -3099,22 +3189,22 @@ sub check_for_nat {
             print_warn('NAT check timed out: ');
             print_warning("attempt $count of 3");
         };
-        alarm 3;
+        alarm 5;
 
         my $sock = IO::Socket::INET->new(
-            PeerAddr => 'cpanel.net',
+            PeerAddr => 'myip.cpanel.net',
             PeerPort => '80',
             Proto    => 'tcp',
-            Timeout  => 3,
+            Timeout  => 5,
         );
 
         if ($sock) {
-            print $sock "GET /showip.cgi HTTP/1.0\r\n\r\n";
-            sysread $sock, $reply, 1000;
+            print $sock "GET /v1.0/ HTTP/1.1\r\nUser-Agent: SSP/" . $version . "\r\nHost: myip.cpanel.net\r\n\r\n";
+            sysread $sock, $reply, 1500;
             close $sock;
         }
-
-        if ( $reply and $reply =~ m{ (\d+\.\d+\.\d+\.\d+) }xms ) {
+        
+        if ( $reply and $reply =~ m{ ^ \s* (\d+\.\d+\.\d+\.\d+) \s* $ }xms ) {
             $external_ip_address = $1;
         }
         else {
@@ -3798,7 +3888,7 @@ sub check_for_cpsources_conf {
 
     if ( -f $cpsources_conf and !-z $cpsources_conf ) {
         print_warn('/etc/cpsources.conf: ');
-        print_warning('exists!');
+        print_warning('exists! This can affect upcp and EA.');
     }
 }
 
@@ -3808,15 +3898,15 @@ sub check_for_apache_rlimits {
     my $output;
 
     if ( open my $httpdconf_fh, '<', $httpdconf ) {
-        local $/ = undef;
-        my $httpdconf_txt = readline($httpdconf_fh);
+        while (<$httpdconf_fh>) {
+            if ( m/\A \s* RLimitMEM \s+ (\d+)/xi ) {
+                $rlimitmem = $1;
+            }
+            if ( m/\A \s* RLimitCPU \s+ (\d+)/xi ) {
+                $rlimitcpu = $1;
+            }
+        }
         close $httpdconf_fh;
-        if ( $httpdconf_txt =~ m/\n[\t ]+RLimitMEM (\d+)/s ) {
-            $rlimitmem = $1;
-        }
-        if ( $httpdconf_txt =~ m/\n[\t ]+RLimitCPU (\d+)/s ) {
-            $rlimitcpu = $1;
-        }
     }
 
     if ($rlimitmem) {
@@ -3825,7 +3915,7 @@ sub check_for_apache_rlimits {
     }
 
     if ($rlimitcpu) {
-        $output .= " RLimitCPU $rlimitcpu";
+        $output .= " / RLimitCPU $rlimitcpu";
     }
 
     if ($output) {
@@ -4282,13 +4372,13 @@ sub check_for_broken_rpm {
     );
 
     my %rpm_checks = (
-        'missing-rpm' => [ 'Missing RPM', sub { # Only if care that the RPM is missing.
+        'missing-rpm' => [ 'Missing RPM', sub { # Only care that the RPM is missing.
             my $rpm = shift;
             return 0 if ! @rpm_list;
             return 0 if grep(/^${rpm}-/, @rpm_list);
             return 1;
         } ],
-        'verify-fail' => [ 'Verify Failed', sub { # Only checks if the RPM exists.
+        'verify-fail' => [ 'Verify Failed', sub { # Only performs check if the RPM exists.
             my $rpm = shift;
             return 0 if ! @rpm_list;
             return 0 if ! grep(/^${rpm}-/, @rpm_list);
@@ -4953,17 +5043,23 @@ sub check_for_missing_etc_localtime {
     }
 }
 
-sub check_for_PERL5LIB_env_var {
-    my $PERL5LIB = $ENV{'PERL5LIB'};
-
-    if ($PERL5LIB) {
+sub check_for_perl_env_var {
+    if ( exists($ENV{'PERL5LIB'}) ) {
         print_warn('PERL5LIB env var: ');
-        print_warning('exists! This can break cPanel\'s perl. See FB 64265');
+        print_warning('exists! This can break cPanel\'s perl or EasyApache. See FB 64265');
+    }
+    if ( exists($ENV{'PERL_MB_OPT'}) ) {
+        print_warn('PERL_MB_OPT env var: ');
+        print_warning('exists! This can break cPanel\'s perl or EasyApache.');
+    }
+    if ( exists($ENV{'PERL_MM_OPT'}) ) {
+        print_warn('PERL_MM_OPT env var: ');
+        print_warning('exists! This can break cPanel\'s perl or EasyApache.');
     }
 }
 
 sub check_for_disabled_services {
-    my ( @disabled_services );
+    my %disabled_services;
     my $disabled;
 
     my %touchfiles = (
@@ -5022,26 +5118,20 @@ sub check_for_disabled_services {
 
     while ( my ( $touchfile, $service ) = each ( %touchfiles ) ) {
         if ( -e $touchfile ) {
-            if ( ! grep { /^${service}$/ } @disabled_services ) {
-                push @disabled_services, $touchfiles{$touchfile};
-            }
+            $disabled_services{$service} = 1;
         }
     }
 
-    foreach my $skip ( keys(%cpconfcheck) ) {
+    while ( my ( $skip, $service ) = each ( %cpconfcheck ) ) {
         if ( $cpconf{$skip} ) {
-            push @disabled_services, $cpconfcheck{$skip};
+            $disabled_services{$service} = 1;
         }
     }
 
-    return if !@disabled_services;
-
-    for my $service ( sort(@disabled_services) ) {
-        $disabled .= "[$service] ";
-    }
+    return if !%disabled_services;
 
     print_warn('Disabled services: ');
-    print_warning($disabled);
+    print_warning('[ ' . join(' ', sort(keys(%disabled_services))) . ' ]');
 }
 
 sub check_for_license_info {
@@ -5174,23 +5264,6 @@ sub check_for_harmful_php_mode_600_cron {
                 print_warn('harmful cron: ');
         print_warning( "${cron_file}! Breaks webmail, phpMyAdmin, and more! See tickets 4225765, 4237465, 4099807, 4231469, 4231473. Vendor: http://whmscripts.net/misc/2013/apache-symlink-security-issue-fixpatch/" );
     }
-}
-
-sub check_for_stale_upgrade_in_progress_txt {
-    my $upgradefile = '/usr/local/cpanel/upgrade_in_progress.txt';
-
-    my $upcp_running = 0;
-    for my $line (@process_list) {
-        if ( $line =~ m{ \A root (?:.*) upcp }xms ) {
-            $upcp_running = 1; 
-            last;
-        }    
-    }    
-
-    if ( -e $upgradefile && $upcp_running == 0 ) {
-        print_warn("${upgradefile}: ");
-        print_warning('exists, but upcp is not running. If Tweak Settings is not loading, this may be why');
-    }   
 }
 
 sub check_for_bad_permissions_on_named_ca {
@@ -6341,6 +6414,21 @@ sub check_for_frontpage_rpms {
      }
 }
 
+sub check_for_prelink {
+     if ( grep( m{prelink}, @rpm_list ) ) {
+        if ( open my $file_fh, '<', '/etc/sysconfig/prelink' ) {
+            while (<$file_fh>) {
+                if ( m{ \A PRELINKING= \s* yes }x ) {
+                    print_warn('Prelink: ');
+                    print_warning('RPM installed and enabled. Recommend disabling to customer by setting PRELINKING=no in /etc/sysconfig/prelink.');
+                    last;
+                }
+            }
+            close $file_fh;
+        }
+    }
+}
+
 sub check_for_php_selector_incompatibilities { 
     return unless $is_cloudlinux;
     # http://docs.cloudlinux.com/php_selector.html - not compatible with MPM ITK, Mod RUID2, DSO
@@ -6434,14 +6522,14 @@ sub check_for_bg_botnet {
     my @bg_files = qw(
         /boot/pro
         /boot/proh
-        /etc/sfewfesfsh
-        /usr/bin/pojie
         /etc/atdd
         /etc/atddd
         /etc/cupsdd
         /etc/cupsddd
         /etc/dsfrefr
+        /etc/fdsfsfvff
         /etc/ferwfrre
+        /etc/gdmorpen
         /etc/gfhddsfew
         /etc/gfhjrtfyhuf
         /etc/ksapd
@@ -6451,23 +6539,35 @@ sub check_for_bg_botnet {
         /etc/rewgtf3er4t
         /etc/sdmfdsfhjfe
         /etc/sfewfesfs
+        /etc/sfewfesfsh
         /etc/sksapd
         /etc/sksapdd
         /etc/skysapd
         /etc/skysapdd
+        /etc/smarvtd
+        /etc/whitptabil
         /etc/xfsdx
         /etc/xfsdxd
-        /usr/bin/.sshd
-        /usr/bin/bsd-port/getty
-        /usr/lib/libamplify.so
         /etc/rc.d/init.d/DbSecuritySpt
         /etc/rc.d/init.d/selinux
+        /usr/bin/.sshd
+        /usr/bin/bsd-port/getty
+        /usr/bin/pojie
+        /usr/lib/libamplify.so
+        /var/.lug.txt
     );
     # Because tmp, we must check that these are owned by root. Leaving "/tmp/notify.file" out of this list due to potential false-positives.
     my @root_bg_files = qw(
         /tmp/bill.lock
         /tmp/gates.lock
         /tmp/moni.lock
+        /tmp/fdsfsfvff
+        /tmp/gdmorpen
+        /tmp/gfhjrtfyhuf
+        /tmp/rewgtf3er4t
+        /tmp/sfewfesfs
+        /tmp/smarvtd
+        /tmp/whitptabil
     );
     for my $file (@bg_files) {
         if ( -e $file ) {
@@ -6500,6 +6600,33 @@ sub check_for_dragnet {
         close($fh);
     }
 };
+
+sub check_for_xor_ddos {
+    my @libs = qw(
+        /lib/libgcc.so
+    );
+
+    my @hashes = qw(
+        d8ebf75697902e883006fc46410558d98c667bc50ebf374d2acd5cc3bfcdc2ff
+    );
+    
+    my @matched;
+    for my $lib (@libs) {
+        next unless my $hash = timed_run( 0, 'sha256sum', $lib );
+        chomp $hash;
+        $hash =~ s/\s.*//g;
+        if ( grep { /$hash/ } @hashes ) {
+            push @matched, $lib . "\n\t  SHA-256: " . $hash;
+        }
+    }
+
+    if ( @matched ) {
+        print_generic_hack_predef('Linux/XOR.DDoS');
+        print_critical('The following file(s) were found:');
+        print_critical("\t" . join( "\n\t", @matched ));
+        print_critical();
+    }
+}
 
 sub check_updatelog {
     my $log = '/var/cpanel/updatelogs/last';
@@ -6842,6 +6969,14 @@ sub check_for_usr_local_mis {
 
     print_3rdp("$dir: ");
     print_3rdp2('found! This can prevent EA from completing. See ticket 4822059');
+}
+
+sub check_for_opt_gsi_tools {
+    my $dir = '/opt/gsi-tools';
+    return if !-d $dir;
+
+    print_3rdp("$dir: ");
+    print_3rdp2('found! These admin scripts have been known to automatically lock user accounts. See ticket 6122361.');
 }
 
 ##############################
@@ -7229,9 +7364,14 @@ sub check_sha1_sigs_sshd {
 sub check_for_ebury_ssh_G {
     my $ssh = '/usr/bin/ssh';
     return if !-e $ssh;
-    return if !-f $ssh;
-    return if !-x $ssh;
-    return if -z $ssh;
+    return if !-f _;
+    return if !-x _;
+    return if -z _;
+
+    my $ssh_usage = timed_run_trap_stderr( 0, $ssh );
+    if ( $ssh_usage !~ /usage/ ) {
+        return; # SSH is plain broken, don't test further.
+    }
 
     my $ssh_G = timed_run_trap_stderr( 0, $ssh, '-G' );
     if ( $ssh_G !~ /illegal|unknown/ ) {
@@ -7376,40 +7516,6 @@ sub get_openssl_rpm_changelog {
     print_info2("RPM query OpenSSL changelog (running \"rpm -q ...\"). This will timeout after $timeout seconds.");
 
     my $changelog = timed_run( $timeout, qw( rpm -q --changelog openssl ) );
-}
-
-sub check_for_immutable_files {
-    return if !-x '/usr/bin/lsattr';
-
-    my @path_dirs = split( m{:}, $ENV{'PATH'} );
-    push @path_dirs, qw( /etc/cpbackup.conf /etc/exim.conf /var/cpanel/cpanel.config );
-
-    foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', @path_dirs ) ) ) ) {
-        print_warn('Immutable file: ');
-        print_warning("$file");
-    }
-    my @recursive_path_dirs = qw ( /usr/local/apache /var/cpanel/backups );
-
-    foreach my $file ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', '-R', @recursive_path_dirs ) ) ) ) {
-        print_warn('Immutable file or directory: ');
-        print_warning("$file");
-    }
-}
-
-sub check_for_immutable_dirs {
-    return if !-x '/usr/bin/lsattr';
-
-    my @dirs = qw( / /usr/local/apache /usr/local/apache/conf /usr/local/apache/htdocs /var/cpanel );
-
-    foreach my $dir ( grep ( m/^-[-]*(?:a|i)/, split( /\n/, timed_run( 0, 'lsattr', '-d', @dirs ) ) ) ) {
-        print_warn('Immutable and/or append-only directory: ');
-        if ( $dir =~ m#\s/\z# ) {
-            print_warning("$dir  This can mess with EA. See ticket 4929961");
-        }
-        else {
-            print_warning($dir);
-        }
-    }
 }
 
 sub check_for_cloudlinux_mysql_gov {
