@@ -42,7 +42,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.99';
+my $version = '4.99.100';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -275,7 +275,8 @@ check_for_non_default_umask();
 check_for_multiple_imagemagick_installs();
 check_for_custom_locales();
 check_eximstats_size();
-check_eximstats_corrupt();
+#check_eximstats_corrupt(); # !! Completely remove after shake-down period for new table check
+check_for_broken_mysql_tables();
 check_for_clock_skew();
 check_for_zlib_h();
 check_if_httpdconf_ipaddrs_exist();
@@ -2662,6 +2663,8 @@ sub check_perl_sanity {
 }
 
 sub check_for_non_default_permissions { 
+    my $timeout = $opts{'timeout'} ? $opts{'timeout'} : 10; # This only applies to the recursive loop.
+
     # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', immutable_recursive => 1, immutable_help => 'Additional info if immutable' },
     # Attributes are always checked, mode is only checked if specified.
     # User and group is always checked if mode is specified. If not explicitly specified, it is assumed to be 'root'.
@@ -2672,7 +2675,7 @@ sub check_for_non_default_permissions {
         '/bin/bash'                             => { mode => ['0755'] },
         '/bin/ln'                               => { mode => ['0755', '0555'] },
         '/bin/rm'                               => { mode => ['0755', '0555'], perms_help => 'File Manager unable to delete files?  This may be why.' },
-        '/dev/log'                              => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog.' },
+        '/dev/log'                              => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog, including user cron jobs to /var/log/cron.' },
         '/dev/null'                             => { mode => ['0666'], perms_help => 'Breaks many things if non-root users can\'t write to this.' },
         '/dev/random'                           => { mode => ['0666', '0664', '0644', '0444'], perms_help => 'Breaks many things if non-root users can\'t read this.' },
         '/dev/urandom'                          => { mode => ['0666', '0664', '0644', '0444'], perms_help => 'Breaks many things if non-root users can\'t read this.' },
@@ -2822,7 +2825,16 @@ sub check_for_non_default_permissions {
                 }
             };
             if ( $is_recursive ) {
-                find( { wanted => $test_ref, no_chdir => 1 }, $path );
+                eval {
+                    local $SIG{'ALRM'} = sub {
+                        print_warn('Non-default Perms: ');
+                        print_warning('recursive check of ' . $path . ' timed out after ' . $timeout . ' seconds.');
+                        die;
+                    };
+                    alarm $timeout;
+                    find( { wanted => $test_ref, no_chdir => 1 }, $path );
+                    alarm 0;
+                };
             }
             else {
                 local $_ = $path;
@@ -4532,6 +4544,19 @@ sub check_eximstats_corrupt {
     if ($eximstats_is_crashed) {
         print_warn('eximstats: ');
         print_warning("latest crash: $eximstats_is_crashed");
+    }
+}
+
+sub check_for_broken_mysql_tables {
+    my %broken;
+    for ( split /\n/, timed_run( 0, 'mysql', '-NBe', '\"SELECT table_schema,table_name,engine,row_format,create_time FROM information_schema.tables WHERE ( table_schema=\'cphulkd\' OR table_schema=\'eximstats\' OR table_schema=\'horde\' OR table_schema=\'modsec\' OR table_schema=\'roundcube\' OR table_schema=\'whmxfer\' ) AND engine IS NULL\"') ) {
+        my @line = split /\t/;
+        $broken{$line[0]}{$line[1]} = 1;
+    }
+    for ( sort(keys(%broken)) ) {
+        print_warn('mysql: broken tables - ');
+        my $tables =  scalar keys(%{$broken{$_}}) > 4 ? 'More than 4!' : join (' ', sort(keys(%{$broken{$_}})));
+        print_warning($_ . ' [ ' . $tables . ' ]');
     }
 }
 
