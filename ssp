@@ -2807,7 +2807,6 @@ sub check_for_non_default_permissions {
         if ( -l _ && ( ! exists $check{$path}{'symlink'} || ( readlink($path) ne $check{$path}{'symlink'} ) ) ) {
             print_warn('Non-default symlink: ');
             print_warning('[ ' . $path . ' -> ' . readlink($path) . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' );
-            #print_warning('path=' . $path . ' ' . readlink($path) . ' ( default -> ' . exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink');
         }
         if ( -e _ ) {
             if (exists $check{$path}->{mode}) {
