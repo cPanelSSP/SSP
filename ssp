@@ -42,7 +42,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.100';
+my $version = '4.99.101';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -194,6 +194,7 @@ print_ftpserver_info();
 check_for_custom_zonetemplates();
 
 ## [WARN]
+check_for_v7();
 check_port_hash();
 check_selinux_status();
 check_runlevel();
@@ -293,9 +294,9 @@ check_for_dhclient();
 check_for_var_cpanel_roundcube_install();
 check_for_missing_etc_localtime();
 check_for_cloudlinux_mysql_gov();
-check_cpanel_config_for_low_maxmem();
-check_pure_ftpd_conf_for_upload_script_and_dead();    #must come after check_cpanel_config_for_low_maxmem
+check_cpanel_config();
 check_cpanel_config_for_bad_root();
+check_pure_ftpd_conf_for_upload_script_and_dead();
 check_for_perl_env_var();
 check_for_disabled_services();
 check_for_cpbackup_exclude_everything();
@@ -453,6 +454,7 @@ sub check_for_dnsonly {
         check_sysinfo();
 
         ## [WARN]
+        check_for_v7();
         check_port_hash();
         check_selinux_status();
         check_runlevel();
@@ -478,7 +480,7 @@ sub check_for_dnsonly {
         check_for_cpanel_files();
         check_bash_history_for_certain_commands();
         check_roots_cron_for_certain_commands();
-        check_for_PERL5LIB_env_var();
+        check_for_perl_env_var();
         check_cpanel_config_for_bad_root();
         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
         check_etc_hosts_sanity();
@@ -856,7 +858,8 @@ sub print_tip {
         'You can run SSP with the --bugreport option to print a pre-filled template for submitting a WHM/cPanel bug report.',
         'The path for the modsec_audit.log changes with Mod Ruid2 or MPM ITK installed to /usr/local/apache/conf/modsec_audit/[user]/YYYYMMDD/YYYYMMDD-HHmm/YYYYMMDD-HHmmSS-[unique-id]',
         'LiteSpeed (lsws) does NOT support the Apache web status page - see: http://www.litespeedtech.com/support/forum/threads/solved-cpanel-after-litespeed-installation-whm-server-status-gives-a-404-error.5536/',
-        'You can submit new ideas or bug reports for SSP by emailing ssp-requests(at)cpanel.net'
+        'You can submit new ideas or bug reports for SSP by emailing ssp-requests(at)cpanel.net',
+        'You can format json files for more readability: python -m tool.json < file.json | less',
     );
 
     my $num  = int rand scalar $#tips;
@@ -2214,6 +2217,12 @@ sub check_for_lsws_update {
 #  BEGIN [WARN] CHECKS
 ##############################
 
+sub check_for_v7 {
+    return if ( version_compare($os_release, qw( < 7 )) );
+    print_warn('RHEL/CentOS/CL 7+: ');
+    print_warning('Use /scripts/restartsrv to restart services, not /etc/init.d scripts.');
+}
+
 sub check_port_hash {
     return if ( scalar keys(%port) >= 1 );
     print_warn('lsof: ');
@@ -2325,7 +2334,7 @@ sub check_interface_lo {
 
     my $ifconfig_lo = timed_run( 0, 'ifconfig', 'lo' );
 
-    if ( $ifconfig_lo =~ /UP LOOPBACK/ ) {
+    if ( $ifconfig_lo =~ /UP.LOOPBACK/ ) {
         $is_up = 1;
     }
 
@@ -2665,15 +2674,18 @@ sub check_perl_sanity {
 sub check_for_non_default_permissions { 
     my $timeout = $opts{'timeout'} ? $opts{'timeout'} : 10; # This only applies to the recursive loop.
 
-    # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', immutable_recursive => 1, immutable_help => 'Additional info if immutable' },
+    # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', immutable_recursive => 1, immutable_help => 'Additional info if immutable', symlink => '/path' },
     # Attributes are always checked, mode is only checked if specified.
     # User and group is always checked if mode is specified. If not explicitly specified, it is assumed to be 'root'.
+    # A '*' can be used to specify any user or group is allowed.
+    # Only symlink ownership can be verified, not its mode.
     # immutable_recursive only works on directories, default is 0 (do not recurse).
     my %check = (
         '/'                                     => { mode => ['0755', '0555'], perms_help => '.ftpquota issues? see ticket 4429843', immutable_help => 'This can break EA. See ticket 4929961' },
-        '/bin'                                  => { mode => ['0755', '0711', '0555'] },
         '/bin/bash'                             => { mode => ['0755'] },
+        '/bin/crontab'                          => { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' },
         '/bin/ln'                               => { mode => ['0755', '0555'] },
+        '/bin/passwd'                           => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
         '/bin/rm'                               => { mode => ['0755', '0555'], perms_help => 'File Manager unable to delete files?  This may be why.' },
         '/dev/log'                              => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog, including user cron jobs to /var/log/cron.' },
         '/dev/null'                             => { mode => ['0666'], perms_help => 'Breaks many things if non-root users can\'t write to this.' },
@@ -2687,7 +2699,7 @@ sub check_for_non_default_permissions {
         '/etc/localdomains'                     => { mode => ['0640'], group=>'mail', perms_help => 'Failing to properly create an email forwarder? See ticket 5234627.' },
         '/etc/nsswitch.conf'                    => { mode => ['0644'] },
         '/etc/passwd'                           => { mode => ['0644'] },
-        '/etc/shadow'                           => { mode => ['0600', '0400', '0200'] },
+        '/etc/shadow'                           => { mode => ['0600', '0400', '0200', '0000'] },
         '/etc/stats.conf'                       => { mode => ['0644'] },
         '/home'                                 => { mode => ['0755', '0711'] },
         '/home1'                                => { mode => ['0755', '0711'] },
@@ -2697,13 +2709,11 @@ sub check_for_non_default_permissions {
         '/home5'                                => { mode => ['0755', '0711'] },
         '/opt'                                  => { mode => ['0755'] },
         '/root/cpanel3-skel'                    => { mode => ['0755'] },
-        '/sbin'                                 => { mode => ['0755', '0711', '0555'] },
         '/sbin/ifconfig'                        => { mode => ['0755', '0555'] },
         '/tmp'                                  => { mode => ['1777'] },
         '/usr'                                  => { mode => ['0755'] },
         '/usr/bin'                              => { mode => ['0755', '0711', '0555'] },
-        '/usr/bin/crontab'                      => { mode => ['6755', '4755', '4711', '4555'] },
-        '/usr/bin/passwd'                       => { mode => ['6755', '4755', '4555', '4511'] },
+        '/usr/bin/screen'                       => { mode => ['2755'], group=>'screen', perms_help => 'Screen doesn\'t work? Run "rpm --setugids screen && rpm --setperms screen" to fix.' },
         '/usr/local'                            => { mode => ['0755'] },
         '/usr/local/apache'                     => { mode => ['0755'], immutable_recursive => 1 },
         '/usr/local/apache/bin/httpd'           => { mode => ['0755'] },
@@ -2730,7 +2740,7 @@ sub check_for_non_default_permissions {
         '/var/cpanel'                           => { mode => ['0755', '0711', '0555'], immutable_recursive => 1 },
         '/var/cpanel/backups'                   => { mode => ['0755'] },
         '/var/cpanel/backups/config'            => { mode => ['0644'] },
-        '/var/cpanel/cpanel.config'             => { mode => ['0644'] },
+        '/var/cpanel/cpanel.config'             => { mode => ['0644'], group => '*' },
         '/var/cpanel/datastore'                 => { mode => ['0755'] },
         '/var/cpanel/domain_keys_private'       => { mode => ['0640'], group => 'wheel' },
         '/var/cpanel/features'                  => { mode => ['0755'] },
@@ -2760,6 +2770,16 @@ sub check_for_non_default_permissions {
         close $wwwacctconf_fh;
     }
 
+    if ( version_compare($os_release, qw( < 7 ) )) {
+        $check{'/bin'}              = { mode => ['0755', '0711', '0555'] };
+        $check{'/sbin'}             = { mode => ['0755', '0711', '0555'] };
+        $check{'/usr/bin/crontab'}  = { mode => ['6755', '4755', '4711', '4555'] };
+        $check{'/usr/bin/passwd'}   = { mode => ['6755', '4755', '4555', '4511'] };
+    }
+    if ( version_compare($os_release, qw( >= 7 )) ) {
+        $check{'/bin'}              = { symlink => 'usr/bin' };
+        $check{'/sbin'}             = { symlink => 'usr/sbin' };
+    }
     if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
         $check{'/etc/localdomains'} = { group => 'root' };
     }
@@ -2783,13 +2803,14 @@ sub check_for_non_default_permissions {
     }
 
     for my $path ( sort keys %check ) {
-        if ( -l $path ) {
-            print_warn('Non-default Location: ');
-            print_warning($path . " is a symlink to [ " . readlink($path) . " ]");
+        lstat $path; # _ can now be used in place of $path for -d, -e, -f, -l, etc...
+        if ( -l _ && ( ! exists $check{$path}{'symlink'} || ( readlink($path) ne $check{$path}{'symlink'} ) ) ) {
+            print_warn('Non-default symlink: ');
+            print_warning('[ ' . $path . ' -> ' . readlink($path) . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' );
         }
-        if ( -e $path ) {
+        if ( -e _ ) {
             if (exists $check{$path}->{mode}) {
-                my ($mode, $uid, $gid) = ( stat($path) )[2,4,5];
+                my ($mode, $uid, $gid) = ( stat(_) )[2,4,5];
                 $mode &= 07777;
                 $mode = sprintf "%lo", $mode;
                 my $user = getpwuid($uid);
@@ -2799,7 +2820,7 @@ sub check_for_non_default_permissions {
                 my $checkuser = $check{$path}->{user} // 'root';
                 my $checkgroup = $check{$path}->{group} // 'root';
                 my $perms_help = exists $check{$path}->{perms_help} ? ' - ' . $check{$path}->{perms_help} : '';
-                if ( ! ($user eq $checkuser) || ! ($group eq $checkgroup) ) {
+                if ( ! ($checkuser eq '*' || $user eq $checkuser) || ! ($checkgroup eq '*' || $group eq $checkgroup) ) {
                     print_warn('Non-default Perms: ');
                     print_warning($path . ' [owner ' . $user . ':' . $group . '] (default ' . $checkuser . ':' . $checkgroup . ')' . $perms_help );
                 }
@@ -3782,7 +3803,8 @@ sub check_roots_cron_for_certain_commands {
             lvedbgovernor-utils-cron |
             makewhatis\.cron |
             maldet |
-            modsecparse.pl |
+            man-db\.cron |
+            modsecparse\.pl |
             prelink |
             rpm
             ) $ }x); # Common false-positives to filter out entirely.
@@ -4873,6 +4895,7 @@ sub check_for_rpm_overrides {
                                 | 89d631ef7c1d43475c20d7be7b7290ff
                                 | 600ff436e5939656a5645c6139cc0228
                                 | 657d59cc9627d30a95d0b84ef4245185
+                                | 350e47b97efd4b75563837b6b3502d71
                                 ) \s }xms ) {
         $easy_is_default = 1;
     }
@@ -7550,15 +7573,15 @@ sub check_for_cloudlinux_mysql_gov {
     }
 }
 
-sub check_cpanel_config_for_low_maxmem {
-    if ( $cpconf{'maxmem'} && $cpconf{'maxmem'} < 512 ) {
+sub check_cpanel_config {
+    if ( exists $cpconf{'maxmem'} && $cpconf{'maxmem'} < 512 ) {
         print_warn("/var/cpanel/cpanel.config: ");
         print_warning("maxmem < 512M, value=$cpconf{'maxmem'} phpmyadmin may fail");
     }
 
-    if ( $cpconf{'use_safe_quotas'} ) {
+    if ( cpanel_version_is(qw( < 11.48 )) && exists $cpconf{'use_safe_quotas'} && $cpconf{'use_safe_quotas'} == 1 ) { # Case 63646 - remove check after 11.46 hits EoL
         print_warn("/var/cpanel/cpanel.config: ");
-        print_warning("use_safe_quotas=1 suspend and unsuspend will be slow");
+        print_warning("use_safe_quotas=1 suspend and unsuspend will be slow. Useless on RHEL/CentOS 5+.");
     }
 }
 
@@ -7585,8 +7608,8 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
     }
 }
 
-sub check_cpanel_config_for_bad_root {
-    if ( $cpconf{'root'} && $cpconf{'root'} ne '/usr/local/cpanel' ) { # The default is used if it is missing, so only need to check if it is set
+sub check_cpanel_config_for_bad_root { # Separate from check_cpanel_config because those don't apply to DNSONLY
+    if ( exists $cpconf{'root'} && $cpconf{'root'} ne '/usr/local/cpanel' ) { # The default is used if it is missing, so only need to check if it is set
         print_warn("/var/cpanel/cpanel.config: ");
         print_warning("root set to \"" . $cpconf{'root'} . "\"");
         print_warning("\t \\_ Default is \"/usr/local/cpanel\"");
