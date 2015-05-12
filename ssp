@@ -42,7 +42,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.101';
+my $version = '4.99.102';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -194,7 +194,7 @@ print_ftpserver_info();
 check_for_custom_zonetemplates();
 
 ## [WARN]
-check_for_v7();
+check_for_os_release_7();
 check_port_hash();
 check_selinux_status();
 check_runlevel();
@@ -310,6 +310,7 @@ check_for_jailshell_additional_mounts_trailing_slash();
 check_for_allow_query_localhost();
 check_for_nocloudlinux_touchfile();
 check_for_mysql_upgrade_touchfile();
+check_for_stupid_touchfile();
 check_for_phphandler_and_opcode_caching_incompatibility();
 check_for_invalid_HOMEDIR();
 check_for_unsupported_options_in_phpini(); # case 75397
@@ -454,7 +455,7 @@ sub check_for_dnsonly {
         check_sysinfo();
 
         ## [WARN]
-        check_for_v7();
+        check_for_os_release_7();
         check_port_hash();
         check_selinux_status();
         check_runlevel();
@@ -2217,7 +2218,7 @@ sub check_for_lsws_update {
 #  BEGIN [WARN] CHECKS
 ##############################
 
-sub check_for_v7 {
+sub check_for_os_release_7 {
     return if ( version_compare($os_release, qw( < 7 )) );
     print_warn('RHEL/CentOS/CL 7+: ');
     print_warning('Use /scripts/restartsrv to restart services, not /etc/init.d scripts.');
@@ -2687,6 +2688,7 @@ sub check_for_non_default_permissions {
         '/bin/ln'                               => { mode => ['0755', '0555'] },
         '/bin/passwd'                           => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
         '/bin/rm'                               => { mode => ['0755', '0555'], perms_help => 'File Manager unable to delete files?  This may be why.' },
+        '/dev'                                  => { mode => ['0755'], perms_help => 'Breaks many things if non-root users can\'t access this.' },
         '/dev/log'                              => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog, including user cron jobs to /var/log/cron.' },
         '/dev/null'                             => { mode => ['0666'], perms_help => 'Breaks many things if non-root users can\'t write to this.' },
         '/dev/random'                           => { mode => ['0666', '0664', '0644', '0444'], perms_help => 'Breaks many things if non-root users can\'t read this.' },
@@ -2804,7 +2806,7 @@ sub check_for_non_default_permissions {
 
     for my $path ( sort keys %check ) {
         lstat $path; # _ can now be used in place of $path for -d, -e, -f, -l, etc...
-        if ( -l _ && ( ! exists $check{$path}{'symlink'} || ( readlink($path) ne $check{$path}{'symlink'} ) ) ) {
+        if ( -l _ && ( ! exists $check{$path}{'symlink'} || ( abs_path(readlink($path)) ne $check{$path}{'symlink'} ) ) ) {
             print_warn('Non-default symlink: ');
             print_warning('[ ' . $path . ' -> ' . readlink($path) . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' );
         }
@@ -2891,6 +2893,9 @@ sub get_attributes {
 sub check_for_non_default_sysctl {
     my %check = ( # 'sysctl_key' => [ ['default1', 'default2', ...], 'Additional info' ]
         'kernel.user_ptrace'                        => [ ['1'], ' - Disabling this is known to break remote logins from WHM Transfer Tool - see case 167393'],
+        'net.ipv4.tcp_tw_recycle'                   => [ ['0'], ' - This should generally never be enabled. Clients behind NAT can have problems connecting.'],
+        'net.ipv4.tcp_tw_reuse'                     => [ ['0'], ' - This should generally never be enabled. Clients behind NAT can have problems connecting.'],
+        'vm.overcommit_memory'                      => [ ['0', '1'], ' - Seeing "Out of memory" but there\s free memory and no limits?  This might be why.'],
     );
 
     for my $key ( sort keys %check ) {
@@ -2903,7 +2908,7 @@ sub check_for_non_default_sysctl {
             }
             if ( ! $default == 1 ) {
                     print_warn('Non-default sysctl: ');
-                    print_warning($key . ' (current: ' . $sysctl{$key} . ' | default: ' . join(' or ', @{$check{$key}[0]}) . ')' . $check{$key}[1] );
+                    print_warning($key . ' = ' . $sysctl{$key} . ' (default: ' . join(' or ', @{$check{$key}[0]}) . ')' . $check{$key}[1] );
             }
         }
     }
@@ -4302,6 +4307,8 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
         }
     }
 
+    return if ! ( defined $version_major && defined $version_minor );
+    
     if ( ( $version_major == 2 ) and ( $version_minor == 2 ) ) {
         $apache_version = '2.2';
     }
@@ -4356,10 +4363,10 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
 
     if ($limit_last_hit_date) {
         if ( $apache_version eq '2.2' ) {
-            print_warn('MaxClients: ');
+            print_warn('Apache MaxClients: ');
         }
         elsif ( $apache_version eq '2.4' ) {
-            print_warn('MaxRequestWorkers: ');
+            print_warn('Apache MaxRequestWorkers: ');
         }
 
         print_warning("limit last reached at $limit_last_hit_date");
@@ -5112,7 +5119,7 @@ sub check_for_disabled_services {
 
     my %touchfiles = (
         '/etc/antirelayddisable'    => 'antirelayd',
-        '/etc/rrdtooldisable'       => 'bandwidth stats',
+        '/etc/rrdtooldisable'       => 'rrdtool',
         '/var/run/chkservd.suspend' => 'chksrvd',
         '/etc/clamddisable'         => 'clamd',
         '/etc/cppopdisable'         => 'courier',
@@ -5453,6 +5460,12 @@ sub check_for_mysql_upgrade_touchfile { # Can be removed after case 113349 is re
         print_warn('/var/cpanel/mysql_upgrade_in_progress: ');
         print_warning('exists! See case 113349.');
     }
+}
+
+sub check_for_stupid_touchfile {
+    return if ! -e '/etc/allowstupidstuff';
+    print_warn('/etc/allowstupidstuff: ');
+    print_warning('exists! Can allow usernames to be created that begin with digits.');
 }
 
 sub check_for_phphandler_and_opcode_caching_incompatibility {
@@ -7574,7 +7587,7 @@ sub check_for_cloudlinux_mysql_gov {
 }
 
 sub check_cpanel_config {
-    if ( exists $cpconf{'maxmem'} && $cpconf{'maxmem'} < 512 ) {
+    if ( defined $cpconf{'maxmem'} && $cpconf{'maxmem'} < 512 ) {
         print_warn("/var/cpanel/cpanel.config: ");
         print_warning("maxmem < 512M, value=$cpconf{'maxmem'} phpmyadmin may fail");
     }
