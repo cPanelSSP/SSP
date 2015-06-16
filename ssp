@@ -42,7 +42,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.102';
+my $version = '4.99.103';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -81,6 +81,9 @@ my %pureftpdconf;               # /etc/pure-ftpd.conf
 my %proftpdconf;                # /etc/proftpd.conf
 my @apache_version_output;      # httpd -v
 my @apache_modules_output;      # httpd -M
+my $apache_version;             # Version string
+my $apache_built;               # Build date
+my $apache_ea_version;          # EA version which built Apache
 my $apache_per_user;            # Type of per-user Apache module in effect such as Mod Ruid2 or MPM ITK
 my $apache_modsec;              # mod_security enabled
 my ( $lsws_full_version, $lsws_numeric_version ) = get_lsws_version();
@@ -91,6 +94,20 @@ my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexe
 if ( -x '/usr/local/apache/bin/httpd' ) {
     @apache_version_output = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-v' );
     @apache_modules_output = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-M' );
+
+    for (@apache_version_output) {
+        if (m{ \A Server \s version: \s+ Apache/(.*) \s+ \(.*\)\z }xms) {
+            $apache_version = $1;
+        }
+        if (m{ \A Server \s built: \s (.*) \z }xms ) {
+            $apache_built = $1;
+            $apache_built =~ s/^\s+//g;
+        }
+        if (m{ \A Cpanel::Easy::Apache \s (.*) \z }xms) {
+            $apache_ea_version = $1;
+        }
+    }
+
     $apache_per_user = "none";
     $apache_modsec = 0;
     for (@apache_modules_output) {
@@ -258,7 +275,6 @@ check_etc_hosts_sanity();
 check_for_empty_or_missing_files();
 check_for_apache_listen_host_is_localhost();
 check_roundcube_mysql_pass_mismatch();
-check_for_11_30_scripts_not_a_symlink();
 check_for_hooks_from_var_cpanel_hooks_yaml();
 check_mysqld_warnings_errors();
 check_mysql_config();
@@ -1226,7 +1242,7 @@ sub get_lsws_version {
     my ($lsws_full_version, $lsws_numeric_version) = ();
     my @lshttpd_version_output = split /\n/, timed_run( 0, $lshttpd, '-v' );
     for ( @lshttpd_version_output ) {
-        if ( m{ \A (LiteSpeed/(\d+\.\d+\.\d+).*) }xms ) {
+        if ( m{ \A (LiteSpeed/(\d+(?:\.\d+){1,2}).*) }xms ) {
             $lsws_full_version = $1;
             $lsws_numeric_version = $2;
         }
@@ -1569,29 +1585,11 @@ sub print_apache_info {
     my $output;
     my $apache_status;
 
-    if (@apache_version_output) {    # httpd -v
-
-        my ( $apache_version, $apache_built, $apache_ea_version );
-
-        for my $line (@apache_version_output) {
-            if ( $line =~ m{ \A Server \s version: \s (.*) \z }xms ) {
-                $apache_version = $1;
-            }
-            if ( $line =~ m{ \A Server \s built: \s (.*) \z }xms ) {
-                $apache_built = $1;
-                $apache_built =~ s/^\s+//g;
-            }
-            if ( $line =~ m{ \A Cpanel::Easy::Apache \s (.*) \z }xms ) {
-                $apache_ea_version = $1;
-            }
-        }
-
-        if ( !$apache_version or !$apache_built or !$apache_ea_version ) {
-            $output .= 'could not determine Apache info!';
-        }
-        else {
-            $output .= "[ $apache_version ] [ $apache_built w/ $apache_ea_version ]";
-        }
+    if ( !$apache_version or !$apache_built or !$apache_ea_version ) {
+        $output .= 'could not determine Apache info!';
+    }
+    else {
+        $output .= "[ $apache_version ] [ $apache_built w/ $apache_ea_version ]";
     }
 
     my ( $apache_uptime, $apache_generations );
@@ -2058,7 +2056,7 @@ sub print_backups_info {
 
 sub print_mailserver_info {
     print_info('Mailserver: ');
-    if ( exists $cpconf{'mailserver'} ) {
+    if ( defined $cpconf{'mailserver'} ) {
         print_normal($cpconf{'mailserver'});
     }
     else {
@@ -2107,7 +2105,7 @@ sub print_ftpserver_info {
 
     my $passivetext = $passiveports ?  "enabled - " . ( $fwppactive ? "allowed in iptables" : "not found in iptables" ) : "not enabled";
 
-    if ( exists $cpconf{'ftpserver'} ) {
+    if ( defined $cpconf{'ftpserver'} ) {
         print_normal($cpconf{'ftpserver'} . " ( Passive ports " . $passivetext . " )" );
     }
     else {
@@ -2675,12 +2673,13 @@ sub check_perl_sanity {
 sub check_for_non_default_permissions { 
     my $timeout = $opts{'timeout'} ? $opts{'timeout'} : 10; # This only applies to the recursive loop.
 
-    # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', immutable_recursive => 1, immutable_help => 'Additional info if immutable', symlink => '/path' },
+    # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', immutable_recursive => 1, immutable_help => 'Additional info if immutable', symlink => '/path', check_missing => 1 },
     # Attributes are always checked, mode is only checked if specified.
     # User and group is always checked if mode is specified. If not explicitly specified, it is assumed to be 'root'.
     # A '*' can be used to specify any user or group is allowed.
     # Only symlink ownership can be verified, not its mode.
     # immutable_recursive only works on directories, default is 0 (do not recurse).
+    # check_missing causes a missing object to be reported
     my %check = (
         '/'                                     => { mode => ['0755', '0555'], perms_help => '.ftpquota issues? see ticket 4429843', immutable_help => 'This can break EA. See ticket 4929961' },
         '/bin/bash'                             => { mode => ['0755'] },
@@ -2758,8 +2757,13 @@ sub check_for_non_default_permissions {
         '/var/log/exim_mainlog'                 => { mode => ['0640'], user => 'mailnull', group => 'mail' },
         '/var/log/exim_paniclog'                => { mode => ['0640'], user => 'mailnull', group => 'mail' },
         '/var/log/exim_rejectlog'               => { mode => ['0640'], user => 'mailnull', group => 'mail' },
-        '/var/tmp'                              => { mode => ['1777'] },
     );
+
+    if ( -l '/var/tmp' ) {
+        $check{'/var/tmp'} = { symlink => '/tmp' };
+    } else {
+        $check{'/var/tmp'} = { mode => ['1777'] };
+    }
 
     my $wwwacctconf = '/etc/wwwacct.conf';
     if ( open my $wwwacctconf_fh, '<', $wwwacctconf ) {
@@ -2779,8 +2783,8 @@ sub check_for_non_default_permissions {
         $check{'/usr/bin/passwd'}   = { mode => ['6755', '4755', '4555', '4511'] };
     }
     if ( version_compare($os_release, qw( >= 7 )) ) {
-        $check{'/bin'}              = { symlink => 'usr/bin' };
-        $check{'/sbin'}             = { symlink => 'usr/sbin' };
+        $check{'/bin'}              = { symlink => '/usr/bin' };
+        $check{'/sbin'}             = { symlink => '/usr/sbin' };
     }
     if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
         $check{'/etc/localdomains'} = { group => 'root' };
@@ -2794,10 +2798,13 @@ sub check_for_non_default_permissions {
     if ( ( cpanel_version_is(qw( >= 11.44.0.0 )) && cpanel_version_is(qw( < 11.44.0.8 )) ) || ( cpanel_version_is(qw( >= 11.42.0.0 )) && cpanel_version_is(qw( < 11.42.1.18 )) ) ) {
         $check{'/usr/local/cpanel/bin/sendmail'} = { mode => ['4755'], perms_help => 'CGIEmail wants suid /u/l/cpanel/bin/sendmail (case 86561)' };
     }
-    if ( exists $cpconf{'skipawstats'} && $cpconf{'skipawstats'} == 0 ) {
+    if ( cpanel_version_is(qw( >= 11.29.0.0)) ) {
+        $check{'/scripts'} = { symlink => '/usr/local/cpanel/scripts', check_missing => 1 };
+    }
+    if ( defined $cpconf{'skipawstats'} && $cpconf{'skipawstats'} == 0 ) {
         $check{'/usr/local/cpanel/3rdparty/bin/awstats.pl'} = { mode => ['0755'] };
     }
-    if ( exists $cpconf{'skipwebalizer'} && $cpconf{'skipwebalizer'} == 0 ) {
+    if ( defined $cpconf{'skipwebalizer'} && $cpconf{'skipwebalizer'} == 0 ) {
         $check{'/usr/local/cpanel/3rdparty/bin/webalizer_lang/english'} = { mode => ['0755'], user => 'bin', group => 'bin' };
     }
     if ( $is_cloudlinux ) {
@@ -2806,11 +2813,19 @@ sub check_for_non_default_permissions {
 
     for my $path ( sort keys %check ) {
         lstat $path; # _ can now be used in place of $path for -d, -e, -f, -l, etc...
-        if ( -l _ && ( ! exists $check{$path}{'symlink'} || ( abs_path(readlink($path)) ne $check{$path}{'symlink'} ) ) ) {
+        if (-l _ ) {
+            my $linktarget = readlink($path);
+            if ( ! ( $linktarget =~ m{ \A / }x ) ) { # If a symlink is relative, try to prepend the base path and convert to absolute
+                my @basepath = split(m{/},$path);
+                my $fullpath = join('/', @basepath[0 .. $#basepath-1]) . '/' . $linktarget;
+                $linktarget = abs_path($fullpath) // $linktarget;
+            }
+            if ( ! exists $check{$path}{'symlink'} || $linktarget ne $check{$path}{'symlink'} ) {
             print_warn('Non-default symlink: ');
-            print_warning('[ ' . $path . ' -> ' . readlink($path) . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' );
+                print_warning('[ ' . $path . ' -> ' . $linktarget . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' );
+            }
         }
-        if ( -e _ ) {
+        elsif ( -e _ ) {
             if (exists $check{$path}->{mode}) {
                 my ($mode, $uid, $gid) = ( stat(_) )[2,4,5];
                 $mode &= 07777;
@@ -2833,8 +2848,8 @@ sub check_for_non_default_permissions {
                     }
                 }
                 if ( ! $default == 1 ) {
-                        print_warn('Non-default Perms: ');
-                        print_warning($path . ' [mode ' . sprintf("%04d", $mode) . '] (default ' . join(' or ', @{$check{$path}->{mode}}) . ')' . $perms_help );
+                    print_warn('Non-default Perms: ');
+                    print_warning($path . ' [mode ' . sprintf("%04d", $mode) . '] (default ' . join(' or ', @{$check{$path}->{mode}}) . ')' . $perms_help );
                 }
             }
             my $immutable_help = exists $check{$path}->{immutable_help} ? ' - ' . $check{$path}->{immutable_help} : '';
@@ -2863,6 +2878,12 @@ sub check_for_non_default_permissions {
                 local $_ = $path;
                 &$test_ref();
             }
+        }
+        elsif ( exists $check{$path}->{check_missing} ) {
+            my $perms_help = exists $check{$path}->{perms_help} ? ' - ' . $check{$path}->{perms_help} : '';
+            my $symlink = exists $check{$path}->{symlink} ? ' symlink to ' . $check{$path}->{symlink} : '';
+            print_warn('Missing: ');
+            print_warning($path . $symlink . $perms_help);
         }
     }
 }
@@ -3374,7 +3395,12 @@ sub check_for_domain_forwarding {
 }
 
 sub check_for_empty_apache_templates {
+    return unless defined $apache_version;
     my $apache2_template_dir = '/var/cpanel/templates/apache2';
+    if (version_compare( $apache_version, qw( >= 2.4.0 ))) {
+        $apache2_template_dir = '/var/cpanel/templates/apache2_4';
+    }
+
     my @dir_contents;
     my $empty_templates;
 
@@ -3839,24 +3865,17 @@ sub check_roots_cron_for_certain_commands {
 }
 
 sub check_for_missing_or_commented_customlog {
-    my $apache_version;
-    my $templates_dir = '/var/cpanel/templates/apache';
+    return if not defined $apache_version;
     my $commented_templates;
     my $missing_customlog_templates;
     my $httpdconf = '/usr/local/apache/conf/httpd.conf';
     my $httpdconf_commented_customlog;
     my $httpdconf_customlog_exists;
 
-    if (@apache_version_output) {
-        for my $line (@apache_version_output) {
-            if ( $line =~ m{ \A Server \s version: \s Apache/(\d) (?:.*) \z }xms ) {
-                $apache_version = $1;
-            }
-        }
+    my $templates_dir = '/var/cpanel/templates/apache2';
+    if (version_compare( $apache_version, qw( >= 2.4.0 ))) {
+        $templates_dir = '/var/cpanel/templates/apache2_4';
     }
-
-    return if !$apache_version;
-    $apache_version == 1 ? $templates_dir .= 1 : $templates_dir .= 2;
 
     my %templates = (
         'main.default'      => 0,
@@ -4079,7 +4098,7 @@ sub check_for_empty_or_missing_files {
 }
 
 sub check_for_apache_listen_host_is_localhost {
-    return if not exists $cpconf{'apache_port'};
+    return if not defined $cpconf{'apache_port'};
 
     my $apache_setting = $cpconf{'apache_port'};
     $apache_setting =~ s/:.*//g;
@@ -4091,7 +4110,7 @@ sub check_for_apache_listen_host_is_localhost {
 }
 
 sub check_roundcube_mysql_pass_mismatch {
-    return if ( exists $cpconf{'roundcube_db'} and $cpconf{'roundcube_db'} ne 'mysql' );
+    return if ( defined $cpconf{'roundcube_db'} and $cpconf{'roundcube_db'} ne 'mysql' );
 
     my $roundcubepass;
     my $rc_mysql_pass;
@@ -4125,14 +4144,6 @@ sub check_roundcube_mysql_pass_mismatch {
     if ( $roundcubepass ne $rc_mysql_pass ) {
         print_warn('RoundCube: ');
         print_warning('password mismatch [/var/cpanel/roundcubepass] [/usr/local/cpanel/base/3rdparty/roundcube/config/db.inc.php]');
-    }
-}
-
-sub check_for_11_30_scripts_not_a_symlink {
-    return if cpanel_version_is(qw( < 11.30.0.0 ));
-    if ( !-l '/scripts' ) {
-        print_warn('/scripts: ');
-        print_warning("cPanel is >= 11.30 [$cpanel_version] and /scripts is not a symlink");
     }
 }
 
@@ -4228,7 +4239,7 @@ sub check_for_extra_mysql_config_files {
 }
 
 sub check_for_C_compiler_optimization {
-    return if ( not exists $cpconf{'enablecompileroptimizations'} or $cpconf{'enablecompileroptimizations'} == 0 );
+    return if ( not defined $cpconf{'enablecompileroptimizations'} or $cpconf{'enablecompileroptimizations'} == 0 );
 
     print_warn('Tweak Setting: ');
     print_warning('"Enable optimizations for the C compiler" enabled. If Sandy Bridge CPU, problems MAY occur (see ticket 3355885)');
@@ -4297,27 +4308,7 @@ sub check_for_custom_exim_conf_local {
 }
 
 sub check_for_maxclients_or_maxrequestworkers_reached {
-    my ( $version_major, $version_minor );
-    my $apache_version;
-
-    for my $line (@apache_version_output) {
-        if ( $line =~ m{ \A Server \s version: \s Apache/(\d\.\d) }xms ) {
-            ( $version_major, $version_minor ) = split /\./, $1;
-            last;
-        }
-    }
-
-    return if ! ( defined $version_major && defined $version_minor );
-    
-    if ( ( $version_major == 2 ) and ( $version_minor == 2 ) ) {
-        $apache_version = '2.2';
-    }
-    elsif ( ( $version_major == 2 ) and ( $version_minor == 4 ) ) {
-        $apache_version = '2.4';
-    }
-
     return if !$apache_version;
-
     my $log            = '/usr/local/apache/logs/error_log';
     my $size           = ( stat($log) )[7];
     my $bytes_to_check = 20_971_520 / 2;                       # 10M limit of logs to check, may need adjusting, depending how much time it adds to SSP
@@ -4342,7 +4333,7 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
         undef $log_data;
         @logs = reverse @logs;
         for my $log_line (@logs) {
-            if ( $apache_version eq '2.2' ) {
+            if ( version_compare($apache_version, qw( < 2.3.0 ) ) ) {
 
                 # [Wed Nov 14 05:55:04 2012] [error] server reached MaxClients setting, consider raising the MaxClients setting
                 if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s+ \[error\] \s+ server \s+ reached \s+ MaxClients }xms ) {
@@ -4350,7 +4341,7 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
                     last;
                 }
             }
-            elsif ( $apache_version eq '2.4' ) {
+            elsif ( version_compare($apache_version, qw( >= 2.4.0 ) ) ) {
 
                 # [Fri Feb 08 09:58:45.875187 2013] [mpm_prefork:error] [pid 23220] AH00161: server reached MaxRequestWorkers
                 if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s (.*) server \s reached \s MaxRequestWorkers }xms ) {
@@ -4362,10 +4353,10 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
     }
 
     if ($limit_last_hit_date) {
-        if ( $apache_version eq '2.2' ) {
+        if ( version_compare($apache_version, qw( < 2.3.0 ) ) ) {
             print_warn('Apache MaxClients: ');
         }
-        elsif ( $apache_version eq '2.4' ) {
+        elsif ( version_compare($apache_version, qw( >= 2.4.0 ) ) ) {
             print_warn('Apache MaxRequestWorkers: ');
         }
 
@@ -4893,6 +4884,7 @@ sub check_for_rpm_overrides {
                                | 352969216e1673edfa8d4ecf189043dc
                                | 94f54ec9f5fecf733f0d27b87e5a6c29
                                | a8eca141eda7464bc7c12f3607f5511c
+                               | 41894ce9a0721ed61db14d5e96e630d0
                                 ) \s }xms ) {
         $local_is_default = 1;
     }
@@ -5051,6 +5043,7 @@ sub check_for_homeloader_php_extension {
 }
 
 sub check_for_networkmanager {
+    return if version_compare($os_release, qw( >= 7 ));
     my $networkmanager_running;
 
     for my $line (@process_list) {
@@ -5341,7 +5334,7 @@ sub check_for_bad_permissions_on_named_ca {
 }
 
 sub check_for_use_compiled_dnsadmin {
-    return if ( exists $cpconf{'disable_compiled_dnsadmin'} and $cpconf{'disable_compiled_dnsadmin'} == 1 );
+    return if ( defined $cpconf{'disable_compiled_dnsadmin'} and $cpconf{'disable_compiled_dnsadmin'} == 1 );
 
     my $has_custom_dnsadmin_modules;
     my ( @setup_modules, @remote_modules );
@@ -5875,7 +5868,7 @@ sub check_for_stray_index_php {
 
 sub check_for_missing_cpanelconfig_items {
     for my $checkvar ( qw( ftpserver mailserver mysql-version ) ) {
-        if ( not exists $cpconf{$checkvar} or $cpconf{$checkvar} =~ /^(?:[ \t]+|$)/ ) {
+        if ( not defined $cpconf{$checkvar} or $cpconf{$checkvar} =~ /^(?:[ \t]+|$)/ ) {
             print_warn('/var/cpanel/cpanel.config: ');
             print_warning('empty or missing "' . $checkvar . '" setting');
         }
@@ -5934,7 +5927,6 @@ sub check_for_missing_groups {
             cpanel
             cpaneleximfilter
             cpaneleximscanner
-            cpanelhorde
             cpanellogin
             cpanelphpmyadmin
             cpanelphppgadmin
@@ -5953,6 +5945,7 @@ sub check_for_missing_groups {
 
     push @groups, 'cpses' if cpanel_version_is(qw( >= 11.39.0.0 )); # Added in 11.40?
     push @groups, 'cpanellogaholic' if cpanel_version_is(qw( < 11.47.0.0 )); # Removed in 11.48
+    push @groups, 'cpanelhorde' if cpanel_version_is(qw( < 11.49.0.0 )); # Removed in 11.50
 
     my $missing_groups;
 
@@ -5970,7 +5963,7 @@ sub check_for_missing_groups {
 
 sub check_for_cgihidepass {
     return if cpanel_version_is(qw( >= 11.42.1.1 )); # Fixed in 11.42.1.1
-    if ( exists $cpconf{'cgihidepass'} and $cpconf{'cgihidepass'} == 1 ) {
+    if ( defined $cpconf{'cgihidepass'} and $cpconf{'cgihidepass'} == 1 ) {
         print_warn('cgihidepass: ');
         print_warning('Tweak Settings >> "Hide login password from cgi scripts" is enabled. Expired passwords can\'t be changed via WHM. See FB 87581');
     }
@@ -6013,7 +6006,7 @@ sub check_for_roundcube_overlay {
 }
 
 sub check_for_hostname_park_zoneexists {
-    if ( -f "/var/named/${hostname}.db" and ( not exists $cpconf{'allowparkonothers'} or $cpconf{'allowparkonothers'} != 1 )) {
+    if ( -f "/var/named/${hostname}.db" and ( not defined $cpconf{'allowparkonothers'} or $cpconf{'allowparkonothers'} != 1 )) {
         print_warn('Parking: ');
         print_warning('since zone of hostname exists, "Allow domain parking across accounts" must be ON to park on the hostname');
     }
@@ -6197,7 +6190,7 @@ sub check_for_mpm_itk_and_suexec {
 
 sub check_for_modruid2_warnings {
         if ( $apache_per_user eq "ruid2" ) {
-            if ( exists $cpconf{'jailapache'} && $cpconf{'jailapache'} == 1 ) {
+            if ( defined $cpconf{'jailapache'} && $cpconf{'jailapache'} == 1 ) {
                 print_warn('Mod Ruid2: ');
                 print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see cases 84393, 104017, and tickets 5015613, 5227891');
                 if ( $php5handler && $php5handler eq 'suphp' ) {
@@ -6394,7 +6387,7 @@ sub check_for_readonly_filesystems {
     my @read_only_fs = ();
     while (<$fh>) {
         if ( my @fs = split(' ') ) {
-            next if grep(m{ / (virtfs|cagefs-skeleton) / }x,$fs[1]);
+            next if grep(m{ / (virtfs|cagefs-skeleton|machine-id) / }x,$fs[1]);
             if ( grep(m{ (^|,) ro (,|$) }x, $fs[3]) ) {
                 push(@read_only_fs, $fs[1]);
             }
@@ -7592,7 +7585,7 @@ sub check_cpanel_config {
         print_warning("maxmem < 512M, value=$cpconf{'maxmem'} phpmyadmin may fail");
     }
 
-    if ( cpanel_version_is(qw( < 11.48 )) && exists $cpconf{'use_safe_quotas'} && $cpconf{'use_safe_quotas'} == 1 ) { # Case 63646 - remove check after 11.46 hits EoL
+    if ( cpanel_version_is(qw( < 11.48 )) && defined $cpconf{'use_safe_quotas'} && $cpconf{'use_safe_quotas'} == 1 ) { # Case 63646 - remove check after 11.46 hits EoL
         print_warn("/var/cpanel/cpanel.config: ");
         print_warning("use_safe_quotas=1 suspend and unsuspend will be slow. Useless on RHEL/CentOS 5+.");
     }
@@ -7622,7 +7615,7 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
 }
 
 sub check_cpanel_config_for_bad_root { # Separate from check_cpanel_config because those don't apply to DNSONLY
-    if ( exists $cpconf{'root'} && $cpconf{'root'} ne '/usr/local/cpanel' ) { # The default is used if it is missing, so only need to check if it is set
+    if ( defined $cpconf{'root'} && $cpconf{'root'} ne '/usr/local/cpanel' ) { # The default is used if it is missing, so only need to check if it is set
         print_warn("/var/cpanel/cpanel.config: ");
         print_warning("root set to \"" . $cpconf{'root'} . "\"");
         print_warning("\t \\_ Default is \"/usr/local/cpanel\"");
