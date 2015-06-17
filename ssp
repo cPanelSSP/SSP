@@ -4205,6 +4205,12 @@ sub check_mysql_config {
         'skipnetworking' => ['', '- Webmail or other MySQL related items not functioning properly? That may be why.'],
         'sqlmode' => ['', '- Seeing "Field \'ssl_cipher\' doesn\'t have a default value"? That may be why.']
     );
+
+    if ( cpanel_version_is(qw( >= 11.49.0.0 )) && cpanel_version_is(qw( <= 11.50.1.0 ))) { # Version should be adjusted after case 127529 is published.
+        $mysqld_checks{'collationdatabase'} = ['', '- Did horde fail to convert to SQLite?  See case 127529.'];
+        $mysqld_checks{'collationserver'} = ['', '- Did horde fail to convert to SQLite?  See case 127529.'];
+    }
+
     for my $check ( sort(keys(%mysqld_checks)) ) {
         if ( $mysql_conf{'mysqld'}{$check} && ! ( $mysql_conf{'mysqld'}{$check}[1] eq $mysqld_checks{$check}[0] ) ) {
             print_warn('MySQL /etc/my.cnf: ');
