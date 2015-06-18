@@ -42,7 +42,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.103';
+my $version = '4.99.104';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -294,6 +294,7 @@ check_for_custom_locales();
 check_eximstats_size();
 #check_eximstats_corrupt(); # !! Completely remove after shake-down period for new table check
 check_for_broken_mysql_tables();
+check_for_broken_mysql_horde();
 check_for_clock_skew();
 check_for_zlib_h();
 check_if_httpdconf_ipaddrs_exist();
@@ -4575,7 +4576,7 @@ sub check_eximstats_corrupt {
 
 sub check_for_broken_mysql_tables {
     my %broken;
-    for ( split /\n/, timed_run( 0, 'mysql', '-NBe', '\"SELECT table_schema,table_name,engine,row_format,create_time FROM information_schema.tables WHERE ( table_schema=\'cphulkd\' OR table_schema=\'eximstats\' OR table_schema=\'horde\' OR table_schema=\'modsec\' OR table_schema=\'roundcube\' OR table_schema=\'whmxfer\' ) AND engine IS NULL\"') ) {
+    for ( split /\n/, timed_run( 0, 'mysql', '-NBe', 'SELECT table_schema,table_name,engine,row_format,create_time FROM information_schema.tables WHERE ( table_schema=\'cphulkd\' OR table_schema=\'eximstats\' OR table_schema=\'horde\' OR table_schema=\'modsec\' OR table_schema=\'roundcube\' OR table_schema=\'whmxfer\' ) AND engine IS NULL') ) {
         my @line = split /\t/;
         $broken{$line[0]}{$line[1]} = 1;
     }
@@ -4583,6 +4584,18 @@ sub check_for_broken_mysql_tables {
         print_warn('mysql: broken tables - ');
         my $tables =  scalar keys(%{$broken{$_}}) > 4 ? 'More than 4!' : join (' ', sort(keys(%{$broken{$_}})));
         print_warning($_ . ' [ ' . $tables . ' ]');
+    }
+}
+
+sub check_for_broken_mysql_horde {
+    return if cpanel_version_is(qw ( >= 11.50.1.0 )); # Adjust when case 189785 is published
+    chomp( my $columns = timed_run( 0, 'mysql', '-NBe', 'SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=\'horde\' AND table_name=\'horde_alarms\''));
+    return if ! defined $columns;
+    return unless $columns =~ m{ \A [0-9]+ \z }xms;
+    $columns += 0;
+    if ($columns > 0 && $columns != 12) {
+        print_warn('mysql: ');
+        print_warning('horde.horde_alarms does not contain the expected 12 columns, this will prevent Horde conversion to SQLite in WHM 11.50.  See case 189785.');
     }
 }
 
