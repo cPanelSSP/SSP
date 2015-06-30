@@ -2824,7 +2824,7 @@ sub check_for_non_default_permissions {
                 $linktarget = abs_path($fullpath) // $linktarget;
             }
             if ( ! exists $check{$path}{'symlink'} || $linktarget ne $check{$path}{'symlink'} ) {
-                unless ( $rhel7 && $path == '/usr/bin/python' ) {
+                unless ( $is_cent7 && $path == '/usr/bin/python' ) {
             		print_warn('Non-default symlink: ');
                 	print_warning('[ ' . $path . ' -> ' . $linktarget . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' );
 				}
