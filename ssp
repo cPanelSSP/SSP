@@ -56,6 +56,7 @@ my ( $cpanel_version_parent, $cpanel_version_major, $cpanel_version_minor, $cpan
 my $hostname                    = hostname();
 my $os                          = get_os();
 my $is_cloudlinux               = 0;
+my $is_cent7                    = 0;
 my $external_ip_address;
 my $TIERS                       = get_tiers_file();
 my @local_ipaddrs_list          = get_local_ipaddrs();
@@ -2221,6 +2222,7 @@ sub check_for_os_release_7 {
     return if ( version_compare($os_release, qw( < 7 )) );
     print_warn('RHEL/CentOS/CL 7+: ');
     print_warning('Use /scripts/restartsrv to restart services, not /etc/init.d scripts.');
+    $is_cent7 = '1';
 }
 
 sub check_port_hash {
@@ -2822,8 +2824,10 @@ sub check_for_non_default_permissions {
                 $linktarget = abs_path($fullpath) // $linktarget;
             }
             if ( ! exists $check{$path}{'symlink'} || $linktarget ne $check{$path}{'symlink'} ) {
-            print_warn('Non-default symlink: ');
-                print_warning('[ ' . $path . ' -> ' . $linktarget . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' );
+                unless ( $is_cent7 && $path == '/usr/bin/python' ) {
+            		print_warn('Non-default symlink: ');
+                	print_warning('[ ' . $path . ' -> ' . $linktarget . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' );
+				}
             }
         }
         elsif ( -e _ ) {
