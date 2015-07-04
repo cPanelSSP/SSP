@@ -42,7 +42,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.104';
+my $version = '4.99.105';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2819,7 +2819,7 @@ sub check_for_non_default_permissions {
             if ( ! ( $linktarget =~ m{ \A / }x ) ) { # If a symlink is relative, try to prepend the base path and convert to absolute
                 my @basepath = split(m{/},$path);
                 my $fullpath = join('/', @basepath[0 .. $#basepath-1]) . '/' . $linktarget;
-                $linktarget = abs_path($fullpath) // $linktarget;
+                $linktarget = defined(abs_path($fullpath)) ? abs_path($fullpath) : $linktarget;
             }
             if ( ! exists $check{$path}{'symlink'} || $linktarget ne $check{$path}{'symlink'} ) {
             print_warn('Non-default symlink: ');
@@ -2835,8 +2835,8 @@ sub check_for_non_default_permissions {
                 $user = $user || $uid;
                 my $group = getgrgid($gid);
                 $group = $group || $gid;
-                my $checkuser = $check{$path}->{user} // 'root';
-                my $checkgroup = $check{$path}->{group} // 'root';
+                my $checkuser = defined($check{$path}->{user}) ? $check{$path}->{user} : 'root';
+                my $checkgroup = defined($check{$path}->{group}) ? $check{$path}->{group} : 'root';
                 my $perms_help = exists $check{$path}->{perms_help} ? ' - ' . $check{$path}->{perms_help} : '';
                 if ( ! ($checkuser eq '*' || $user eq $checkuser) || ! ($checkgroup eq '*' || $group eq $checkgroup) ) {
                     print_warn('Non-default Perms: ');
@@ -7441,10 +7441,8 @@ sub check_for_ebury_ssh_G {
     return if !-x _;
     return if -z _;
 
-    my $ssh_usage = timed_run_trap_stderr( 0, $ssh );
-    if ( $ssh_usage !~ /usage/ ) {
-        return; # SSH is plain broken, don't test further.
-    }
+    my $ssh_version = timed_run_trap_stderr( 0, $ssh, '-V' );
+    return if $ssh_version !~ m{ \A OpenSSH_5 }xms;
 
     my $ssh_G = timed_run_trap_stderr( 0, $ssh, '-G' );
     if ( $ssh_G !~ /illegal|unknown/ ) {
