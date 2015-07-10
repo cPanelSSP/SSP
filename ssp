@@ -42,7 +42,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.105';
+my $version = '4.99.106';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -7656,57 +7656,37 @@ sub print_bug_report {
     print <<END_OF_TEMPLATE
 ==== BEGIN COPY BELOW ====
 ----------------------------------------------
-   1. cPanel Version(s) Affected
+   1. Detailed Explanation
 ----------------------------------------------
 
-$version
 
 ----------------------------------------------
-   2. System Information 
+   2. Step-by-Step Instructions
 ----------------------------------------------
 
+
+----------------------------------------------
+   3. Suggested Resolution / Expected Behavior
+----------------------------------------------
+
+
+----------------------------------------------
+   4. Known work around(s)
+----------------------------------------------
+
+
+==== END COPY ABOVE ====
+
+Useful Information:
+
+Ticket Number: $ticket
+cPanel Version: $version
 OS: $os
 Kernel: $kernel
 Arch: $arch
 Environment: $environment
 CPU: $cpu w/ $cores core(s)
 
-----------------------------------------------
-   3. Ticket Number(s)
-----------------------------------------------
-
-$ticket
-
-----------------------------------------------
-   4. Brief Description
-----------------------------------------------
-
-
-
-----------------------------------------------
-   5. Step by Step Instructions
-----------------------------------------------
-
-
-
-----------------------------------------------
-   6. Detailed Explanation
-----------------------------------------------
-
-
-
-----------------------------------------------
-   7. Suggested Resolution / Expected Behavior
-----------------------------------------------
-
-
-
-----------------------------------------------
-   8. Known work around(s)
-----------------------------------------------
-
-
-==== END COPY ABOVE ====
 END_OF_TEMPLATE
 }
 
