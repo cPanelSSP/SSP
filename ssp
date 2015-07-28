@@ -5354,106 +5354,65 @@ sub check_for_broken_mysql_horde {
 }
 
 sub check_for_clock_skew {
-    ## last updated 2/14/14
+    ## last updated 2016-07-28
     ## we do this to avoid having to do the DNS lookup
     my @rdate_servers = qw(
-      64.50.161.11
-      66.23.237.210
-      67.159.2.2
-      67.205.110.4
-      67.222.0.10
-      67.227.128.74
-      69.50.192.73
-      69.72.212.10
-      69.72.212.11
-      70.87.220.252
-      72.233.42.250
-      74.200.212.130
-      74.200.65.162
-      74.50.120.123
-      75.126.236.226
-      75.127.84.226
-      208.109.109.239
-      208.74.123.21
-      208.74.125.42
-      208.78.42.4
-      208.82.118.100
-      209.188.92.54
-      209.85.80.214
-      216.104.43.138
-      216.38.56.98
+      208.74.121.36
+      208.74.121.43
+      208.74.125.89
+      208.74.125.90
     );
-
-    my $num          = int rand scalar @rdate_servers;
-    my $rdate_server = $rdate_servers[$num];
 
     my $localtime = time();
     my $rdate_time;
     my $clock_skew;
-    my $has_dovecot = 0;
 
     my %months = qw(
       Jan 0   Feb 1   Mar 2   Apr 3   May 4   Jun 5
       Jul 6   Aug 7   Sep 8   Oct 9   Nov 10  Dec 11
     );
 
-    $rdate_time = timed_run( 0, 'rdate', '-p', '-t', '1', $rdate_server );
-
-    ## fall back to UDP if necessary
-    ## we don't use UDP first because many of the rdate servers don't reply when using it
-    if ( !$rdate_time ) {
-        $rdate_time = timed_run( 0, 'rdate', '-p', '-t', '1', '-u', $rdate_server );
+    for ( 1 .. 2 ) {
+        my $num = int rand scalar @rdate_servers;
+        $rdate_time = timed_run( 10, 'rdate', '-p', '-t', '3', $rdate_servers[$num] );
+        last if $rdate_time;
     }
 
     return if !$rdate_time;
 
-    $rdate_time =~ s/\A rdate: \s \[rdate\.cpanel\.net\] \s+//gxms;
+    $rdate_time =~ s/\A rdate: \s \[[^\]]+\] \s+//gxms;
 
     if ( $rdate_time =~ m{ \A \S+ \s (\S+) \s (\d+) \s (\d+):(\d+):(\d+) \s (\d+) }xms ) {
         my ( $mon, $mday, $hour, $min, $sec, $year ) = ( $1, $2, $3, $4, $5, $6 );
         $mon = $months{$mon};
         $rdate_time = timelocal( $sec, $min, $hour, $mday, $mon, $year );
     }
-
-    return if ( $rdate_time !~ /\d{10}/ );
+    return if ( $rdate_time !~ /\d{10,}/ );
 
     $clock_skew = ( $rdate_time - $localtime );
     $clock_skew = abs $clock_skew;                # convert negative numbers to positive
 
-    return if ( $clock_skew < 60 );
+    return if ( $clock_skew < 120 );
 
     if ( $clock_skew >= 31536000 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 31536000 );
-        $clock_skew .= ' years';
+        $clock_skew = sprintf '%d', ( $clock_skew / 31536000 );
+        $clock_skew .= ' year(s)';
     }
     elsif ( $clock_skew >= 86400 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 86400 );
-        $clock_skew .= ' days';
+        $clock_skew = sprintf '%d', ( $clock_skew / 86400 );
+        $clock_skew .= ' day(s)';
     }
     elsif ( $clock_skew >= 3600 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 3600 );
-        $clock_skew .= ' hours';
+        $clock_skew = sprintf '%d', ( $clock_skew / 3600 );
+        $clock_skew .= ' hour(s)';
     }
     elsif ( $clock_skew >= 60 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 60 );
-        $clock_skew .= ' minutes';
+        $clock_skew = sprintf '%d', ( $clock_skew / 60 );
+        $clock_skew .= ' minute(s)';
     }
 
-    for my $process (@PROCESS_LIST) {
-        if ( $process =~ m{ \A root (.*) dovecot }xms ) {
-            $has_dovecot = 1;
-            last;
-        }
-    }
-
-    if ( $has_dovecot == 0 and $clock_skew !~ /minutes/ ) {
-        print_warn('Clock skew: ');
-        print_warning("servers time may be off by $clock_skew");
-    }
-    elsif ( $has_dovecot == 1 ) {
-        print_warn('Clock skew: ');
-        print_warning("server time may be off by ${clock_skew}. This can cause Dovecot to die during upcp");
-    }
+    print_warn('Clock skew: ');
+    print_warning("server time may be off by ${clock_skew}. Large time offsets may cause SSL-related problems or Dovecot to die during upcp.");
 }
 
 sub check_for_zlib_h {
