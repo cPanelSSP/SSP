@@ -3,6 +3,14 @@
 # SSP - System Status Probe
 # Find and print useful troubleshooting info on cPanel servers
 
+=head1 COPYRIGHT
+
+This software is Copyright 2015 by cPanel, Inc.
+
+THE SOFTWARE LICENSED HEREUNDER IS PROVIDED "AS IS" AND CPANEL HEREBY DISCLAIMS ALL WARRANTIES OF ANY KIND, WHETHER EXPRESS OR IMPLIED, RELATING TO THE SOFTWARE, ITS THIRD PARTY COMPONENTS, AND ANY DATA ACCESSED THEREFROM, OR THE ACCURACY, TIMELINESS, COMPLETENESS, OR ADEQUACY OF THE SOFTWARE, ITS THIRD PARTY COMPONENTS, AND ANY DATA ACCESSED THEREFROM, INCLUDING THE IMPLIED WARRANTIES OF TITLE, MERCHANTABILITY, SATISFACTORY QUALITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.  CPANEL DOES NOT WARRANT THAT THE SOFTWARE OR ITS THIRD PARTY COMPONENTS ARE ERROR-FREE OR WILL OPERATE WITHOUT INTERRUPTION.  IF THE SOFTWARE, ITS THIRD PARTY COMPONENTS, OR ANY DATA ACCESSED THEREFROM IS DEFECTIVE, YOU ASSUME THE SOLE RESPONSIBILITY FOR THE ENTIRE COST OF ALL REPAIR OR INJURY OF ANY KIND, EVEN IF CPANEL HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DEFECTS OR DAMAGES.  NO ORAL OR WRITTEN INFORMATION OR ADVICE GIVEN BY CPANEL, ITS AFFILIATES, LICENSEES, DEALERS, SUB-LICENSORS, AGENTS OR EMPLOYEES SHALL CREATE A WARRANTY OR IN ANY WAY. 
+
+=cut
+
 use strict;
 use warnings;
 use File::Find;
@@ -2676,7 +2684,7 @@ sub check_for_non_default_permissions {
 
     # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', immutable_recursive => 1, immutable_help => 'Additional info if immutable', symlink => '/path', check_missing => 1 },
     # Attributes are always checked, mode is only checked if specified.
-    # User and group is always checked if mode is specified. If not explicitly specified, it is assumed to be 'root'.
+    # User is always checked if mode is specified, which defaults to 'root'.
     # A '*' can be used to specify any user or group is allowed.
     # Only symlink ownership can be verified, not its mode.
     # immutable_recursive only works on directories, default is 0 (do not recurse).
@@ -2720,17 +2728,17 @@ sub check_for_non_default_permissions {
         '/usr/local/apache'                     => { mode => ['0755'], immutable_recursive => 1 },
         '/usr/local/apache/bin/httpd'           => { mode => ['0755'] },
         '/usr/local/apache/conf'                => { mode => ['0755'] },
-        '/usr/local/apache/domlogs'             => { mode => ['0711'], group => 'wheel', perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' },
+        '/usr/local/apache/domlogs'             => { mode => ['0711'], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' },
         '/usr/local/apache/htdocs'              => { mode => ['0755'] },
         '/usr/local/bin'                        => { mode => ['0755', '0711', '0555'] },
-        '/usr/local/cpanel'                     => { mode => ['0711'], group => 'wheel' },
-        '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'                          => { mode => ['0644'], group => 'wheel' },
-        '/usr/local/cpanel/base/3rdparty/phpPgAdmin/index.php'                          => { mode => ['0644'], group => 'wheel' },
-        '/usr/local/cpanel/base/3rdparty/roundcube/index.php'                           => { mode => ['0644'], group => 'wheel' },
-        '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => { mode => ['0644'], group => 'wheel' },
-        '/usr/local/cpanel/base/3rdparty/squirrelmail/index.php'                        => { mode => ['0644'], group => 'wheel' },
+        '/usr/local/cpanel'                     => { mode => ['0711'] },
+        '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'                          => { mode => ['0644'] },
+        '/usr/local/cpanel/base/3rdparty/phpPgAdmin/index.php'                          => { mode => ['0644'] },
+        '/usr/local/cpanel/base/3rdparty/roundcube/index.php'                           => { mode => ['0644'] },
+        '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => { mode => ['0644'] },
+        '/usr/local/cpanel/base/3rdparty/squirrelmail/index.php'                        => { mode => ['0644'] },
         '/usr/local/cpanel/base/horde/index.php'                                        => { mode => ['0644'] },
-        '/usr/local/cpanel/bin/cpwrap'          => { mode => ['0755'], group => 'wheel' },
+        '/usr/local/cpanel/bin/cpwrap'          => { mode => ['0755'] },
         '/usr/local/cpanel/bin/sendmail'        => { mode => ['0755'] },
         '/usr/local/cpanel/php/cpanel.php'      => { mode => ['0644'] },
         '/usr/local/sbin'                       => { mode => ['0755', '0711', '0555'] },
@@ -2742,7 +2750,8 @@ sub check_for_non_default_permissions {
         '/var/cpanel'                           => { mode => ['0755', '0711', '0555'], immutable_recursive => 1 },
         '/var/cpanel/backups'                   => { mode => ['0755'] },
         '/var/cpanel/backups/config'            => { mode => ['0644'] },
-        '/var/cpanel/cpanel.config'             => { mode => ['0644'], group => '*' },
+        '/var/cpanel/bandwidth.cache'           => { mode => ['0711'] },
+        '/var/cpanel/cpanel.config'             => { mode => ['0644'] },
         '/var/cpanel/datastore'                 => { mode => ['0755'] },
         '/var/cpanel/domain_keys_private'       => { mode => ['0640'], group => 'wheel' },
         '/var/cpanel/features'                  => { mode => ['0755'] },
@@ -2750,7 +2759,7 @@ sub check_for_non_default_permissions {
         '/var/cpanel/locale/themes'             => { mode => ['0755'] },
         '/var/cpanel/resellers'                 => { mode => ['0644'] },
         '/var/cpanel/userhomes'                 => { mode => ['0755', '0711'] },
-        '/var/cpanel/userhomes/cpanelhorde'     => { mode => ['0711'], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' },
+        '/var/cpanel/userhomes/cpanelhorde'     => { mode => ['0700', '0711'], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' },
         '/var/cpanel/userhomes/cpanelroundcube' => { mode => ['0711'], user => 'cpanelroundcube', group => 'cpanelroundcube' },
         '/var/lib'                              => { mode => ['0755'] },
         '/var/lib/mysql'                        => { mode => ['0751'], user => 'mysql', group => 'mysql' },
@@ -2789,9 +2798,6 @@ sub check_for_non_default_permissions {
     }
     if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
         $check{'/etc/localdomains'} = { group => 'root' };
-    }
-    if ( cpanel_version_is(qw( < 11.42.0.0 )) ) {
-        $check{'/usr/local/cpanel/base/horde/index.php'} = { group => 'wheel' };
     }
     if ( cpanel_version_is(qw( <= 11.36.0.0 )) ) {
         $check{'/usr/local/cpanel/bin/cpwrap'} = { mode => ['4755'] };
@@ -2836,7 +2842,7 @@ sub check_for_non_default_permissions {
                 my $group = getgrgid($gid);
                 $group = $group || $gid;
                 my $checkuser = defined($check{$path}->{user}) ? $check{$path}->{user} : 'root';
-                my $checkgroup = defined($check{$path}->{group}) ? $check{$path}->{group} : 'root';
+                my $checkgroup = defined($check{$path}->{group}) ? $check{$path}->{group} : '*';
                 my $perms_help = exists $check{$path}->{perms_help} ? ' - ' . $check{$path}->{perms_help} : '';
                 if ( ! ($checkuser eq '*' || $user eq $checkuser) || ! ($checkgroup eq '*' || $group eq $checkgroup) ) {
                     print_warn('Non-default Perms: ');
@@ -3785,6 +3791,10 @@ sub check_bash_history_for_certain_commands {
 sub check_wwwacctconf_for_incorrect_minuid {
     my $wwwacctconf = '/etc/wwwacct.conf';
     my $minuid;
+    my $floor = 500;
+    if ( version_compare($os_release, qw( >= 7 )) ) {
+        $floor = 1000;
+    }
 
     if ( open my $wwwacctconf_fh, '<', $wwwacctconf ) {
         while (<$wwwacctconf_fh>) {
@@ -3797,9 +3807,9 @@ sub check_wwwacctconf_for_incorrect_minuid {
     }
 
     if ( $minuid and $minuid =~ /\d+/ ) {
-        if ( $minuid < 500 or $minuid > 60000 ) {
+        if ( $minuid < $floor or $minuid > 60000 ) {
             print_warn('MINUID: ');
-            print_warning("$wwwacctconf has a MINUID value of $minuid (should be between 500 and 60000)");
+            print_warning("$wwwacctconf has a MINUID value of $minuid (must be between $floor and 60000 or will cause issues with account creation)");
         }
     }
 }
@@ -5750,11 +5760,11 @@ sub check_for_processes_killed_by_lfd {
         @logs = reverse @logs;
 
         for my $line (@logs) { 
-            if ( $line =~ /(\S+\s\d+\s\S+)\s(?:\S+)\s(?:\S+) \*User Processing\* PID:(?:\d+) Kill:1 User:(\S+) VM:(\d+)\(MB\) EXE:(\S+) CMD:(\S+)/ ) {
+            if ( $line =~ /^(\S+\s+\d+\s\S+)\s(?:\S+)\s(?:\S+) \*User Processing\* PID:(?:\d+) Kill:1 User:(\S+) VM:(\d+)\(MB\) EXE:(\S+) CMD:(.+)$/ ) {
                 push @killed_by_lfd, "[$1] [user: $2] [file: $4] [cmd: $5] [Used ${3}MB mem]\n";
                 $count++;
             }
-            elsif ( $line =~ /(\S+\s\d+\s\S+)\s(?:\S+)\s(?:\S+) \*User Processing\* PID:(?:\d+) Kill:1 User:(\S+) Time:(\d+) EXE:(\S+) CMD:(\S+)/ ) {
+            elsif ( $line =~ /^(\S+\s+\d+\s\S+)\s(?:\S+)\s(?:\S+) \*User Processing\* PID:(?:\d+) Kill:1 User:(\S+) Time:(\d+) EXE:(\S+) CMD:(.+)$/ ) {
                 push @killed_by_lfd, "[$1] [user: $2] [file: $4] [cmd: $5] [Ran for ${3} seconds]\n";
                 $count++;
             }
@@ -6706,7 +6716,7 @@ sub check_updatelog {
     return if ! -e $log;
 
     my $size = (stat($log))[7];
-    next if !$size;
+    return if !$size;
     my $bytes_to_read = 10485760; # 10M
     $bytes_to_read = $size if $bytes_to_read > $size;
 
