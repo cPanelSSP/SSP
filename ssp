@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.106';
+my $version = '4.99.107';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -5759,23 +5759,21 @@ sub check_for_processes_killed_by_lfd {
         undef $log_data;
         @logs = reverse @logs;
 
-        for my $line (@logs) { 
-            if ( $line =~ /^(\S+\s+\d+\s\S+)\s(?:\S+)\s(?:\S+) \*User Processing\* PID:(?:\d+) Kill:1 User:(\S+) VM:(\d+)\(MB\) EXE:(\S+) CMD:(.+)$/ ) {
-                push @killed_by_lfd, "[$1] [user: $2] [file: $4] [cmd: $5] [Used ${3}MB mem]\n";
+        for my $line (@logs) {
+            if ( $line =~ /(.*?)[ \t]+\*User Processing\*[ \t]+(.*?)[ \t]+CMD:(.*)/ ) {
+                my $header   = $1;
+                my %keypairs = map { ( split( m{:}, $_, 2 ) )[ 0, 1 ] } split( m{[ \t]+}, $2 );
+                my $cmd      = $3;
+                push @killed_by_lfd, "[$header] " . join( " ", ( map { "[$_: $keypairs{$_}]" } sort keys %keypairs ) ) . " [cmd: $cmd]\n";
                 $count++;
             }
-            elsif ( $line =~ /^(\S+\s+\d+\s\S+)\s(?:\S+)\s(?:\S+) \*User Processing\* PID:(?:\d+) Kill:1 User:(\S+) Time:(\d+) EXE:(\S+) CMD:(.+)$/ ) {
-                push @killed_by_lfd, "[$1] [user: $2] [file: $4] [cmd: $5] [Ran for ${3} seconds]\n";
-                $count++;
-            }
-
-            last if $count >= 10;
+            last if $count >= 20;
         }
     }
 
     if (@killed_by_lfd) {
         chomp @killed_by_lfd;
-        print_warn("Last 10 processes killed by 3rd party software \"LFD\" (\"grep Kill:1 /var/log/lfd.log\"):\n");
+        print_warn("Last 20 processes killed by 3rd party software \"LFD\" (\"grep Kill:1 /var/log/lfd.log\"):\n");
         for my $killed_process (@killed_by_lfd) {
             print_magenta("\t \\_ $killed_process");
         }
