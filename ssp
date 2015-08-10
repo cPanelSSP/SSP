@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.107';
+my $version = '4.99.108';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -94,6 +94,7 @@ my $apache_built;               # Build date
 my $apache_ea_version;          # EA version which built Apache
 my $apache_per_user;            # Type of per-user Apache module in effect such as Mod Ruid2 or MPM ITK
 my $apache_modsec;              # mod_security enabled
+my $ea4                        = is_ea4(); # True if system is running EA4
 my ( $lsws_full_version, $lsws_numeric_version ) = get_lsws_version();
 
 my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexec );
@@ -624,6 +625,13 @@ sub get_phpini {
     return @phpini;
 }
 
+sub is_ea4 {
+    if ( -f '/etc/cpanel/ea4/is_ea4' ) {
+        print BOLD GREEN ON_RED "\n\t!!!!! EA4 DETECTED. Deployment is NOT SUPPORTED. !!!!!\n";
+        return 1;
+    }
+    return undef;
+}
 
 sub get_cpanel_version {
     my $cpanel_version_file = '/usr/local/cpanel/version';
@@ -2769,6 +2777,20 @@ sub check_for_non_default_permissions {
         '/var/log/exim_rejectlog'               => { mode => ['0640'], user => 'mailnull', group => 'mail' },
     );
 
+    ## If EA4 is running we need to redefine some of the paths from %check as these paths have turned into symlinks.
+    ## We also conditionally need to add the new paths that EA4 introduces.
+    if ( $ea4 ) {
+        delete $check{'/usr/local/apache/bin/httpd'}{mode};
+        delete $check{'/usr/local/apache/domlogs/'}{mode};
+        delete $check{'/usr/local/apache/htdocs'}{mode};
+        $check{'/usr/local/apache/bin/httpd'} = { symlink => '/usr/sbin/httpd' };
+        $check{'/usr/local/apache/domlogs'} = { symlink => '/etc/apache2/logs/domlogs' };
+        $check{'/usr/local/apache/htdocs'} = { symlink => '/var/www/html' };
+        $check{'/usr/bin/httpd'} = { mode => [ '0755' ] };
+        $check{'/etc/apache2/logs/domlogs'} = { mode => [ '0755' ] };
+        $check{'/var/www/html'} = { mode => [ '0755' ] };
+    }
+
     if ( -l '/var/tmp' ) {
         $check{'/var/tmp'} = { symlink => '/tmp' };
     } else {
@@ -3554,7 +3576,7 @@ sub check_for_additional_rpms {
     return if !@rpm_list;
 
     my @additional_rpms = grep { /^(php-|kde-|psa-|clamav|clamd|rrdtool-)|(http|apache|pear|sendmail)/ } @rpm_list;
-    @additional_rpms = grep { !/httpd-tools|cpanel-|alt-php|apache-tomcat-apis/ } @additional_rpms;
+    @additional_rpms = grep { !/httpd-tools|cpanel-|alt-php|apache-tomcat-apis|^ea-/ } @additional_rpms;
     if (@additional_rpms) {
         print "\n";
         print_magenta('This is informational only. Unless these rpms directly relate to an issue, they can be ignored:');
@@ -5921,8 +5943,9 @@ sub check_for_port_80_not_apache {
     my $exe = readlink "/proc/${pid}/exe" or return;
     my $cwd = readlink "/proc/${pid}/cwd" or return;
 
-    if ( $exe ne '/usr/local/apache/bin/httpd' ) {
+    if ( $exe ne '/usr/local/apache/bin/httpd' && $exe ne '/usr/sbin/httpd' ) {
         $unknown_httpd = 1;
+
         open my $file_fh, '<', "/proc/${pid}/cmdline" or return;
         $cmdline = readline $file_fh;
         close $file_fh;
