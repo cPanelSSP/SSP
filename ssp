@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.108';
+my $version = '4.99.109';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
