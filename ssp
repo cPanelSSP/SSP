@@ -94,27 +94,34 @@ my $apache_built;               # Build date
 my $apache_ea_version;          # EA version which built Apache
 my $apache_per_user;            # Type of per-user Apache module in effect such as Mod Ruid2 or MPM ITK
 my $apache_modsec;              # mod_security enabled
-my $ea4                        = is_ea4(); # True if system is running EA4
+my $ea4                         = is_ea4(); # True if system is running EA4
+my $httpd_path                  = _get_httpd_path(); # location of operative httpd
 my ( $lsws_full_version, $lsws_numeric_version ) = get_lsws_version();
 
 my ( $phpversion, $php5version, $php4version, $php4handler, $php5handler, $suexec );
 
-
-if ( -x '/usr/local/apache/bin/httpd' ) {
-    @apache_version_output = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-v' );
-    @apache_modules_output = split /\n/, timed_run( 0, '/usr/local/apache/bin/httpd', '-M' );
+if ( $httpd_path ) {
+    @apache_version_output = split /\n/, timed_run( 0, $httpd_path, '-v' );
+    @apache_modules_output = split /\n/, timed_run( 0, $httpd_path, '-M' );
 
     for (@apache_version_output) {
-        if (m{ \A Server \s version: \s+ Apache/(.*) \s+ \(.*\)\z }xms) {
-            $apache_version = $1;
+        if (m{ \A Server \s version: \s+ Apache/(.*) \s \(.*\)\z }xms) {
+        $apache_version = $1;
         }
         if (m{ \A Server \s built: \s (.*) \z }xms ) {
             $apache_built = $1;
             $apache_built =~ s/^\s+//g;
         }
-        if (m{ \A Cpanel::Easy::Apache \s (.*) \z }xms) {
-            $apache_ea_version = $1;
+        if ( !$ea4 ) {
+            if (m{ \A Cpanel::Easy::Apache \s (.*) \z }xms) {
+                $apache_ea_version = $1;
+            }
         }
+    }
+
+    if ( $ea4 ) {
+        $apache_ea_version = timed_run( 0, 'rpm', '-qf', $httpd_path );
+        $apache_ea_version =~ s/\.\w\d{1,3}\D+\d+\n//;
     }
 
     $apache_per_user = "none";
@@ -625,9 +632,19 @@ sub get_phpini {
     return @phpini;
 }
 
+sub _get_httpd_path {
+    if ( $ea4 && -x '/usr/sbin/httpd' ) {
+        return '/usr/sbin/httpd';
+    }
+    if ( !$ea4 && -x '/usr/local/apache/bin/httpd' ) {
+        return '/usr/local/apache/bin/httpd';
+    }
+}
+
 sub is_ea4 {
     if ( -f '/etc/cpanel/ea4/is_ea4' ) {
-        print BOLD GREEN ON_RED "\n\t!!!!! EA4 DETECTED. Deployment is NOT SUPPORTED. !!!!!\n";
+        print "\n";
+        print BOLD GREEN ON_RED "\t!!!!! EA4 DETECTED. Deployment is NOT SUPPORTED. !!!!!" . RESET . "\n";
         return 1;
     }
     return undef;
@@ -1679,7 +1696,10 @@ sub print_apache_info {
 }
 
 sub print_php_configuration {
-    my $phpconf = '/usr/local/apache/conf/php.conf.yaml';
+    my $phpconf;
+    $phpconf = '/usr/local/apache/conf/php.conf.yaml' if !$ea4;
+    $phpconf = '/etc/apache2/conf.d/php.conf.yaml' if $ea4;
+
     if (!-f $phpconf) {
         print_info('PHP: ');
         print_warning($phpconf . " missing.  PHP checks will be skipped.");
@@ -1689,10 +1709,10 @@ sub print_php_configuration {
     open my $phpconf_fh, '<', $phpconf;
     while (<$phpconf_fh>) {
         chomp;
-        if (/^phpversion: (\d)/) {
+        if ( /^phpversion: (\d)/) {
             $phpversion = $1;
         }
-        if (/^php4:[ \t]+['"]?([^'"]+)/) {
+        if ( /^php4:[ \t]+['"]?([^'"]+)/) {
             $php4handler = $1;
         }
         if (/^php5:[ \t]+['"]?([^'"]+)/) {
@@ -1701,7 +1721,7 @@ sub print_php_configuration {
         if (/^suexec:[ \t]+['"]?([^'"]+)/) {
             $suexec = $1;
         }
-    }
+     }
     close $phpconf_fh;
 
     if ( $suexec && $suexec eq '1' ) {
@@ -1711,7 +1731,7 @@ sub print_php_configuration {
         $suexec = 'without suexec';
     }
 
-    if ( $phpversion == 5 ) {
+    if ( !$ea4 && $phpversion == 5 ) {
         if ( -x '/usr/bin/php' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/bin/php', '-n', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
