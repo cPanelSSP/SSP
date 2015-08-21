@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.110';
+my $version = '4.99.111';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -215,8 +215,8 @@ check_for_clustering();
 print_apache_info();
 print_lsws_info();
 check_for_lsws_update();
-print_ea3_php_configuration() if !$ea4;
-print_ea4_php_configuration() if $ea4;
+print_ea3_php_configuration();
+print_ea4_php_configuration();
 check_sysinfo();
 check_for_remote_mysql();
 print_if_using_mydns_or_nsd();
@@ -1697,6 +1697,7 @@ sub print_apache_info {
 }
 
 sub print_ea3_php_configuration {
+    return if $ea4;
     my $phpconf;
     $phpconf = '/usr/local/apache/conf/php.conf.yaml' if !$ea4;
     $phpconf = '/etc/apache2/conf.d/php.conf.yaml' if $ea4;
@@ -1811,6 +1812,7 @@ sub print_ea3_php_configuration {
 }
 
 sub print_ea4_php_configuration {
+    return if !$ea4;
     my $php = _get_installed_ea4_php();
     if ( $php ) {
         $php->{print_line} = "PHP Default: $php->{$php->{default}}->{release_version}";;
