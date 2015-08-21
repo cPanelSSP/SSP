@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.108';
+my $version = '4.99.109';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -215,7 +215,8 @@ check_for_clustering();
 print_apache_info();
 print_lsws_info();
 check_for_lsws_update();
-print_php_configuration();
+print_ea3_php_configuration() if !$ea4;
+print_ea4_php_configuration() if $ea4;
 check_sysinfo();
 check_for_remote_mysql();
 print_if_using_mydns_or_nsd();
@@ -1695,7 +1696,7 @@ sub print_apache_info {
     }
 }
 
-sub print_php_configuration {
+sub print_ea3_php_configuration {
     my $phpconf;
     $phpconf = '/usr/local/apache/conf/php.conf.yaml' if !$ea4;
     $phpconf = '/etc/apache2/conf.d/php.conf.yaml' if $ea4;
@@ -1807,6 +1808,52 @@ sub print_php_configuration {
         print_warn('PHP: ');
         print_warning('no handler defined for PHP4 or PHP5!');
     }
+}
+
+sub print_ea4_php_configuration {
+    my $php = _get_installed_ea4_php();
+    if ( $php ) {
+        $php->{print_line} = "PHP Default: $php->{$php->{default}}->{release_version}";;
+        $php->{print_line} .= " ( $php->{default} )" if ( $php->{default} );
+        $php->{print_line} .= " \\w $php->{$php->{default}}->{handler}" if ( $php->{$php->{default}}->{handler} );
+        $php->{print_line} .= "\n";
+    }
+    print_info( $php->{print_line} );
+}
+
+sub _get_installed_ea4_php {
+    my $php = {};
+    my ( $available_php, $current_php ) = split ( /\nC/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
+    my @available_php = split ( /\n/, $available_php );
+    my @current_php = split ( /\n/, $current_php );
+
+    @available_php = grep { !/handlers/ } @available_php;
+    @current_php = grep { !/handlers/ } @current_php;
+
+    foreach my $line ( @current_php ) {
+        if ( $line =~ /(ea-php\d{1,2}):\s(\w+)/m ) {
+            my $pkg = $1;
+            $php->{$pkg}->{handler} = $2;
+            $php->{$pkg}->{path} = "/opt/cpanel/$1/root/usr/bin/php";
+            if ( $line =~ /default/ ) {
+                $php->{$pkg}->{default_php} = 1;
+                $php->{default} = $pkg;
+            }
+            foreach ( split ( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
+                if ( /PHP\s(\d\.\d+\.\d+)\s\(cli\)\s\(built:\s(\w+\s+\d+\s\d+\s\d+:\d+:\d+)/ ) {
+                    $php->{$pkg}->{release_version} = $1;
+                    $php->{$pkg}->{build_time} = $2;
+                    $php->{$pkg}->{build_time} =~ s/  / /;
+                }
+                if ( /Zend\sEngine\sv(\d+\.\d+\.\d+)/ ) {
+                    $php->{$pkg}->{zend} = $1;
+                }
+            }
+            # Gather a list of modules for this given PHP Binary
+            @{$php->{$pkg}->{module_list}} = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split ( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
+        }
+    }
+    return $php;
 }
 
 sub check_sysinfo {
