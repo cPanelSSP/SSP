@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.109';
+my $version = '4.99.110';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -277,7 +277,7 @@ check_for_empty_easyapache_profiles();
 check_for_missing_timezone_from_phpini();
 check_for_proc_mdstat_recovery();
 check_usr_local_cpanel_path_for_symlinks();
-check_for_system_mem_below_512M();
+check_for_system_mem_below_required();
 check_yumconf_sanity();
 check_for_cpanel_files();
 check_bash_history_for_certain_commands();
@@ -510,7 +510,7 @@ sub check_for_dnsonly {
         check_for_oracle_linux();
         check_for_proc_mdstat_recovery();
         check_usr_local_cpanel_path_for_symlinks();
-        check_for_system_mem_below_512M();
+        check_for_system_mem_below_required();
         check_yumconf_sanity();
         check_for_cpanel_files();
         check_bash_history_for_certain_commands();
@@ -3778,7 +3778,7 @@ sub check_php_libmysqlclient_mismatch {
     }
 }
 
-sub check_for_system_mem_below_512M {
+sub check_for_system_mem_below_required {
     my $meminfo = '/proc/meminfo';
     my $memtotal;
 
@@ -3796,9 +3796,10 @@ sub check_for_system_mem_below_512M {
         $memtotal = $1;
     }
 
-    if ( $memtotal < 512 ) {
+    # Close-enough factor 768M
+    if ( $memtotal < 741 ) {
         print_warn('Memory: ');
-        print_warning("Server has less than 512M physical memory! [$memtotal MB]");
+        print_warning("Server has less than 768M physical memory! [$memtotal MB]");
     }
 }
 
