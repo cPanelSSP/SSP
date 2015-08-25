@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.111';
+my $version = '4.99.112';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -120,7 +120,7 @@ if ( $httpd_path ) {
     }
 
     if ( $ea4 ) {
-        $apache_ea_version = timed_run( 0, 'rpm', '-qf', $httpd_path );
+        chomp ( $apache_ea_version = timed_run( 0, 'rpm', '-qf', $httpd_path ) );
         $apache_ea_version =~ s/\.\w\d{1,3}\D+\d+\n//;
     }
 
