@@ -3,11 +3,11 @@
 REQUEST='curl -s --insecure https://ssp.cpanel.net/ssp'
 
 if [ -f /usr/local/cpanel/3rdparty/bin/perl ] && [ -x /usr/local/cpanel/3rdparty/bin/perl ] ; then 
-    $REQUEST | /usr/local/cpanel/3rdparty/bin/perl
+    $REQUEST | /usr/local/cpanel/3rdparty/bin/perl - $@
 elif [ -f /usr/bin/perl ] && [ -x /usr/bin/perl ] ; then 
-    $REQUEST | /usr/bin/perl
+    $REQUEST | /usr/bin/perl - $@
 elif [ -f /usr/local/bin/perl ] && [ -x /usr/local/bin/perl ] ; then 
-    $REQUEST | /usr/local/bin/perl
+    $REQUEST | /usr/local/bin/perl - $@
 else
     echo 'Could not find a working perl interpreter'
 fi
