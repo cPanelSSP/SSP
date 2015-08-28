@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.112';
+my $version = '4.99.113';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -74,6 +74,7 @@ my %ipcs;                       &get_ipcs_hash(\%ipcs);
 my %hostinfo                    = get_hostinfo();
 my %cpuinfo                     = get_cpuinfo();
 my %sysctl                      = get_sysctl();
+my $environment			= get_environment();
 my ( $os_release, $os_ises )    = get_release_version();
 my %mysql_conf;                 &get_mysql_conf(\%mysql_conf);
 my $mysql_datadir               = get_mysql_datadir(); # needs %mysql_conf
@@ -229,6 +230,7 @@ check_for_custom_zonetemplates();
 
 ## [WARN]
 check_for_os_release_7();
+check_for_cos7vz();
 check_port_hash();
 check_selinux_status();
 check_runlevel();
@@ -490,6 +492,7 @@ sub check_for_dnsonly {
 
         ## [WARN]
         check_for_os_release_7();
+        check_for_cos7vz();
         check_port_hash();
         check_selinux_status();
         check_runlevel();
@@ -2306,6 +2309,14 @@ sub check_for_os_release_7 {
     return if ( version_compare($os_release, qw( < 7 )) );
     print_warn('RHEL/CentOS/CL 7+: ');
     print_warning('Use /scripts/restartsrv to restart services, not /etc/init.d scripts.');
+}
+
+sub check_for_cos7vz {
+    return if ( version_compare($os_release, qw( < 7 )) );
+    if ( $environment eq "virtuozzo" ) {
+    print_warn('RHEL/CentOS/CL 7+: ');
+    print_warning('Licensing issues on VZ?  Check for presence of subinterface with ifconfig - See ticket 7065533.');
+    }
 }
 
 sub check_port_hash {
