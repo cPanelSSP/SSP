@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.112';
+my $version = '4.99.113';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -356,6 +356,7 @@ check_if_hostname_missing_from_localdomains();
 check_for_eximstats_newline();
 check_for_nfs();
 check_for_processes_killed_by_lfd();
+check_for_processes_killed_by_oom();
 check_for_processes_killed_by_prm();
 check_for_broken_userdatadomains();
 check_ssl_db_perms();
@@ -5868,6 +5869,46 @@ sub check_for_processes_killed_by_lfd {
         print_warn("Last 20 processes killed by 3rd party software \"LFD\" (\"grep Kill:1 /var/log/lfd.log\"):\n");
         for my $killed_process (@killed_by_lfd) {
             print_magenta("\t \\_ $killed_process");
+        }
+    }
+}
+
+sub check_for_processes_killed_by_oom {
+    my $log = "/var/log/messages";
+    my $bytes_to_check = 10485760;
+    my $size = (stat($log))[7];
+    my $seek_position = 0;
+    if ( $size > $bytes_to_check ) {
+        $seek_position = ( $size - $bytes_to_check );
+    }
+    my $log_data = undef;
+    my @logs;
+    my $count = 0;
+    my @killed_by_oom = ();
+    
+    open my $file_fh, '<', $log or return;
+    seek $file_fh, $seek_position, 0;
+    read $file_fh, $log_data, $bytes_to_check;
+    close $file_fh;
+    
+    if ( $log_data =~ /Out of memory/ ) {
+        @logs = split /\n/, $log_data;
+        undef $log_data;
+        @logs = reverse @logs;
+        
+        for my $line (@logs) {
+            if ( $line =~ /([[:alpha:]]{3}(?: \d\d|  \d) \d\d:\d\d:\d\d) (?:.*) kernel: \[\d*\.\d{6}\] Out of memory in UB \d*: OOM killed process (\d*) \((.*)\) score \d vm:(\d*)kB, rss:(\d*)kB, swap:(\d*)kB/ ) {
+                push @killed_by_oom, "[$1] [pid: $2] [cmd: $3] [vm: $4 kB] [rss: $5 kB] [swap: $6 kB]";
+                $count++;
+                last if $count >= 10;
+            }
+        }
+        
+        if ( @killed_by_oom ) {
+            print_warn( "Last $count processes killed by Linux Out of memory killer (grep \"Out of memory\" /var/log/messages):\n" );
+            for my $killed_process ( @killed_by_oom ) {
+                print_magenta("\t \\_ $killed_process");
+            }
         }
     }
 }
