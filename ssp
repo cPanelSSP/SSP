@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.113';
+my $version = '4.99.114';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -347,7 +347,7 @@ check_for_mysql_upgrade_touchfile();
 check_for_stupid_touchfile();
 check_for_phphandler_and_opcode_caching_incompatibility();
 check_for_invalid_HOMEDIR();
-check_for_unsupported_options_in_phpini(); # case 75397
+check_for_unsupported_options_in_phpini(); # FB-75397
 check_for_suphp_but_no_fileprotect();
 check_for_assp_hates_appconfig_cron();
 check_for_missing_var_cpanel_dynamicui_ftp();
@@ -437,6 +437,7 @@ check_for_ebury_socket();                                       # malware
 check_for_bg_botnet();                                          # malware
 check_for_dragnet();                                            # malware
 check_for_xor_ddos();                                           # malware
+check_for_ncom_filenames();                                     # malware
 
 # These are run closer to the end since it has the potential to take the longest due to RPM usage
 build_rpm_list();
@@ -565,6 +566,7 @@ sub check_for_dnsonly {
         check_for_bg_botnet();                                          # malware
         check_for_dragnet();                                            # malware
         check_for_xor_ddos();                                           # malware
+        check_for_ncom_filenames();                                     # malware
 
         # These are run closer to the end since it has the potential to take the longest due to RPM usage
         build_rpm_list();
@@ -727,7 +729,7 @@ sub timed_run { # Borrowed from Cpanel::SafeRun::Timed and modified
     my $output = ""; # In the event of time-out or failure, return empty string instead of undef.
     my $complete = 0;
     my $pid;
-    my $fh;    # Case 63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
+    my $fh;    # FB-63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
     eval {
         local $SIG{'__DIE__'} = 'DEFAULT';
         local $SIG{'ALRM'} = sub { $output = ""; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
@@ -772,7 +774,7 @@ sub timed_run_trap_stderr { # Borrowed from Cpanel::SafeRun::Timed and modified
     my $output = ""; # In the event of time-out or failure, return empty string instead of undef.
     my $complete = 0;
     my $pid;
-    my $fh;    # Case 63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
+    my $fh;    # FB-63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
     eval {
         local $SIG{'__DIE__'} = 'DEFAULT';
         local $SIG{'ALRM'} = sub { $output = ""; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
@@ -856,25 +858,25 @@ sub print_version {
 
 sub print_tip {
     my @tips = (
-        '[FB 86549] (Fixed in 11.42.1.1) cPHulk may report root logins to Pure-FTPd despite no evidence being found',
-        '[FB 78617] (By design) sysup always installs bind',
-        '[FB 75793] (By design) Proxy subdomains are not created for addon domains',
-        '[FB 73369] Can\'t log into SquirrelMail, but Horde and Roundcube work? Check if webmail pass contains "odd" characters',
-        '[FB 72801] (By design) File Manager creates new files with 0600 perms, even when saving an existing file as a new one',
-        '[FB 72733] (By design) File Manager\'s "Compress" feature has a hard coded timeout due to using cPanel\'s form upload logic',
-        '[FB 63530] When setting up a remote MySQL server, that server must have the openssh-clients package installed',
-        '[FB 63193] File Manager showing "Out of memory" in cPanel error_log? Try renaming $HOME/$USER/.cpanel/datastore/SYSTEMMIME',
-        '[FB 62819] "License File Expired: LTD: 1334782495 NOW: 1246416504 FUT!" likely just means the server clock is wrong',
-        '[FB 62054] (By design) The "Dedicated IP" box can only be modified when creating a package - not when editing',
-        '[FB 61735] (By design) "/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings" destroys custom proxy subdomain records. Use WHM >> Tweak Settings instead.',
-        '[FB 59450] (By design) Email quotas cannot exceed 2048MB, but they can be unlimited',
-        '[FB 58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and "PCRE is not compiled with UTF-8 support"',
-        '[FB 57237] (By design) Per ISO 3166-1, the country code for the UK is GB (not UK). Look for this in WHM >> Generate an SSL Certificate [...]',
-        '[FB 50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale',
-        '[FB 46853] Customer complaining that they can\'t log into cPanel as root? Update FB 46853',
-        '[FB 44884] upcp resets Mailman lists\' hostnames. pre/postupcp hooks workaround in ticket 3541643',
-        '[FB 42027] "Recently Uploaded Cgi Script Mail" scans and sends email alerts about downloaded files too',
-        '[FB 21774] Pure-FTPd is not linked against libwrap. As such, Host Access Control does nothing for it',
+        '[FB-86549] (Fixed in 11.42.1.1) cPHulk may report root logins to Pure-FTPd despite no evidence being found',
+        '[FB-78617] (By design) sysup always installs bind',
+        '[FB-75793] (By design) Proxy subdomains are not created for addon domains',
+        '[FB-73369] Can\'t log into SquirrelMail, but Horde and Roundcube work? Check if webmail pass contains "odd" characters',
+        '[FB-72801] (By design) File Manager creates new files with 0600 perms, even when saving an existing file as a new one',
+        '[FB-72733] (By design) File Manager\'s "Compress" feature has a hard coded timeout due to using cPanel\'s form upload logic',
+        '[FB-63530] When setting up a remote MySQL server, that server must have the openssh-clients package installed',
+        '[FB-63193] File Manager showing "Out of memory" in cPanel error_log? Try renaming $HOME/$USER/.cpanel/datastore/SYSTEMMIME',
+        '[FB-62819] "License File Expired: LTD: 1334782495 NOW: 1246416504 FUT!" likely just means the server clock is wrong',
+        '[FB-62054] (By design) The "Dedicated IP" box can only be modified when creating a package - not when editing',
+        '[FB-61735] (By design) "/u/l/c/whostmgr/bin/whostmgr2 --updatetweaksettings" destroys custom proxy subdomain records. Use WHM >> Tweak Settings instead.',
+        '[FB-59450] (By design) Email quotas cannot exceed 2048MB, but they can be unlimited',
+        '[FB-58625] Apache 2.0.x links to the wrong PCRE libs. This can cause preg_match*() errors, and "PCRE is not compiled with UTF-8 support"',
+        '[FB-57237] (By design) Per ISO 3166-1, the country code for the UK is GB (not UK). Look for this in WHM >> Generate an SSL Certificate [...]',
+        '[FB-50745] (By design) The cPanel UI displays differently (more columns than rows) when changing your locale',
+        '[FB-46853] Customer complaining that they can\'t log into cPanel as root? Update FB-46853',
+        '[FB-44884] upcp resets Mailman lists\' hostnames. pre/postupcp hooks workaround in ticket 3541643',
+        '[FB-42027] "Recently Uploaded Cgi Script Mail" scans and sends email alerts about downloaded files too',
+        '[FB-21774] Pure-FTPd is not linked against libwrap. As such, Host Access Control does nothing for it',
         'The cpanel-postgresql* packages are for phpPgAdmin. The postgresql-* packages are for PostgreSQL',
         'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/pegpr78)',
         'For a list of obscure issues, see the RareIssues wiki article',
@@ -2135,7 +2137,7 @@ sub print_backups_info {
                 close $privatekey_fh;
             }
             if (! $key_is_encrypted) { 
-                print_warning("\t\t   \\_ The SFTP private key is not encrypted but the transport config contains a passphrase.  See cases 152341 and 152337.");
+                print_warning("\t\t   \\_ The SFTP private key is not encrypted but the transport config contains a passphrase.  See FB-152341 and FB-152337.");
             }
         }
     }
@@ -2804,10 +2806,7 @@ sub check_for_non_default_permissions {
         '/usr/bin/screen'                       => { mode => ['2755'], group=>'screen', perms_help => 'Screen doesn\'t work? Run "rpm --setugids screen && rpm --setperms screen" to fix.' },
         '/usr/local'                            => { mode => ['0755'] },
         '/usr/local/apache'                     => { mode => ['0755'], immutable_recursive => 1 },
-        '/usr/local/apache/bin/httpd'           => { mode => ['0755'] },
         '/usr/local/apache/conf'                => { mode => ['0755'] },
-        '/usr/local/apache/domlogs'             => { mode => ['0711'], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' },
-        '/usr/local/apache/htdocs'              => { mode => ['0755'] },
         '/usr/local/bin'                        => { mode => ['0755', '0711', '0555'] },
         '/usr/local/cpanel'                     => { mode => ['0711'] },
         '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'                          => { mode => ['0644'] },
@@ -2826,7 +2825,7 @@ sub check_for_non_default_permissions {
         '/usr/share/zoneinfo'                   => { mode => ['0755'] },
         '/var'                                  => { mode => ['0755'] },
         '/var/cpanel'                           => { mode => ['0755', '0711', '0555'], immutable_recursive => 1 },
-        '/var/cpanel/backups'                   => { mode => ['0755'] },
+        '/var/cpanel/backups'                   => { mode => ['0755', '0750' ] },
         '/var/cpanel/backups/config'            => { mode => ['0644'] },
         '/var/cpanel/bandwidth.cache'           => { mode => ['0711'] },
         '/var/cpanel/cpanel.config'             => { mode => ['0644'] },
@@ -2842,6 +2841,7 @@ sub check_for_non_default_permissions {
         '/var/lib'                              => { mode => ['0755'] },
         '/var/lib/mysql'                        => { mode => ['0751'], user => 'mysql', group => 'mysql' },
         '/var/lib/mysql/mysql.sock'             => { mode => ['0777'], user => 'mysql', group => 'mysql' },
+        '/var/log'                              => { mode => ['0755', '0751', '0711'], perms_help => 'If non-root users cannot write to log files it can cause service failure' },
         '/var/log/exim_mainlog'                 => { mode => ['0640'], user => 'mailnull', group => 'mail' },
         '/var/log/exim_paniclog'                => { mode => ['0640'], user => 'mailnull', group => 'mail' },
         '/var/log/exim_rejectlog'               => { mode => ['0640'], user => 'mailnull', group => 'mail' },
@@ -2850,15 +2850,36 @@ sub check_for_non_default_permissions {
     ## If EA4 is running we need to redefine some of the paths from %check as these paths have turned into symlinks.
     ## We also conditionally need to add the new paths that EA4 introduces.
     if ( $ea4 ) {
-        delete $check{'/usr/local/apache/bin/httpd'}{mode};
-        delete $check{'/usr/local/apache/domlogs/'}{mode};
-        delete $check{'/usr/local/apache/htdocs'}{mode};
-        $check{'/usr/local/apache/bin/httpd'} = { symlink => '/usr/sbin/httpd' };
-        $check{'/usr/local/apache/domlogs'} = { symlink => '/etc/apache2/logs/domlogs' };
-        $check{'/usr/local/apache/htdocs'} = { symlink => '/var/www/html' };
-        $check{'/usr/bin/httpd'} = { mode => [ '0755' ] };
-        $check{'/etc/apache2/logs/domlogs'} = { mode => [ '0755' ] };
-        $check{'/var/www/html'} = { mode => [ '0755' ] };
+        $check{'/etc/apache2'}                      = { mode => ['0755'] };
+        $check{'/etc/apache2/conf'}                 = { mode => ['0755'] };
+        $check{'/etc/apache2/conf.d'}               = { mode => ['0755'] };
+        $check{'/etc/apache2/conf.modules.d'}       = { mode => ['0755'] };
+        $check{'/etc/apache2/logs'}                 = { symlink => '/var/log/apache2', check_missing => 1 };
+        $check{'/etc/apache2/logs/error_log'}       = { mode => ['0644'], perms_help => 'If users can\t read error_log, cPanel Errors (Last 300) won\t work.' };
+        $check{'/etc/apache2/logs/domlogs'}         = { mode => ['0755'], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
+        $check{'/etc/apache2/modules'}              = { symlink => '/usr/lib64/apache2/modules', check_missing => 1 };
+        $check{'/etc/apache2/run'}                  = { symlink => '/var/run/apache2', check_missing => 1 };
+        $check{'/usr/local/apache/access_log'}      = { symlink => '/etc/apache2/logs/access_log', check_missing => 1 };
+        $check{'/usr/local/apache/bin/apachectl'}   = { symlink => '/usr/sbin/apachectl', check_missing => 1 };
+        $check{'/usr/local/apache/bin/httpd'}       = { symlink => '/usr/sbin/httpd', check_missing => 1 };
+        $check{'/usr/local/apache/bin/suexec'}      = { symlink => '/usr/sbin/suexec', check_missing => 1 };
+        $check{'/usr/local/apache/conf/httpd.conf'} = { symlink => '/etc/apache2/conf/httpd.conf', check_missing => 1 };
+        $check{'/usr/local/apache/conf/includes'}   = { symlink => '/etc/apache2/conf.d/includes', check_missing => 1 };
+        $check{'/usr/local/apache/conf/mime.types'} = { symlink => '/etc/mime.types', check_missing => 1 };
+        $check{'/usr/local/apache/conf/php.conf'}   = { symlink => '/etc/apache2/conf.d/php.conf', check_missing => 1 };
+        $check{'/usr/local/apache/domlogs'}         = { symlink => '/etc/apache2/logs/domlogs', check_missing => 1 };
+        $check{'/usr/local/apache/error_log'}       = { symlink => '/etc/apache2/logs/error_log', check_missing => 1 };
+        $check{'/usr/local/apache/htdocs'}          = { symlink => '/var/www/html', check_missing => 1 };
+        $check{'/usr/local/apache/logs'}            = { symlink => '/etc/apache2/logs', check_missing => 1 };
+        $check{'/usr/local/apache/modules'}         = { symlink => '/etc/apache2/modules', check_missing => 1 };
+        $check{'/usr/sbin/httpd'}                   = { mode => ['0755'] };
+        $check{'/var/log/apache2'}                  = { mode => ['0711'] };
+        $check{'/var/www/html'}                     = { mode => ['0755'] };
+    } else {
+        $check{'/usr/local/apache/bin/httpd'}       = { mode => ['0755'] };
+        $check{'/usr/local/apache/domlogs'}         = { mode => ['0711'], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
+        $check{'/usr/local/apache/htdocs'}          = { mode => ['0755'] };
+        $check{'/usr/local/apache/logs/error_log'}  = { mode => ['0644'], perms_help => 'If users can\t read error_log, cPanel Errors (Last 300) won\t work.' };
     }
 
     if ( -l '/var/tmp' ) {
@@ -2886,6 +2907,7 @@ sub check_for_non_default_permissions {
     }
     if ( version_compare($os_release, qw( >= 7 )) ) {
         $check{'/bin'}              = { symlink => '/usr/bin' };
+        $check{'/bin/rpm'}          = { mode => ['755', '555'], perms_help => 'If users cannot execute /bin/rpm it will break Cron Jobs in x3 UI (CPANEL-1487)' };
         $check{'/sbin'}             = { symlink => '/usr/sbin' };
     }
     if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
@@ -2895,7 +2917,7 @@ sub check_for_non_default_permissions {
         $check{'/usr/local/cpanel/bin/cpwrap'} = { mode => ['4755'] };
     }
     if ( ( cpanel_version_is(qw( >= 11.44.0.0 )) && cpanel_version_is(qw( < 11.44.0.8 )) ) || ( cpanel_version_is(qw( >= 11.42.0.0 )) && cpanel_version_is(qw( < 11.42.1.18 )) ) ) {
-        $check{'/usr/local/cpanel/bin/sendmail'} = { mode => ['4755'], perms_help => 'CGIEmail wants suid /u/l/cpanel/bin/sendmail (case 86561)' };
+        $check{'/usr/local/cpanel/bin/sendmail'} = { mode => ['4755'], perms_help => 'CGIEmail wants suid /u/l/cpanel/bin/sendmail (FB-86561)' };
     }
     if ( cpanel_version_is(qw( >= 11.29.0.0)) ) {
         $check{'/scripts'} = { symlink => '/usr/local/cpanel/scripts', check_missing => 1 };
@@ -3012,9 +3034,9 @@ sub get_attributes {
 
 sub check_for_non_default_sysctl {
     my %check = ( # 'sysctl_key' => [ ['default1', 'default2', ...], 'Additional info' ]
-        'kernel.user_ptrace'                        => [ ['1'], ' - Disabling this is known to break remote logins from WHM Transfer Tool - see case 167393'],
-        'net.ipv4.tcp_tw_recycle'                   => [ ['0'], ' - This should generally never be enabled. Clients behind NAT can have problems connecting.'],
-        'net.ipv4.tcp_tw_reuse'                     => [ ['0'], ' - This should generally never be enabled. Clients behind NAT can have problems connecting.'],
+        'kernel.user_ptrace'                        => [ ['1'], ' - Disabling this is known to break remote logins from WHM Transfer Tool - see FB-167393'],
+        'net.ipv4.tcp_tw_recycle'                   => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.'],
+        'net.ipv4.tcp_tw_reuse'                     => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.'],
         'vm.overcommit_memory'                      => [ ['0', '1'], ' - Seeing "Out of memory" but there\s free memory and no limits?  This might be why.'],
     );
 
@@ -3097,7 +3119,7 @@ sub check_limitsconf {
 
     if (@limitsconf) {
         print_warn('/etc/security/limits.conf: ');
-        print_warning('customizations found. DON\'T move/alter! Seeing "Unable to set uids"? See CronUnableToSetUID article, FB 76597.');
+        print_warning('customizations found. DON\'T move/alter! Seeing "Unable to set uids"? See CronUnableToSetUID article, FB-76597.');
     }
 }
 
@@ -3474,7 +3496,7 @@ sub get_mysql_datadir {
 sub check_mysqld_warnings_errors {
     foreach my $mysql_err ( grep ( m{\[(?:err)}i, split( /\n/, timed_run_trap_stderr( 0, 'mysqld', '-u', 'mysql', '--help' ) ) ) ) {
         if ( $mysql_err =~ m/open_files_limit=/ ) {
-            print_warn('MySQL config missing newline: [see FB 64008]: ');
+            print_warn('MySQL config missing newline [see FB-64008]: ');
             print_warning($mysql_err);
         }
         else {
@@ -4310,9 +4332,9 @@ sub check_mysql_config {
         'sqlmode' => ['', '- Seeing "Field \'ssl_cipher\' doesn\'t have a default value"? That may be why.']
     );
 
-    if ( cpanel_version_is(qw( >= 11.49.0.0 )) && cpanel_version_is(qw( <= 11.50.1.0 ))) { # Version should be adjusted after case 127529 is published.
-        $mysqld_checks{'collationdatabase'} = ['', '- Did horde fail to convert to SQLite?  See case 127529.'];
-        $mysqld_checks{'collationserver'} = ['', '- Did horde fail to convert to SQLite?  See case 127529.'];
+    if ( cpanel_version_is(qw( >= 11.49.0.0 )) && cpanel_version_is(qw( < 11.50.0.11 ))) {
+        $mysqld_checks{'collationdatabase'} = ['', '- Did horde fail to convert to SQLite?  See FB-127529.'];
+        $mysqld_checks{'collationserver'} = ['', '- Did horde fail to convert to SQLite?  See FB-127529.'];
     }
 
     for my $check ( sort(keys(%mysqld_checks)) ) {
@@ -4483,7 +4505,7 @@ sub check_for_non_default_umask {
 
     if ( $umask !~ /2$/ ) {
         print_warn('umask: ');
-        print_warning("Non-default value [$umask] (check FB 62683 if permissions error when running convert_roundcube_mysql2sqlite)");
+        print_warning("Non-default value [$umask] (check FB-62683 if permissions error when running convert_roundcube_mysql2sqlite)");
     }
 }
 
@@ -4545,8 +4567,7 @@ sub check_for_broken_rpm {
 }
 
 sub check_for_custom_locales {
-
-    # FB 62119
+    return if cpanel_version_is(qw( >= 11.46.0.0 ));
 
     my $locale_dir = '/var/cpanel/locale.local';
     my $users_dir  = '/var/cpanel/users';
@@ -4610,7 +4631,7 @@ sub check_for_custom_locales {
     return if !@users_with_custom_locales;
 
     print_warn('locales: ');
-    print_warning('[FB 62119] Users with custom locales detected. Seeing "500 Internal Server Error" in cPanel? May be related, check the FB');
+    print_warning('Users with custom locales detected. Seeing "500 Internal Server Error" in cPanel? May be related, check FB-62119 and FB-107865');
 }
 
 sub check_eximstats_size {
@@ -4691,14 +4712,14 @@ sub check_for_broken_mysql_tables {
 }
 
 sub check_for_broken_mysql_horde {
-    return if cpanel_version_is(qw ( >= 11.50.1.0 )); # Adjust when case 189785 is published
+    return if cpanel_version_is(qw ( >= 11.50.0.12 ));
     chomp( my $columns = timed_run( 0, 'mysql', '-NBe', 'SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=\'horde\' AND table_name=\'horde_alarms\''));
     return if ! defined $columns;
     return unless $columns =~ m{ \A [0-9]+ \z }xms;
     $columns += 0;
     if ($columns > 0 && $columns != 12) {
         print_warn('mysql: ');
-        print_warning('horde.horde_alarms does not contain the expected 12 columns, this will prevent Horde conversion to SQLite in WHM 11.50.  See case 189785.');
+        print_warning('horde.horde_alarms does not contain the expected 12 columns, this will prevent Horde conversion to SQLite in WHM 11.50.  See FB-189785.');
     }
 }
 
@@ -4818,7 +4839,7 @@ sub check_for_better_linux {
     foreach my $rpm_ref ( grep { $_->{'name'} =~ m/^kernel/ } @extended_rpm_list ) {
         if ( $rpm_ref->{'release'} =~ m/\.bl/ ) {
             print_warn("BetterLinux detected:\n");
-            print_magenta("\t \\_ Branding problems? Possible CloakFS involvement. See FB 64368, ticket 4582511");
+            print_magenta("\t \\_ Branding problems? Possible CloakFS involvement. See FB-64368, ticket 4582511");
             print_magenta("\t \\_ ImageMagick segfaulting? See tickets 4185629, 4087003");
             last;
         }
@@ -4861,7 +4882,7 @@ sub check_for_percona_rpms {
 
     if ( $has_percona == 1 ) {
         print_warn("Percona RPMs found:\n");
-        print_magenta("\t \\_ EA failing with \"Cannot find libmysqlclient\"? libmysqlclient.so missing? see FB 93349");
+        print_magenta("\t \\_ EA failing with \"Cannot find libmysqlclient\"? libmysqlclient.so missing? see FB-93349");
         print_magenta("\t \\_ If Exim is segfaulting after STARTTLS, this may be why. See ticket 3658929");
         print_magenta("\t \\_ If Apache with PHP DSO is segfaulting after restart, this may be why. See ticket 5525179");
     }
@@ -5017,6 +5038,7 @@ sub check_for_rpm_overrides {
                                 | 600ff436e5939656a5645c6139cc0228
                                 | 657d59cc9627d30a95d0b84ef4245185
                                 | 350e47b97efd4b75563837b6b3502d71
+                                | 5818611cb4c0bf4086806aced5669f25
                                 ) \s }xms ) {
         $easy_is_default = 1;
     }
@@ -5093,12 +5115,12 @@ sub check_for_odd_yum_conf {
 
     if ( $exclude_line_count > 1 ) {
         print_warn('yum.conf: ');
-        print_warning('contains multiple "exclude" lines! See FB 63311');
+        print_warning('contains multiple "exclude" lines! See FB-63311');
     }
 
     if ( $exclude_kernel == 1 ) {
         print_warn('yum.conf: ');
-        print_warning('may be excluding kernel updates! See FB 63311');
+        print_warning('may be excluding kernel updates! See FB-63311');
     }
 }
 
@@ -5160,7 +5182,7 @@ sub check_for_homeloader_php_extension {
 
     if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? homeloader\.so ['"]? #xms } @phpini ) {
         print_warn('/usr/local/lib/php.ini: ');
-        print_warning("homeloader.so extension found. This can cause errors. See FB 4471 and 63838");
+        print_warning("homeloader.so extension found. This can cause errors. See FB-4471 and FB-63838");
     }
 }
 
@@ -5207,16 +5229,17 @@ sub check_for_var_cpanel_roundcube_install {
 }
 
 sub check_for_missing_etc_localtime {
-    if ( !-f '/etc/localtime' ) {
+    stat('/etc/localtime');
+    if ( ! -f _ or ! -s _ ) {
         print_warn('/etc/localtime: ');
-        print_warning('Missing! upcp may fail with "Error testing if the RPMs will install" (see ticket 3811269)');
+        print_warning('Missing or empty! Can break many things including upcp and stats (see tickets 3811269, 7092613, 7124961)');
     }
 }
 
 sub check_for_perl_env_var {
     if ( exists($ENV{'PERL5LIB'}) ) {
         print_warn('PERL5LIB env var: ');
-        print_warning('exists! This can break cPanel\'s perl or EasyApache. See FB 64265');
+        print_warning('exists! This can break cPanel\'s perl or EasyApache. See FB-64265');
     }
     if ( exists($ENV{'PERL_MB_OPT'}) ) {
         print_warn('PERL_MB_OPT env var: ');
@@ -5396,7 +5419,7 @@ sub check_for_bw_module_and_more_than_1024_vhosts {
 
     if ( $num_vhosts and $num_vhosts > 1024 ) {
         print_warn('bw_module: ');
-        print_warning("loaded, and httpd.conf has >1024 VirtualHosts ($num_vhosts). Apache failing to start? See FB 69121");
+        print_warning("loaded, and httpd.conf has >1024 VirtualHosts ($num_vhosts). Apache failing to start? See FB-69121");
     }
 }
 
@@ -5507,7 +5530,7 @@ sub check_for_mysql_root_pass_with_single_quote {
 
     if ( $has_single_quote && $has_single_quote == 1 ) {
         print_warn('mysql root user: ');
-        print_warning('pass has single quote. This breaks mysql_upgrade! mysql.proc issues? See FB 73533');
+        print_warning('pass has single quote. This breaks mysql_upgrade! mysql.proc issues? See FB-73533');
     }
 }
 
@@ -5533,7 +5556,7 @@ sub check_for_jailshell_additional_mounts_trailing_slash {
 
     if ( $has_slash == 1 ) {
         print_warn("$mounts_file: ");
-        print_warning( 'contains trailing slashes! Server may become unstable. See FB 71613');
+        print_warning( 'contains trailing slashes! Server may become unstable. See FB-71613');
     }
 }
 
@@ -5570,10 +5593,11 @@ sub check_for_nocloudlinux_touchfile {
     }
 }
 
-sub check_for_mysql_upgrade_touchfile { # Can be removed after case 113349 is resolved in all supported tiers.
+sub check_for_mysql_upgrade_touchfile {
+    return if cpanel_version_is(qw( >= 11.46.1.0 ));
     if ( -e '/var/cpanel/mysql_upgrade_in_progress' ) {
         print_warn('/var/cpanel/mysql_upgrade_in_progress: ');
-        print_warning('exists! See case 113349.');
+        print_warning('exists! See FB-113349.');
     }
 }
 
@@ -5633,7 +5657,7 @@ sub check_for_invalid_HOMEDIR {
     }
 }
 
-sub check_for_unsupported_options_in_phpini { # case 75397
+sub check_for_unsupported_options_in_phpini { # FB-75397
     return if !$php5version;
 
     my ( undef, $php5minor ) = split /\./, $php5version;
@@ -5655,7 +5679,7 @@ sub check_for_unsupported_options_in_phpini { # case 75397
     if ( $unsupported_options ) {
         $unsupported_options =~ s/\s$//g;
         print_warn('/usr/local/lib/php.ini: ');
-        print_warning("PHP $php5version does not support $unsupported_options, but found enabled in php.ini. See FB 75397");
+        print_warning("PHP $php5version does not support $unsupported_options, but found enabled in php.ini. See FB-75397");
     }    
 }
 
@@ -5691,7 +5715,7 @@ sub check_for_assp_hates_appconfig_cron {
 sub check_for_missing_var_cpanel_dynamicui_ftp {
     if ( !-e '/etc/ftpddisable' and !-e '/etc/ftpserverdisable' and !-e '/var/cpanel/dynamicui/ftp' ) {
         print_warn('FTP: ');
-        print_warning('touchfile /v/c/dynamicui/ftp appears to be missing. FTP options may not appear in cPanel. See FB 83193');
+        print_warning('touchfile /v/c/dynamicui/ftp appears to be missing. FTP options may not appear in cPanel. See FB-83193');
     }
 }
 
@@ -5820,7 +5844,7 @@ sub check_for_nfs {
 
     if ( $has_nfs == 1 ) {
         print_warn('NFS: ');
-        print_warning('filesystem(s) with NFS detected. This can cause cPanel to load slowly (see ticket 4380977, FB 79549)');
+        print_warning('filesystem(s) with NFS detected. This can cause cPanel to load slowly (see ticket 4380977, FB-79549)');
     }    
 }
 
@@ -5857,6 +5881,7 @@ sub check_for_processes_killed_by_lfd {
                 my $header   = $1;
                 my %keypairs = map { ( split( m{:}, $_, 2 ) )[ 0, 1 ] } split( m{[ \t]+}, $2 );
                 my $cmd      = $3;
+                next if $keypairs{"Kill"} == "0";
                 push @killed_by_lfd, "[$header] " . join( " ", ( map { "[$_: $keypairs{$_}]" } sort keys %keypairs ) ) . " [cmd: $cmd]\n";
                 $count++;
             }
@@ -6123,10 +6148,10 @@ sub check_for_missing_groups {
 }
 
 sub check_for_cgihidepass {
-    return if cpanel_version_is(qw( >= 11.42.1.1 )); # Fixed in 11.42.1.1
+    return if cpanel_version_is(qw( >= 11.42.1.1 ));
     if ( defined $cpconf{'cgihidepass'} and $cpconf{'cgihidepass'} == 1 ) {
         print_warn('cgihidepass: ');
-        print_warning('Tweak Settings >> "Hide login password from cgi scripts" is enabled. Expired passwords can\'t be changed via WHM. See FB 87581');
+        print_warning('Tweak Settings >> "Hide login password from cgi scripts" is enabled. Expired passwords can\'t be changed via WHM. See FB-87581');
     }
 }
 
@@ -6193,7 +6218,7 @@ sub check_for_pgpass_colon_in_password_field {
 
     if ( $has_colon == 1 ) {
         print_warn("$pgpass: ");
-        print_warning('password field contains a colon. Seeing Postgres auth issues? See FB 89093' );
+        print_warning('password field contains a colon. Seeing Postgres auth issues? See FB-89093' );
     }
 }
 
@@ -6226,8 +6251,8 @@ sub check_for_extra_uid_0_user {
 
     if ( $uid_0_users == 1 ) {
         print_warn("non-root uid 0 user(s): \n");
-        print_magenta("\t \\_ This can cause a variety of issues. See FB 92065 and the tickets listed there for some examples.");
-        print_magenta("\t \\_ EasyApache failing with \"can't create [...] all_iplist.db\"? See FB 62467. Do *not* escalate as security issue.");
+        print_magenta("\t \\_ This can cause a variety of issues. See FB-92065 and the tickets listed there for some examples.");
+        print_magenta("\t \\_ EasyApache failing with \"can't create [...] all_iplist.db\"? See FB-62467. Do *not* escalate as security issue.");
     }
 }
 
@@ -6338,7 +6363,7 @@ sub check_for_missing_skiphttpauth {
     return if defined $cpconf{'skiphttpauth'};
 
     print_warn('skiphttpauth: ');
-    print_warning('not found in cpanel.config. HTTP auth will be enabled by default. See FB 95681');
+    print_warning('not found in cpanel.config. HTTP auth will be enabled by default. See FB-95681');
 }
 
 sub check_for_mpm_itk_and_suexec {
@@ -6346,17 +6371,17 @@ sub check_for_mpm_itk_and_suexec {
     return unless $suexec;
 
     print_warn('MPM ITK: ');
-    print_warning('enabled with suEXEC. This can break redirects like /cpanel. See case 83405.');
+    print_warning('enabled with suEXEC. This can break redirects like /cpanel. See FB-83405.');
 }
 
 sub check_for_modruid2_warnings {
         if ( $apache_per_user eq "ruid2" ) {
             if ( defined $cpconf{'jailapache'} && $cpconf{'jailapache'} == 1 ) {
                 print_warn('Mod Ruid2: ');
-                print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see cases 84393, 104017, and tickets 5015613, 5227891');
+                print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see FB-84393, FB-104017, and tickets 5015613, 5227891');
                 if ( $php5handler && $php5handler eq 'suphp' ) {
                     print_warn('Mod Ruid2: ');
-                    print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see cases 70561, 105901');
+                    print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see FB-70561, FB-105901');
                 }
             }
             if ( $lsws_full_version ) {
@@ -6520,7 +6545,7 @@ sub check_for_broken_mysqldump {
     # tested via MySQL55-client
     if ( $exit_status && $exit_status != 1 ) {
         print_warn("$md: ");
-        print_warning('may be broken (exit status != 1). This can cause eximstats and other issues. See FB 98477');
+        print_warning('may be broken (exit status != 1). This can cause eximstats and other issues. See FB-98477');
     }
 }
 
@@ -7698,6 +7723,35 @@ sub check_for_ebury_socket {
     }
 }
 
+sub check_for_ncom_filenames {
+    my @bad_libs;
+    my @dirs  = qw( /lib /lib64 );
+    my @files = qw(
+                    libncom.so.4.0.1
+                    libselinux.so.4
+                );
+
+    for my $dir (@dirs) {
+        next if !-e $dir;
+        for my $file (@files) {
+            my $fullpath = $dir . "/" . $file;
+            stat $fullpath;
+            if ( -f _ and !-z _ ) {
+                push @bad_libs, $fullpath;
+            }
+        }
+    }
+
+    if (@bad_libs) {
+        print_generic_hack_predef('NCOM ROOTKIT');
+        print_critical('The following files were found:');
+        print_critical("\t" . join(" ", @bad_libs));
+        print_critical("\tL3: use 07 - Ncom Rootkit Predef [L3 Only]");
+        print_critical("\tL3: check /etc/ld.so.preload");
+        print_critical();
+    }
+}
+
 ## END malware checks
 
 sub build_rpm_list {
@@ -7733,7 +7787,7 @@ sub get_openssl_rpm_changelog {
 
 sub check_for_cloudlinux_mysql_gov {
     if ( my @cl_mysql_rpms = grep ( m{^cl-MySQL-}, @rpm_list ) ) {
-        print_warn("CloudLinux MySQL (see FB 64017): ");
+        print_warn("CloudLinux MySQL (see FB-64017): ");
         print_warning( join( " ", @cl_mysql_rpms ) );
     }
 }
@@ -7744,9 +7798,9 @@ sub check_cpanel_config {
         print_warning("maxmem < 512M, value=$cpconf{'maxmem'} phpmyadmin may fail");
     }
 
-    if ( cpanel_version_is(qw( < 11.48 )) && defined $cpconf{'use_safe_quotas'} && $cpconf{'use_safe_quotas'} == 1 ) { # Case 63646 - remove check after 11.46 hits EoL
+    if ( cpanel_version_is(qw( < 11.48.0.0 )) && defined $cpconf{'use_safe_quotas'} && $cpconf{'use_safe_quotas'} == 1 ) {
         print_warn("/var/cpanel/cpanel.config: ");
-        print_warning("use_safe_quotas=1 suspend and unsuspend will be slow. Useless on RHEL/CentOS 5+.");
+        print_warning("use_safe_quotas=1 suspend and unsuspend will be slow. Useless on RHEL/CentOS 5+. See FB-63646.");
     }
 }
 
