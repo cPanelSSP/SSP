@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.114';
+my $version = '4.99.115';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2855,10 +2855,11 @@ sub check_for_non_default_permissions {
         $check{'/etc/apache2/conf.d'}               = { mode => ['0755'] };
         $check{'/etc/apache2/conf.modules.d'}       = { mode => ['0755'] };
         $check{'/etc/apache2/logs'}                 = { symlink => '/var/log/apache2', check_missing => 1 };
-        $check{'/etc/apache2/logs/error_log'}       = { mode => ['0644'], perms_help => 'If users can\t read error_log, cPanel Errors (Last 300) won\t work.' };
+        $check{'/etc/apache2/logs/error_log'}       = { mode => ['0644'], user => '*', perms_help => 'If users can\'t read error_log, cPanel Errors (Last 300) won\'t work.' };
         $check{'/etc/apache2/logs/domlogs'}         = { mode => ['0755'], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
         $check{'/etc/apache2/modules'}              = { symlink => '/usr/lib64/apache2/modules', check_missing => 1 };
         $check{'/etc/apache2/run'}                  = { symlink => '/var/run/apache2', check_missing => 1 };
+        $check{'/etc/cpanel'}                       = { mode => ['0755'], perms_help => 'cPanel MultiPHP needs read access to this directory.  See CPANEL-905.' };
         $check{'/usr/local/apache/access_log'}      = { symlink => '/etc/apache2/logs/access_log', check_missing => 1 };
         $check{'/usr/local/apache/bin/apachectl'}   = { symlink => '/usr/sbin/apachectl', check_missing => 1 };
         $check{'/usr/local/apache/bin/httpd'}       = { symlink => '/usr/sbin/httpd', check_missing => 1 };
@@ -2879,7 +2880,7 @@ sub check_for_non_default_permissions {
         $check{'/usr/local/apache/bin/httpd'}       = { mode => ['0755'] };
         $check{'/usr/local/apache/domlogs'}         = { mode => ['0711'], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
         $check{'/usr/local/apache/htdocs'}          = { mode => ['0755'] };
-        $check{'/usr/local/apache/logs/error_log'}  = { mode => ['0644'], perms_help => 'If users can\t read error_log, cPanel Errors (Last 300) won\t work.' };
+        $check{'/usr/local/apache/logs/error_log'}  = { mode => ['0644'], user => '*', perms_help => 'If users can\'t read error_log, cPanel Errors (Last 300) won\'t work.' };
     }
 
     if ( -l '/var/tmp' ) {
@@ -6729,7 +6730,7 @@ sub check_for_UMBREON_rootkit {
         print_generic_hack_predef('UMBREON ROOTKIT');
         print_critical('The following directory was found:');
         print_critical("\t" . $dir);
-        print_critical("\tL3: use 07 - Jynx2 Predef [L3 Only]");
+        print_critical("\tL3: use \"L3 - Jynx2 Predef [L3 Only]\"");
         print_critical();
     }
 }
@@ -6749,7 +6750,7 @@ sub check_for_jynx2_rootkit {
         print_generic_hack_predef('Jynx 2 ROOTKIT');
         print_critical('The following files were found:');
         print_critical("\t" . join(" ", @found_jynx2_files));
-        print_critical("\tL3: use 07 - Jynx2 Predef [L3 Only]");
+        print_critical("\tL3: use \"L3 - Jynx2 Predef [L3 Only]\"");
         print_critical();
     }
 }
@@ -6823,7 +6824,7 @@ sub check_for_bg_botnet {
     print_generic_hack_predef('BG BOTNET');
     print_critical('The following files were found:');
     print_critical("\t" . join(" ", @found_bg_files));
-    print_critical("\tL3: use 07 - BG Botnet Predef [L3 Only]");
+    print_critical("\tL3: use \"L3 - BG Botnet Predef [L3 Only]\"");
     print_critical();
 }
 
@@ -7252,13 +7253,13 @@ sub print_generic_hack_predef {
     my $name = shift;
     print_critical();
     print_crit('!! [ ' . $name . ' ] !! ');
-    print_critical('Escalate this ticket to L3 using "00 - Hacked Server Response for L1/L2->L3');
+    print_critical('Escalate this ticket to L3 using "ESCALATE - Hacked Server Response for L1/L2->L3 ( All Analysts )"');
 }
 
 sub print_ebury_cdorked_predef {
     my $name = shift;
     print_generic_hack_predef($name);
-    print_critical("\tL3 use \"00 - eBury / CDorked - Free Migration [L3 only]\"");
+    print_critical("\tL3: use \"L3 - eBury / CDorked - Free Migration [L3 only]\"");
 }
 
 sub check_for_cdorked_A {
@@ -7746,7 +7747,7 @@ sub check_for_ncom_filenames {
         print_generic_hack_predef('NCOM ROOTKIT');
         print_critical('The following files were found:');
         print_critical("\t" . join(" ", @bad_libs));
-        print_critical("\tL3: use 07 - Ncom Rootkit Predef [L3 Only]");
+        print_critical("\tL3: use \"L3 - Ncom Rootkit Predef [L3 Only]\"");
         print_critical("\tL3: check /etc/ld.so.preload");
         print_critical();
     }
