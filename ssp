@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.115';
+my $version = '4.99.116';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -199,6 +199,7 @@ for ( 1 .. 3 ) {
 check_for_hacked_server_touchfile();
 check_for_multiple_tech_logins();
 check_for_lve_environment();
+check_for_os_release_7();
 
 ## [INFO]
 print "\n";
@@ -226,9 +227,9 @@ print_backups_info();
 print_mailserver_info();
 print_ftpserver_info();
 check_for_custom_zonetemplates();
+print_news();
 
 ## [WARN]
-check_for_os_release_7();
 check_port_hash();
 check_selinux_status();
 check_runlevel();
@@ -479,6 +480,7 @@ sub check_for_dnsonly {
         check_for_hacked_server_touchfile();
         check_for_multiple_tech_logins();
         check_for_lve_environment();
+        check_for_os_release_7();
 
         ## [INFO]
         print_hostname();
@@ -491,7 +493,6 @@ sub check_for_dnsonly {
         check_sysinfo();
 
         ## [WARN]
-        check_for_os_release_7();
         check_port_hash();
         check_selinux_status();
         check_runlevel();
@@ -878,7 +879,6 @@ sub print_tip {
         '[FB-42027] "Recently Uploaded Cgi Script Mail" scans and sends email alerts about downloaded files too',
         '[FB-21774] Pure-FTPd is not linked against libwrap. As such, Host Access Control does nothing for it',
         'The cpanel-postgresql* packages are for phpPgAdmin. The postgresql-* packages are for PostgreSQL',
-        'mod_userdir URLs (/~username) are not compatible with FCGI when Apache\'s suexec is enabled (cP Docs: tinyurl.com/pegpr78)',
         'For a list of obscure issues, see the RareIssues wiki article',
         '11.35+: Use /scripts/check_cpanel_rpms to fix problems in /usr/local/cpanel/3rdparty/  - not checkperlmodules',
         'php.ini for phpMyAdmin, phpPgAdmin, Horde, and RoundCube can be found in /usr/local/cpanel/3rdparty/etc/',
@@ -1290,6 +1290,12 @@ sub get_lsws_version {
     $lsws_numeric_version = "unknown" if ! $lsws_numeric_version;
 
     return ( $lsws_full_version, $lsws_numeric_version );
+}
+
+sub check_for_os_release_7 {
+    return if ( version_compare($os_release, qw( < 7 )) );
+    print_crit('RHEL/CentOS/CL 7+: ');
+    print_critical('Use /scripts/restartsrv to restart services, not /etc/init.d scripts.');
 }
 
 ##############################
@@ -1746,16 +1752,9 @@ sub print_ea3_php_configuration {
                 $php5version = '(version unknown)';
             }
 
-            my $additional_text = "";
             if ( $php5handler ) {
-                if ( $php5handler eq 'fcgi' ) {
-                    $additional_text .= " (mod_userdir style URLs don't work with fcgi!)";
-                }
-                if ( $php5handler eq 'cgi' ) {
-                    $additional_text .= " (mod_userdir style URLs don't work with cgi!)";
-                }
                 print_info('PHP Default: ');
-                print_normal("PHP $php5version $php5handler $suexec" . $additional_text);
+                print_normal("PHP $php5version $php5handler $suexec");
             }
         }
 
@@ -2297,6 +2296,14 @@ sub check_for_lsws_update {
     }
 }
 
+sub print_news {
+    if ( cpanel_version_is(qw( >= 11.52.0.0 )) ) {
+        print_info('WHM 11.52+: ');
+        print_normal('Slow email delivery or monitoring service detects SMTP has failed? 11.52 added SMTP connection delays, see DOC-6092.');
+    }
+};
+
+
 ##############################
 #  END [INFO] CHECKS
 ##############################
@@ -2304,12 +2311,6 @@ sub check_for_lsws_update {
 ##############################
 #  BEGIN [WARN] CHECKS
 ##############################
-
-sub check_for_os_release_7 {
-    return if ( version_compare($os_release, qw( < 7 )) );
-    print_warn('RHEL/CentOS/CL 7+: ');
-    print_warning('Use /scripts/restartsrv to restart services, not /etc/init.d scripts.');
-}
 
 sub check_port_hash {
     return if ( scalar keys(%port) >= 1 );
@@ -2635,7 +2636,7 @@ sub check_for_missing_account_suspensions_conf {
     for my $template (keys(%templates)) {
         if (! $templates{$template}[1]) {
             print_warn("Custom templates: ");
-            print_warning( $templates{$template}[0] . " is missing include for account_suspensions.conf!\n\t\\_ Use predefined \"03 - Suspensions Template Update\"");
+            print_warning( $templates{$template}[0] . " is missing include for account_suspensions.conf!\n\t\\_ Use predefined \"WEBSERVER - Suspensions Template Update\"");
         }
     }
 }
@@ -2775,6 +2776,7 @@ sub check_for_non_default_permissions {
         '/bin/crontab'                          => { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' },
         '/bin/ln'                               => { mode => ['0755', '0555'] },
         '/bin/passwd'                           => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
+        '/bin/rpm'                              => { mode => ['755', '555'], perms_help => 'If users cannot execute /bin/rpm it will break Cron Jobs in x3 UI (CPANEL-1487)' },
         '/bin/rm'                               => { mode => ['0755', '0555'], perms_help => 'File Manager unable to delete files?  This may be why.' },
         '/dev'                                  => { mode => ['0755'], perms_help => 'Breaks many things if non-root users can\'t access this.' },
         '/dev/log'                              => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog, including user cron jobs to /var/log/cron.' },
@@ -2908,7 +2910,6 @@ sub check_for_non_default_permissions {
     }
     if ( version_compare($os_release, qw( >= 7 )) ) {
         $check{'/bin'}              = { symlink => '/usr/bin' };
-        $check{'/bin/rpm'}          = { mode => ['755', '555'], perms_help => 'If users cannot execute /bin/rpm it will break Cron Jobs in x3 UI (CPANEL-1487)' };
         $check{'/sbin'}             = { symlink => '/usr/sbin' };
     }
     if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
@@ -2930,7 +2931,13 @@ sub check_for_non_default_permissions {
         $check{'/usr/local/cpanel/3rdparty/bin/webalizer_lang/english'} = { mode => ['0755'], user => 'bin', group => 'bin' };
     }
     if ( $is_cloudlinux ) {
-        $check{'/usr/bin/python'} = { mode => ['0755'], perms_help => 'If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' };
+        if ( version_compare($os_release, qw( >= 7 ) )) {
+            $check{'/usr/bin/python'}       = { symlink => '/usr/bin/python2.7', check_missing => 1, perms_help => 'If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' };
+            $check{'/usr/bin/python2.7'}    = { mode => ['0755'], perms_help => 'If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' };
+        }
+        else {
+            $check{'/usr/bin/python'} = { mode => ['0755'], perms_help => 'If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' };
+        }
     }
 
     for my $path ( sort keys %check ) {
@@ -6161,7 +6168,7 @@ sub check_for_noquotafs {
     return if !-f $noquotafs or -z $noquotafs;
 
     print_warn("$noquotafs: ");
-    print_warning('exists. quota issues? See http://documentation.cpanel.net/pages/viewpage.action?pageId=363841');
+    print_warning('exists. quota issues? See https://documentation.cpanel.net/pages/viewpage.action?pageId=1507750');
 }
 
 sub check_for_mod_rpaf {
@@ -6457,7 +6464,7 @@ sub check_for_openssl_heartbleed_bug {
 
     print_critical();
     print_crit('Heartbleed: ');
-    print_critical('Send customer this premade: OpenSSL Heartbleed Vulnerability - Discovery');
+    print_critical('Send customer this premade: SECURITY - OpenSSL Heartbleed Vulnerability - Discovery');
     print_critical('The following check was used: rpm -q --changelog openssl | grep \' CVE-2014-0160 \'');
     print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
     print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
@@ -6505,7 +6512,7 @@ sub check_for_openssl_secadv_20140605 {
     print_critical();
     print_crit('OpenSSL RPM missing secadv_20140605 patches: ');
     print_critical('CVE-2014-0224');
-    print_critical('Send customer this premade: "OpenSSL advisory 2014-06-05 - Discovery"');
+    print_critical('Send customer this premade: "SECURITY - OpenSSL advisory 2014-06-05 - Discovery"');
     print_critical('!! BEFORE SENDING PREMADE VERIFY THE MISSING CVE PATCHES WITH: rpm -q --changelog openssl | egrep \' CVE-201(0|4)-\'');
     print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
     print_critical();
@@ -6519,7 +6526,7 @@ sub check_for_bash_secadv_20140924 {
     print_crit('Installed \'bash\' shell is vulnerable to remote code injection.  Verify by running the following at a shell prompt, it should return "vulnerable":');
     print_critical();
     print_critical('    env x=\'() { :;}; echo vulnerable\' bash -c ""');
-    print_critical('Send customer this premade: "Bash advisory 2014-09-24 - Discovery"');
+    print_critical('Send customer this premade: "SECURITY - Bash advisory 2014-09-24 - Discovery"');
     print_critical();
 };
 
