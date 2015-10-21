@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.116';
+my $version = '4.99.117';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -2763,12 +2763,13 @@ sub check_perl_sanity {
 sub check_for_non_default_permissions { 
     my $timeout = $opts{'timeout'} ? $opts{'timeout'} : 10; # This only applies to the recursive loop.
 
-    # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', immutable_recursive => 1, immutable_help => 'Additional info if immutable', symlink => '/path', check_missing => 1 },
+    # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', immutable_recursive => 1, immutable_help => 'Additional info if immutable', symlink => '/path', symlink_no_absolute => 1, check_missing => 1 },
     # Attributes are always checked, mode is only checked if specified.
     # User is always checked if mode is specified, which defaults to 'root'.
     # A '*' can be used to specify any user or group is allowed.
     # Only symlink ownership can be verified, not its mode.
     # immutable_recursive only works on directories, default is 0 (do not recurse).
+    # symlink_no_absolute defines whether the absolute target path of a symlink will be computed before comparing. Default behavior is to resolve the absolute target path.  Enabling this option allows you to compare a symlink at face-value.
     # check_missing causes a missing object to be reported
     my %check = (
         '/'                                     => { mode => ['0755', '0555'], perms_help => '.ftpquota issues? see ticket 4429843', immutable_help => 'This can break EA. See ticket 4929961' },
@@ -2782,6 +2783,9 @@ sub check_for_non_default_permissions {
         '/dev/log'                              => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog, including user cron jobs to /var/log/cron.' },
         '/dev/null'                             => { mode => ['0666'], perms_help => 'Breaks many things if non-root users can\'t write to this.' },
         '/dev/random'                           => { mode => ['0666', '0664', '0644', '0444'], perms_help => 'Breaks many things if non-root users can\'t read this.' },
+        '/dev/stderr'                           => { symlink => '/proc/self/fd/2', symlink_no_absolute => 1, check_missing => 1 },
+        '/dev/stdin'                            => { symlink => '/proc/self/fd/0', symlink_no_absolute => 1, check_missing => 1 },
+        '/dev/stdout'                           => { symlink => '/proc/self/fd/1', symlink_no_absolute => 1, check_missing => 1 },
         '/dev/urandom'                          => { mode => ['0666', '0664', '0644', '0444'], perms_help => 'Breaks many things if non-root users can\'t read this.' },
         '/etc'                                  => { mode => ['0755'] },
         '/etc/cpbackup.conf'                    => { mode => ['0644'] },
@@ -2944,10 +2948,15 @@ sub check_for_non_default_permissions {
         lstat $path; # _ can now be used in place of $path for -d, -e, -f, -l, etc...
         if (-l _ ) {
             my $linktarget = readlink($path);
-            if ( ! ( $linktarget =~ m{ \A / }x ) ) { # If a symlink is relative, try to prepend the base path and convert to absolute
-                my @basepath = split(m{/},$path);
-                my $fullpath = join('/', @basepath[0 .. $#basepath-1]) . '/' . $linktarget;
-                $linktarget = defined(abs_path($fullpath)) ? abs_path($fullpath) : $linktarget;
+            if ( ! exists $check{$path}{'symlink_no_absolute'} || $check{$path}{'symlink_no_absolute'} == 0 ) {
+                if ( ! ( $linktarget =~ m{ \A / }x ) ) { # If a symlink has a relative prefix, try to prepend the base path and convert to absolute
+                    my @basepath = split(m{/},$path);
+                    my $fullpath = join('/', @basepath[0 .. $#basepath-1]) . '/' . $linktarget;
+                    $linktarget = defined(abs_path($fullpath)) ? abs_path($fullpath) : $linktarget;
+                }
+                elsif ( $linktarget =~ m{ / .{1,2} / }x ) { # If a symlink is relative, convert to absolute
+                    $linktarget = defined(abs_path($linktarget)) ? abs_path($linktarget) : $linktarget;
+                }
             }
             if ( ! exists $check{$path}{'symlink'} || $linktarget ne $check{$path}{'symlink'} ) {
             print_warn('Non-default symlink: ');
@@ -7347,6 +7356,7 @@ sub check_for_libkeyutils_filenames {
                     libkeyutils.so.1.3.2
                     libns2.so
                     libns5.so
+                    libpw3.so
                     tls/libkeyutils.so.1
                     tls/libkeyutils.so.1.5
                 );
