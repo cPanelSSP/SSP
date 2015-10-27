@@ -50,7 +50,7 @@ if ( $< != 0 ) {
 
 $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
-my $version = '4.99.117';
+my $version = '4.99.118';
 
 $|                          = 1;
 $Term::ANSIColor::AUTORESET = 1;
@@ -3029,7 +3029,7 @@ sub check_for_non_default_permissions {
 sub get_attributes {
     # @want is optional, not specifying anything returns all checked attributes
     my ( $path, @want ) = @_;
-    open my $fh, $path or return;
+    open(my $fh, '<', $path) or return;
     my %attributes = (
         'APPEND-ONLY'   => 0x00000020,  # EXT2_APPEND_FL in ext2fs/ext2_fs.h
         'IMMUTABLE'     => 0x00000010,  # EXT2_IMMUTABLE_FL in ext2fs/ext2_fs.h
