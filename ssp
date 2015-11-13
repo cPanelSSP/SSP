@@ -15,6 +15,7 @@ THE SOFTWARE LICENSED HEREUNDER IS PROVIDED "AS IS" AND CPANEL HEREBY DISCLAIMS 
 
 use strict;
 use warnings;
+use Fcntl qw(:mode);
 use File::Find;
 use IO::Socket::INET;
 use Sys::Hostname;
@@ -27,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.118';
+our $VERSION = '4.99.119';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -80,6 +81,7 @@ our ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION );
 our ( $PHPVERSION, $PHP5VERSION, $PHP4VERSION, $PHP4HANDLER, $PHP5HANDLER, $SUEXEC );
 our @LSOF_80;
 our $OPENSSL_RPM_CHANGELOG;
+our $EA4_PHP_FPM;               # Boolean flag indicating if easyapache4's php fpm is running
 
 # Initialize application by setting loading all global variables
 # (except the RPM variables).  That's done within run()
@@ -118,8 +120,9 @@ sub init {
     $CPUINFO            = get_cpuinfo();
     $SYSCTL             = get_sysctl();
     $MYSQL_CONF         = get_mysql_conf();
-    $MYSQL_DATADIR      = get_mysql_datadir();      # needs $MYSQL_CONF
-    $MYSQL_ERROR_LOG    = get_mysql_error_log();    # needs $MYSQL_CONF
+    $MYSQL_DATADIR      = get_mysql_datadir();        # needs $MYSQL_CONF
+    $MYSQL_ERROR_LOG    = get_mysql_error_log();      # needs $MYSQL_CONF
+    $EA4_PHP_FPM        = get_ea4_php_fpm_status();
     ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION ) = get_lsws_version();
 
     if ($HTTPD_PATH) {
@@ -7960,6 +7963,92 @@ sub check_cpanel_config_for_bad_root {    # Separate from check_cpanel_config be
     }
 }
 
+sub get_ea4_php_fpm_status {
+    return 0 unless $EA4;
+    my $running = 0;
+
+    while ( my ( $pid, $ref ) = each(%$PROCESS_REF) ) {
+        if ( $ref->{COMM} =~ /php\-fpm/ ) {
+            $running = 1;
+            last;
+        }
+    }
+
+    keys %$PROCESS_REF;    # reset iterator
+
+    return $running;
+}
+
+# Examines the system for EasyApache4 PHP FPM, if it exists.
+# It then examines the setup with the following sanity checks
+#   1. Only user pools are in-use (as opposed to a global)
+#   2. Only UNIX sockets are in-use (as opposed to net socket)
+#   3. UNIX sockets have correct perms
+sub check_ea4_php_fpm {
+    return unless $EA4;
+    return unless $EA4_PHP_FPM;
+    my @running;
+
+    # gather up a list of running php-fpm process
+    while ( my ( $pid, $ref ) = each(%$PROCESS_REF) ) {
+        next unless $ref->{COMM} =~ /php\-fpm/;
+        push @running, { PID => $pid, %$ref };
+    }
+
+    my ( %shared, %port, %perms );
+
+    # run through each process, checking for bad stuff
+    for my $ref (@running) {
+        my @lsof = split /\n/, timed_run( 0, 'lsof', '-nbP', '-p', $ref->{PID} );
+
+        # e.g. php-fpm 26622 cgi64    0u  unix 0xffff880068acce80      0t0 9183680 /home/cgi64/php-fpm/run/ea-php55.sock
+        # e.g. httpd   26012 nobody   3u  IPv4 9175485                 0t0     TCP *:http (LISTEN)
+        for my $line (@lsof) {
+            my ( $proc, $pid, $user, $fd, $type, $device, $size, $node, $name, $listen ) = split( /\s+/, $line );
+            next unless $proc =~ /php\-fpm/i;    # verify in case it changed between runs
+
+            $shared{$pid} = { user => $user } if ( !$shared{$pid} && ( $user =~ /^apache$/ || $user =~ /^nobody$/ ) );
+
+            if ( $type eq 'unix' && $name =~ /^\// ) {
+                next if $perms{$name};
+                my $mode = ( stat($name) )[2];
+
+                unless ($mode) {
+                    print_warn('EA4 php-fpm: ');
+                    print_warning("Unable to determine UNIX socket permissions (pid:$pid, path:$name)");
+                    next;
+                }
+
+                $perms{$name} = { pid => $pid, user => $user } if $mode & S_IRWXO;
+            }
+            elsif ( $type =~ /^ipv\d+/i && $listen =~ /LISTEN/i ) {
+                $name =~ s/^.*?:(\d+).*/$1/;
+                $port{$name} = { pid => $pid, user => $user, type => $type } unless $port{$name};
+            }
+        }
+    }
+
+    if ( keys %shared ) {
+        print_warn('EA4 php-fpm: ');
+        my @ports = sort keys %shared;
+        print_warning("Found shared pool(s), instead of dedicated per-user pools (pid:@ports)");
+    }
+
+    if ( keys %perms ) {
+        print_warn('EA4 php-fpm: ');
+        my @paths = sort keys %perms;
+        print_warning("Invalid filesystem permission on UNIX socket(s). Remove 'world' bits: @paths");
+    }
+
+    if ( keys %port ) {
+        print_warn('EA4 php-fpm: ');
+        my @ports = keys %port;
+        print_warning("php-fpm should not be listening on port(s): @ports");
+    }
+
+    return 1;
+}
+
 sub print_bug_report {
     my $version     = $CPANEL_VERSION ? $CPANEL_VERSION : 'Unknown';
     my $os          = get_os_release();
@@ -8019,4 +8108,3 @@ unless ( caller() ) {
     SSP::init();
     SSP::run();
 }
-
