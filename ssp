@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.119';
+our $VERSION = '4.99.120';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -345,6 +345,7 @@ sub run {
     check_for_multiple_imagemagick_installs();
     check_for_custom_locales();
     check_eximstats_size();
+    check_sa_dns();
 
     #check_eximstats_corrupt(); # !! Completely remove after shake-down period for new table check
     check_for_broken_mysql_tables();
@@ -7017,6 +7018,32 @@ sub check_updatelog {
     if ($found_rpm_needs_space) {
         print_warn("WHM update: ");
         print_warning( $log . ' contains errors which indicate that RPM installation had insufficient free disk space available' );
+    }
+}
+
+sub check_sa_dns {
+    my $resolv = '/etc/resolv.conf';
+
+    my ( $found1, $found2 );
+    open( my $fh, '<:encoding(UTF-8)', $resolv ) or return;
+    while ( my $line = <$fh> ) {
+        if ( $line =~ /8\.8\.8\.8/ ) {
+            $found1 = "8.8.8.8";
+        }
+        if ( $line =~ /4\.2\.2\.2/ ) {
+            $found2 = "4.2.2.2";
+        }
+    }
+    close $fh;
+
+    if ( $found1 || $found2 ) {
+        my $message = "$resolv contains ";
+        $message .= $found1 if $found1;
+        $message .= " and " if ( $found1 && $found2 );
+        $message .= $found2 if $found2;
+        $message .= " which can cause issues with SpamAssassin\n";
+
+        print_warn("$message");
     }
 }
 
