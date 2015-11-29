@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.119';
+our $VERSION = '4.99.120';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -6033,13 +6033,34 @@ sub check_for_processes_killed_by_oom {
     read $file_fh, $log_data, $bytes_to_check;
     close $file_fh;
 
-    if ( $log_data =~ /Out of memory/ ) {
+    if ( $log_data =~ /[Kk]illed process/ ) {
         @logs = split /\n/, $log_data;
         undef $log_data;
         @logs = reverse @logs;
 
         for my $line (@logs) {
-            if ( $line =~ /([[:alpha:]]{3}(?: \d\d|  \d) \d\d:\d\d:\d\d) (?:.*) kernel: \[\d*\.\d{6}\] Out of memory in UB \d*: OOM killed process (\d*) \((.*)\) score \d vm:(\d*)kB, rss:(\d*)kB, swap:(\d*)kB/ ) {
+            # CloudLinux LVE OOM
+            if ( $line =~ /([[:alpha:]]{3}(?: \d\d|  \d) \d\d:\d\d:\d\d) (?:.*) kernel: \[ *\d*\.\d{6}\] Out of memory in UB (\d*): OOM killed process (\d*) \((.*)\) score \d* vm:(\d*)kB, rss:(\d*)kB, swap:(\d*)kB/ ) {
+                push @killed_by_oom, "[$1] [pid: $2] [cmd: $3] [LVE ID: $4] [vm: $5 kB] [rss: $6 kB] [swap: $7 kB]";
+                $count++;
+                last if $count >= 10;
+            }
+
+            if ( $line =~ /([[:alpha:]]{3}(?: \d\d|  \d) \d\d:\d\d:\d\d) (?:.*?) kernel: \[ *\d*\.\d{6}\] Out of memory: OOM killed process (\d*?) \((.*?)\) score \d* vm:(\d*)kB, rss:(\d*)kB, swap:(\d*)kB/ ) {
+                push @killed_by_oom, "[$1] [pid: $2] [cmd: $3] [vm: $4 kB] [rss: $5 kB] [swap: $6 kB]";
+                $count++;
+                last if $count >= 10;
+            }
+
+            # CentOS 6
+            if ( $line =~ /([[:alpha:]]{3}(?: \d\d|  \d) \d\d:\d\d:\d\d) (?:.*) kernel: \[ *\d*\.\d{6}\] Killed process (\d+) \((.*?)\) total-vm:(\d+)kB, anon-rss:(\d+)kB, file-rss:(\d+)kB/ ) {
+                push @killed_by_oom, "[$1] [pid: $2] [cmd: $3] [vm: $4 kB] [rss: $5 kB] [swap: $6 kB]";
+                $count++;
+                last if $count >= 10;
+            }
+
+            # CentOS 7
+            if ( $line =~ /([[:alpha:]]{3}(?: \d\d|  \d) \d\d:\d\d:\d\d) (?:.*?) kernel: Killed process (\d*) \((.*)\) total-vm:(\d*?)kB, anon-rss:(\d*?)kB, file-rss:(\d*?)kB/ ) {
                 push @killed_by_oom, "[$1] [pid: $2] [cmd: $3] [vm: $4 kB] [rss: $5 kB] [swap: $6 kB]";
                 $count++;
                 last if $count >= 10;
