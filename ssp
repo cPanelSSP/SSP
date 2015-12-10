@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.120';
+our $VERSION = '4.99.121';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -47,8 +47,10 @@ our $CPANEL_VERSION;    # Current cpanel version of system
 our $HOSTNAME;
 our $OS;
 our $IS_CLOUDLINUX = 0;
+our $IS_KERNELCARE = 0;
 our ( $OS_RELEASE, $OS_ISES );
 our $EXTERNAL_IP_ADDRESS;
+our $EXTERNAL_LICENSE_ADDRESS;
 our $TIERS;
 our @LOCAL_IPADDRS_LIST;
 our @PROCESS_LIST;
@@ -102,13 +104,16 @@ sub init {
     $|                          = 1;
     $Term::ANSIColor::AUTORESET = 1;
 
-    $CPANEL_VERSION        = get_cpanel_version();
-    $EA4                   = is_ea4();
-    $HTTPD_PATH            = get_httpd_path();                # location of operative httpd
-    @PHPINI                = get_phpini();
-    $LIBKEYUTILS_FILES_REF = build_libkeyutils_file_list();
-    $HOSTNAME              = hostname();
-    $OS                    = get_os();
+    $CPANEL_VERSION           = get_cpanel_version();
+    $EA4                      = is_ea4();
+    $EXTERNAL_IP_ADDRESS      = get_external_ip('80');
+    $EXTERNAL_LICENSE_ADDRESS = get_external_ip('2089');
+    $HTTPD_PATH               = get_httpd_path();                # location of operative httpd
+    $IS_KERNELCARE            = is_kernelcare();
+    @PHPINI                   = get_phpini();
+    $LIBKEYUTILS_FILES_REF    = build_libkeyutils_file_list();
+    $HOSTNAME                 = hostname();
+    $OS                       = get_os();
     ( $OS_RELEASE, $OS_ISES ) = get_release_version();
     $TIERS              = get_tiers_file();
     @LOCAL_IPADDRS_LIST = get_local_ipaddrs();
@@ -123,6 +128,7 @@ sub init {
     $MYSQL_DATADIR      = get_mysql_datadir();        # needs $MYSQL_CONF
     $MYSQL_ERROR_LOG    = get_mysql_error_log();      # needs $MYSQL_CONF
     $EA4_PHP_FPM        = get_ea4_php_fpm_status();
+    $APACHE_PER_USER    = "none";
     ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION ) = get_lsws_version();
 
     if ($HTTPD_PATH) {
@@ -149,8 +155,7 @@ sub init {
             $APACHE_EA_VERSION =~ s/\.\w\d{1,3}\D+\d+\n//;
         }
 
-        $APACHE_PER_USER = "none";
-        $APACHE_MODSEC   = 0;
+        $APACHE_MODSEC = 0;
         for (@APACHE_MODULES_OUTPUT) {
             if (/ruid2_module/) {    #
                 $APACHE_PER_USER = "ruid2";
@@ -244,6 +249,7 @@ sub run {
     print_hostname();
     print_os();
     print_kernel_and_cpu();
+    print_kernelcare_info();
     print_cpanel_info();
     check_for_cpanel_update();
     print_uptime();
@@ -302,7 +308,7 @@ sub run {
     check_easyapache();
     check_for_easyapache_hooks();
     check_for_home_noexec();
-    check_for_nat();
+    check_for_unsupported_nat();
     check_for_oracle_linux();
     check_for_usr_local_cpanel_hooks();
     check_for_sql_safe_mode();
@@ -336,7 +342,6 @@ sub run {
     check_perl_version_less_than_588();
     check_for_low_ulimit_for_root();
     check_for_fork_bomb_protection();
-    check_for_license_info();
     check_for_harmful_php_mode_600_cron();
     check_for_cPanel_lower_than_11_30_7_3();
     check_for_custom_exim_conf_local();
@@ -428,6 +433,7 @@ sub run {
     check_for_missing_cloudlinux_files();
     check_for_modsec2_stage_files();
     check_for_cron_allow();
+    check_for_license_info();
 
     # [3RDP]
     check_smtp_processes();
@@ -525,6 +531,7 @@ sub check_for_dnsonly {
         print_hostname();
         print_os();
         print_kernel_and_cpu();
+        print_kernelcare_info();
         print_cpanel_info();
         check_for_cpanel_update();
         print_uptime();
@@ -548,7 +555,7 @@ sub check_for_dnsonly {
         check_for_gdm();
         check_for_redhat_firewall();
         check_for_home_noexec();
-        check_for_nat();
+        check_for_unsupported_nat();
         check_for_oracle_linux();
         check_for_proc_mdstat_recovery();
         check_usr_local_cpanel_path_for_symlinks();
@@ -693,6 +700,11 @@ sub is_ea4 {
         return 1;
     }
     return undef;
+}
+
+sub is_kernelcare {
+    return 1 if -e '/usr/bin/kcarectl';
+    return 0;
 }
 
 sub get_cpanel_version {
@@ -1443,6 +1455,29 @@ sub print_os {
 sub print_kernel_and_cpu {
     print_info('Kernel/CPU: ');
     print_normal("$HOSTINFO->{'kernel'} $HOSTINFO->{'hardware'} $HOSTINFO->{'environment'} $CPUINFO->{'model'} w/ $CPUINFO->{'numcores'} core(s)");
+}
+
+sub print_kernelcare_info {
+    return unless $IS_KERNELCARE;
+    my $kcarectl_path = '/usr/bin/kcarectl';
+    my $kcarectl_info = "Installed";
+    my $license_output;
+    my $uname_output;
+    if ( -x $kcarectl_path ) {
+        chomp( $license_output = timed_run( 0, $kcarectl_path, '--license-info' ) );
+        if ( $license_output =~ /Valid license found/ ) {
+            $kcarectl_info .= ' and licensed';
+        }
+        else {
+            $kcarectl_info .= ' (license not detected)';
+        }
+        chomp( $uname_output = timed_run( 0, $kcarectl_path, '--uname' ) );
+        if ( ( $uname_output =~ /^\d+\.\d+\.\d+/ ) && ( $uname_output !~ /\n/ ) ) {
+            $kcarectl_info .= ' [ ' . $uname_output . ' ]';
+        }
+    }
+    print_info('KernelCare: ');
+    print_normal($kcarectl_info);
 }
 
 sub print_cpanel_info {
@@ -2843,87 +2878,90 @@ sub check_for_non_default_permissions {
     # immutable_recursive only works on directories, default is 0 (do not recurse).
     # symlink_no_absolute defines whether the absolute target path of a symlink will be computed before comparing. Default behavior is to resolve the absolute target path.  Enabling this option allows you to compare a symlink at face-value.
     # check_missing causes a missing object to be reported
+    # tidyoff
     my %check = (
-        '/'            => { mode    => [ '0755', '0555' ], perms_help => '.ftpquota issues? see ticket 4429843', immutable_help => 'This can break EA. See ticket 4929961' },
-        '/bin/bash'    => { mode    => ['0755'] },
-        '/bin/crontab' => { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' },
-        '/bin/ln'     => { mode    => [ '0755', '0555' ] },
-        '/bin/passwd' => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
-        '/bin/rpm' => { mode => [ '755',  '555' ],  perms_help => 'If users cannot execute /bin/rpm it will break Cron Jobs in x3 UI (CPANEL-1487)' },
-        '/bin/rm'  => { mode => [ '0755', '0555' ], perms_help => 'File Manager unable to delete files?  This may be why.' },
-        '/dev'      => { mode => ['0755'], perms_help => 'Breaks many things if non-root users can\'t access this.' },
-        '/dev/log'  => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog, including user cron jobs to /var/log/cron.' },
-        '/dev/null' => { mode => ['0666'], perms_help => 'Breaks many things if non-root users can\'t write to this.' },
-        '/dev/random' => { mode => [ '0666', '0664', '0644', '0444' ], perms_help => 'Breaks many things if non-root users can\'t read this.' },
-        '/dev/stderr' => { symlink => '/proc/self/fd/2', symlink_no_absolute => 1, check_missing => 1 },
-        '/dev/stdin'  => { symlink => '/proc/self/fd/0', symlink_no_absolute => 1, check_missing => 1 },
-        '/dev/stdout' => { symlink => '/proc/self/fd/1', symlink_no_absolute => 1, check_missing => 1 },
-        '/dev/urandom'       => { mode => [ '0666', '0664', '0644', '0444' ], perms_help => 'Breaks many things if non-root users can\'t read this.' },
-        '/etc'               => { mode => ['0755'] },
-        '/etc/cpbackup.conf' => { mode => ['0644'] },
-        '/etc/exim.conf'     => { mode => ['0644'] },
-        '/etc/group'         => { mode => ['0644'] },
-        '/etc/hosts'         => { mode => ['0644'] },
-        '/etc/localdomains'  => { mode => ['0640'], group => 'mail', perms_help => 'Failing to properly create an email forwarder? See ticket 5234627.' },
-        '/etc/nsswitch.conf' => { mode => ['0644'] },
-        '/etc/passwd'        => { mode => ['0644'] },
-        '/etc/shadow'     => { mode => [ '0600', '0400', '0200', '0000' ] },
-        '/etc/stats.conf' => { mode => ['0644'] },
-        '/home'              => { mode => [ '0755', '0711' ] },
-        '/home1'             => { mode => [ '0755', '0711' ] },
-        '/home2'             => { mode => [ '0755', '0711' ] },
-        '/home3'             => { mode => [ '0755', '0711' ] },
-        '/home4'             => { mode => [ '0755', '0711' ] },
-        '/home5'             => { mode => [ '0755', '0711' ] },
-        '/opt'               => { mode => ['0755'] },
-        '/root/cpanel3-skel' => { mode => ['0755'] },
-        '/sbin/ifconfig'     => { mode => [ '0755', '0555' ] },
-        '/tmp'               => { mode => ['1777'] },
-        '/usr'               => { mode => ['0755'] },
-        '/usr/bin' => { mode => [ '0755', '0711', '0555' ] },
-        '/usr/bin/screen' => { mode => ['2755'], group => 'screen', perms_help => 'Screen doesn\'t work? Run "rpm --setugids screen && rpm --setperms screen" to fix.' },
-        '/usr/local'      => { mode => ['0755'] },
-        '/usr/local/apache'      => { mode => ['0755'], immutable_recursive => 1 },
-        '/usr/local/apache/conf' => { mode => ['0755'] },
-        '/usr/local/bin'                                                                => { mode => [ '0755', '0711', '0555' ] },
-        '/usr/local/cpanel'                                                             => { mode => ['0711'] },
+        '/'                                     => { mode => [ '0755', '0555' ], perms_help => '.ftpquota issues? see ticket 4429843', immutable_help => 'This can break EA. See ticket 4929961' },
+        '/bin/bash'                             => { mode => ['0755'] },
+        '/bin/crontab'                          => { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' },
+        '/bin/ln'                               => { mode => [ '0755', '0555' ] },
+        '/bin/passwd'                           => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
+        '/bin/rpm'                              => { mode => [ '755',  '555' ],  perms_help => 'If users cannot execute /bin/rpm it will break Cron Jobs in x3 UI (CPANEL-1487)' },
+        '/bin/rm'                               => { mode => [ '0755', '0555' ], perms_help => 'File Manager unable to delete files?  This may be why.' },
+        '/dev'                                  => { mode => ['0755'], perms_help => 'Breaks many things if non-root users can\'t access this.' },
+        '/dev/log'                              => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog, including user cron jobs to /var/log/cron.' },
+        '/dev/null'                             => { mode => ['0666'], perms_help => 'Breaks many things if non-root users can\'t write to this.' },
+        '/dev/random'                           => { mode => [ '0666', '0664', '0644', '0444' ], perms_help => 'Breaks many things if non-root users can\'t read this.' },
+        '/dev/stderr'                           => { symlink => '/proc/self/fd/2', symlink_no_absolute => 1, check_missing => 1 },
+        '/dev/stdin'                            => { symlink => '/proc/self/fd/0', symlink_no_absolute => 1, check_missing => 1 },
+        '/dev/stdout'                           => { symlink => '/proc/self/fd/1', symlink_no_absolute => 1, check_missing => 1 },
+        '/dev/urandom'                          => { mode => [ '0666', '0664', '0644', '0444' ], perms_help => 'Breaks many things if non-root users can\'t read this.' },
+        '/etc'                                  => { mode => ['0755'] },
+        '/etc/cpbackup.conf'                    => { mode => ['0644'] },
+        '/etc/exim.conf'                        => { mode => ['0644'] },
+        '/etc/group'                            => { mode => ['0644'] },
+        '/etc/hosts'                            => { mode => ['0644'] },
+        '/etc/localdomains'                     => { mode => ['0640'], group => 'mail', perms_help => 'Failing to properly create an email forwarder? See ticket 5234627.' },
+        '/etc/nsswitch.conf'                    => { mode => ['0644'] },
+        '/etc/passwd'                           => { mode => ['0644'] },
+        '/etc/shadow'                           => { mode => [ '0600', '0400', '0200', '0000' ] },
+        '/etc/stats.conf'                       => { mode => ['0644'] },
+        '/home'                                 => { mode => [ '0755', '0711' ] },
+        '/home1'                                => { mode => [ '0755', '0711' ] },
+        '/home2'                                => { mode => [ '0755', '0711' ] },
+        '/home3'                                => { mode => [ '0755', '0711' ] },
+        '/home4'                                => { mode => [ '0755', '0711' ] },
+        '/home5'                                => { mode => [ '0755', '0711' ] },
+        '/opt'                                  => { mode => ['0755'] },
+        '/root/cpanel3-skel'                    => { mode => ['0755'] },
+        '/sbin/ifconfig'                        => { mode => [ '0755', '0555' ] },
+        '/tmp'                                  => { mode => ['1777'] },
+        '/usr'                                  => { mode => ['0755'] },
+        '/usr/bin'                              => { mode => [ '0755', '0711', '0555' ] },
+        '/usr/bin/screen'                       => { mode => ['2755'], group => 'screen', perms_help => 'Screen doesn\'t work? Run "rpm --setugids screen && rpm --setperms screen" to fix.' },
+        '/usr/local'                            => { mode => ['0755'] },
+        '/usr/local/apache'                     => { mode => ['0755'], immutable_recursive => 1 },
+        '/usr/local/apache/conf'                => { mode => ['0755'] },
+        '/usr/local/bin'                        => { mode => [ '0755', '0711', '0555' ] },
+        '/usr/local/cpanel'                     => { mode => ['0711'] },
         '/usr/local/cpanel/base/3rdparty/phpMyAdmin/index.php'                          => { mode => ['0644'] },
         '/usr/local/cpanel/base/3rdparty/phpPgAdmin/index.php'                          => { mode => ['0644'] },
         '/usr/local/cpanel/base/3rdparty/roundcube/index.php'                           => { mode => ['0644'] },
         '/usr/local/cpanel/base/3rdparty/roundcube/plugins/cpanellogin/cpanellogin.php' => { mode => ['0644'] },
         '/usr/local/cpanel/base/3rdparty/squirrelmail/index.php'                        => { mode => ['0644'] },
         '/usr/local/cpanel/base/horde/index.php'                                        => { mode => ['0644'] },
-        '/usr/local/cpanel/bin/cpwrap'                                                  => { mode => ['0755'] },
-        '/usr/local/cpanel/bin/sendmail'                                                => { mode => ['0755'] },
-        '/usr/local/cpanel/php/cpanel.php'                                              => { mode => ['0644'] },
-        '/usr/local/sbin'                                                               => { mode => [ '0755', '0711', '0555' ] },
-        '/usr/sbin'                                                                     => { mode => [ '0755', '0711', '0555' ] },
-        '/usr/sbin/exim'                                                                => { mode => ['4755'] },
-        '/usr/share'                                                                    => { mode => ['0755'] },
-        '/usr/share/zoneinfo'                                                           => { mode => ['0755'] },
-        '/var'                                                                          => { mode => ['0755'] },
-        '/var/cpanel'                 => { mode => [ '0755', '0711', '0555' ], immutable_recursive => 1 },
-        '/var/cpanel/backups'         => { mode => [ '0755', '0750' ] },
-        '/var/cpanel/backups/config'  => { mode => ['0644'] },
-        '/var/cpanel/bandwidth.cache' => { mode => ['0711'] },
-        '/var/cpanel/cpanel.config'   => { mode => ['0644'] },
-        '/var/cpanel/datastore'       => { mode => ['0755'] },
-        '/var/cpanel/domain_keys_private' => { mode => ['0640'], group => 'wheel' },
-        '/var/cpanel/features'            => { mode => ['0755'] },
-        '/var/cpanel/locale'              => { mode => ['0755'] },
-        '/var/cpanel/locale/themes'       => { mode => ['0755'] },
-        '/var/cpanel/resellers'           => { mode => ['0644'] },
-        '/var/cpanel/userhomes'             => { mode => [ '0755', '0711' ] },
-        '/var/cpanel/userhomes/cpanelhorde' => { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' },
+        '/usr/local/cpanel/bin/cpwrap'          => { mode => ['0755'] },
+        '/usr/local/cpanel/bin/sendmail'        => { mode => ['0755'] },
+        '/usr/local/cpanel/cpanel.lisc'         => { mode => ['0644'] },
+        '/usr/local/cpanel/php/cpanel.php'      => { mode => ['0644'] },
+        '/usr/local/sbin'                       => { mode => [ '0755', '0711', '0555' ] },
+        '/usr/sbin'                             => { mode => [ '0755', '0711', '0555' ] },
+        '/usr/sbin/exim'                        => { mode => ['4755'] },
+        '/usr/share'                            => { mode => ['0755'] },
+        '/usr/share/zoneinfo'                   => { mode => ['0755'] },
+        '/var'                                  => { mode => ['0755'] },
+        '/var/cpanel'                           => { mode => [ '0755', '0711', '0555' ], immutable_recursive => 1 },
+        '/var/cpanel/backups'                   => { mode => [ '0755', '0750' ] },
+        '/var/cpanel/backups/config'            => { mode => ['0644'] },
+        '/var/cpanel/bandwidth.cache'           => { mode => ['0711'] },
+        '/var/cpanel/cpanel.config'             => { mode => ['0644'] },
+        '/var/cpanel/datastore'                 => { mode => ['0755'] },
+        '/var/cpanel/domain_keys_private'       => { mode => ['0640'], group => 'wheel' },
+        '/var/cpanel/features'                  => { mode => ['0755'] },
+        '/var/cpanel/locale'                    => { mode => ['0755'] },
+        '/var/cpanel/locale/themes'             => { mode => ['0755'] },
+        '/var/cpanel/resellers'                 => { mode => ['0644'] },
+        '/var/cpanel/userhomes'                 => { mode => [ '0755', '0711' ] },
+        '/var/cpanel/userhomes/cpanelhorde'     => { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' },
         '/var/cpanel/userhomes/cpanelroundcube' => { mode => ['0711'], user => 'cpanelroundcube', group => 'cpanelroundcube' },
         '/var/lib'                              => { mode => ['0755'] },
-        '/var/lib/mysql'                        => { mode => ['0751'], user => 'mysql',           group => 'mysql' },
-        '/var/lib/mysql/mysql.sock'             => { mode => ['0777'], user => 'mysql',           group => 'mysql' },
-        '/var/log' => { mode => [ '0755', '0751', '0711' ], perms_help => 'If non-root users cannot write to log files it can cause service failure' },
-        '/var/log/exim_mainlog'   => { mode => ['0640'], user => 'mailnull', group => 'mail' },
-        '/var/log/exim_paniclog'  => { mode => ['0640'], user => 'mailnull', group => 'mail' },
-        '/var/log/exim_rejectlog' => { mode => ['0640'], user => 'mailnull', group => 'mail' },
+        '/var/lib/mysql'                        => { mode => ['0751'], user => 'mysql', group => 'mysql' },
+        '/var/lib/mysql/mysql.sock'             => { mode => ['0777'], user => 'mysql', group => 'mysql' },
+        '/var/log'                              => { mode => [ '0755', '0751', '0711' ], perms_help => 'If non-root users cannot write to log files it can cause service failure' },
+        '/var/log/exim_mainlog'                 => { mode => ['0640'], user => 'mailnull', group => 'mail' },
+        '/var/log/exim_paniclog'                => { mode => ['0640'], user => 'mailnull', group => 'mail' },
+        '/var/log/exim_rejectlog'               => { mode => ['0640'], user => 'mailnull', group => 'mail' },
     );
+    # tidyon
 
     ## If EA4 is running we need to redefine some of the paths from %check as these paths have turned into symlinks.
     ## We also conditionally need to add the new paths that EA4 introduces.
@@ -3451,50 +3489,9 @@ sub check_for_home_noexec {
 ## compare external IP addr with local IP addrs, OR
 ## check if only internal IP addrs are bound to server (this is not as reliable,
 ## as NAT can still be used with external IP addrs of course)
-sub check_for_nat {
-    return if -e '/var/cpanel/cpnat';
-
+sub check_for_unsupported_nat {
     my @external_ipaddrs;
-    my $reply;
-    my $count = 0;
-
-    for ( 1 .. 3 ) {
-        local $SIG{'ALRM'} = sub {
-            $count++;
-            print_warn('NAT check timed out: ');
-            print_warning("attempt $count of 3");
-        };
-        alarm 5;
-
-        my $sock = IO::Socket::INET->new(
-            PeerAddr => 'myip.cpanel.net',
-            PeerPort => '80',
-            Proto    => 'tcp',
-            Timeout  => 5,
-        );
-
-        if ($sock) {
-            print $sock "GET /v1.0/ HTTP/1.1\r\nUser-Agent: SSP/" . $VERSION . "\r\nHost: myip.cpanel.net\r\n\r\n";
-            sysread $sock, $reply, 1500;
-            close $sock;
-        }
-
-        if ( $reply and $reply =~ m{ ^ \s* (\d+\.\d+\.\d+\.\d+) \s* $ }xms ) {
-            $EXTERNAL_IP_ADDRESS = $1;
-        }
-        else {
-            return;
-        }
-
-        if ($EXTERNAL_IP_ADDRESS) {
-            chomp $EXTERNAL_IP_ADDRESS;
-        }
-        alarm 0;
-
-        if ($EXTERNAL_IP_ADDRESS) {
-            last;
-        }
-    }
+    return if -e '/var/cpanel/cpnat';
 
     if ( $EXTERNAL_IP_ADDRESS && $EXTERNAL_IP_ADDRESS =~ m{ \A \d+\.\d+\.\d+\.\d+ }xms ) {
         if ( !grep { /$EXTERNAL_IP_ADDRESS/ } @LOCAL_IPADDRS_LIST ) {
@@ -4622,7 +4619,8 @@ sub check_for_multiple_imagemagick_installs {
 
 sub check_for_kernel_headers_rpm {
     if ( !-f '/usr/include/linux/limits.h' ) {
-        print_warn('Missing file: /usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
+        print_warn('Missing file: ');
+        print_warning('/usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
     }
     else {
         if ( @RPM_LIST && !grep( /^kernel-headers-/, @RPM_LIST ) ) {
@@ -5445,44 +5443,66 @@ sub check_for_disabled_services {
 }
 
 sub check_for_license_info {
-    return if !$EXTERNAL_IP_ADDRESS;
-
     my $host                                      = 'verify.cpanel.net';
-    my $url                                       = '/index.cgi?ip=' . $EXTERNAL_IP_ADDRESS;
+    my $helper_url                                = "http://" . $host;
+    my $is_licensed_for_kernelcare_through_cpanel = 0;
     my $is_licensed_for_cloudlinux_through_cpanel = 0;
     my $is_one_time_license                       = 0;
 
-    my $sock = IO::Socket::INET->new(
-        PeerAddr => $host,
-        PeerPort => 80,
-        Proto    => 'tcp',
-        Timeout  => 5,
-    ) or return;
-
-    local $SIG{'ALRM'} = sub { return (); };
-
-    alarm 5;
-    print $sock "GET $url HTTP/1.1\r\nHost: verify.cpanel.net\r\n\r\n";
-    read $sock, my $buffer, 50_000;
-    alarm 0;
-    close $sock;
-
-    if ( $buffer =~ /cloud_linux_os/ ) {
-        $is_licensed_for_cloudlinux_through_cpanel = 1;
+    if ( ( defined($EXTERNAL_IP_ADDRESS) && defined($EXTERNAL_LICENSE_ADDRESS) ) && !( $EXTERNAL_IP_ADDRESS eq $EXTERNAL_LICENSE_ADDRESS ) ) {
+        print_crit('cPanel license IP: ');
+        print_critical("external IP detected via port 80 [ ${EXTERNAL_IP_ADDRESS} ] does not match IP detected via port 2089 [ ${EXTERNAL_LICENSE_ADDRESS} ] which can result in unexpected cPanel license update behavior.");
     }
 
-    if ( $buffer =~ /ONE TIME FEE/ ) {
-        $is_one_time_license = 1;
+    if ( !$EXTERNAL_LICENSE_ADDRESS ) {
+        print_warn('cPanel license IP: ');
+        print_warning('external IP was not detected via outbound connection using port 2089, may cause license update issue.  Verify with [ curl -w \'\n\' http://myip.cpanel.net:2089/v1.0/ ]');
+    }
+
+    if ($EXTERNAL_IP_ADDRESS) {
+        my $url = '/index.cgi?ip=' . $EXTERNAL_IP_ADDRESS;
+        $helper_url .= $url;
+        my $sock = IO::Socket::INET->new(
+            PeerAddr => $host,
+            PeerPort => 80,
+            Proto    => 'tcp',
+            Timeout  => 5,
+        ) or return;
+
+        local $SIG{'ALRM'} = sub { return (); };
+
+        alarm 5;
+        print $sock "GET ${url} HTTP/1.1\r\nHost: ${host}\r\n\r\n";
+        read $sock, my $buffer, 50_000;
+        alarm 0;
+        close $sock;
+
+        if ( $buffer =~ /alt="KernelCare"/ ) {
+            $is_licensed_for_kernelcare_through_cpanel = 1;
+        }
+
+        if ( $buffer =~ /cloud_linux_os/ ) {
+            $is_licensed_for_cloudlinux_through_cpanel = 1;
+        }
+
+        if ( $buffer =~ /ONE TIME FEE/ ) {
+            $is_one_time_license = 1;
+        }
+    }
+
+    if ( $IS_KERNELCARE && $is_licensed_for_kernelcare_through_cpanel == 0 ) {
+        print_warn('KernelCare: ');
+        print_warning("license via cPanel store not detected -- manually check at [ ${helper_url} ]");
     }
 
     if ( $IS_CLOUDLINUX && $is_licensed_for_cloudlinux_through_cpanel == 0 ) {
         print_warn('CloudLinux: ');
-        print_warning("installed, not licensed by cPanel [ http://verify.cpanel.net/index.cgi?ip=${EXTERNAL_IP_ADDRESS} ]");
+        print_warning("license via cPanel store not detected -- manually check at [ ${helper_url} ] -- use \"LICENSE - CloudLinux Not Licensed through cPanel\" if not licensed and CL support is needed");
     }
 
     if ($is_one_time_license) {
         print_warn('License: ');
-        print_warning("may be a one-time cPanel license [ http://verify.cpanel.net/index.cgi?ip=${EXTERNAL_IP_ADDRESS} ]");
+        print_warning("may be a one-time cPanel license -- manually check at [ ${helper_url} ]");
     }
 
 }
@@ -6016,10 +6036,12 @@ sub check_for_processes_killed_by_lfd {
 }
 
 sub check_for_processes_killed_by_oom {
-    my $log            = "/var/log/messages";
+    my $log = "/var/log/messages";
+    return unless -e $log;
     my $bytes_to_check = 10485760;
     my $size           = ( stat($log) )[7];
-    my $seek_position  = 0;
+    return unless defined $size;
+    my $seek_position = 0;
     if ( $size > $bytes_to_check ) {
         $seek_position = ( $size - $bytes_to_check );
     }
@@ -6039,6 +6061,7 @@ sub check_for_processes_killed_by_oom {
         @logs = reverse @logs;
 
         for my $line (@logs) {
+
             # CloudLinux LVE OOM
             if ( $line =~ /([[:alpha:]]{3}(?: \d\d|  \d) \d\d:\d\d:\d\d) (?:.*) kernel: \[ *\d*\.\d{6}\] Out of memory in UB (\d*): OOM killed process (\d*) \((.*)\) score \d* vm:(\d*)kB, rss:(\d*)kB, swap:(\d*)kB/ ) {
                 push @killed_by_oom, "[$1] [pid: $2] [cmd: $3] [LVE ID: $4] [vm: $5 kB] [rss: $6 kB] [swap: $7 kB]";
@@ -6374,22 +6397,28 @@ sub check_for_dirs_that_break_ea {
 }
 
 sub check_for_extra_uid_0_user {
-    my $uid_0_users = 0;
+    my $uid_0_user;
 
     open my $file_fh, '<', '/etc/passwd' or die $!;
     while (<$file_fh>) {
         if (m{ \A ([^:]+) :x:0: }xms) {
             next if $1 =~ m{ \A root \z }xms;
-            $uid_0_users = 1;
+            $uid_0_user = $1;
             last;
         }
     }
     close $file_fh;
 
-    if ( $uid_0_users == 1 ) {
-        print_warn("non-root uid 0 user(s): \n");
-        print_magenta("\t \\_ This can cause a variety of issues. See FB-92065 and the tickets listed there for some examples.");
-        print_magenta("\t \\_ EasyApache failing with \"can't create [...] all_iplist.db\"? See FB-62467. Do *not* escalate as security issue.");
+    if ( defined($uid_0_user) ) {
+        my $uid_0_user_info = "non-root UID 0 user found: [ " . $uid_0_user . " ]";
+        for my $pid ( keys(%$PROCESS_REF) ) {
+            if ( $PROCESS_REF->{$pid}->{CMD} =~ m{bin/nscd(\s|$)} ) {
+                print_warn($uid_0_user_info);
+                print_warning(" -- and nscd is running! This can break things. See CPANEL-2360.");
+                return;
+            }
+        }
+        print_warn( $uid_0_user_info . "\n" );
     }
 }
 
@@ -8068,6 +8097,49 @@ sub check_ea4_php_fpm {
     }
 
     return 1;
+}
+
+sub get_external_ip {
+    my ($port) = @_;
+    die "get_external_ip port number not specified" if !$port;
+
+    # myip.cpanel.net supports HTTP ports 80, 2089 and HTTPS port 443.
+    my $host = 'myip.cpanel.net';
+    my $path = '/v1.0/';
+    my $ip;
+    my $reply;
+
+    my $count = 0;
+    for ( 1 .. 2 ) {
+        local $SIG{'ALRM'} = sub {
+            $count++;
+            print_warn("External IP detection via ${host} port ${port} timed out: ");
+            print_warning("attempt ${count} of 2");
+        };
+
+        alarm 5;
+
+        my $sock = IO::Socket::INET->new(
+            PeerAddr => $host,
+            PeerPort => $port,
+            Proto    => 'tcp',
+            Timeout  => 5,
+        );
+
+        if ($sock) {
+            print $sock "GET ${path} HTTP/1.1\r\nUser-Agent: SSP/" . $VERSION . "\r\nHost: ${host}\r\n\r\n";
+            sysread $sock, $reply, 1500;
+            close $sock;
+        }
+
+        alarm 0;
+
+        if ( $reply and $reply =~ m{ ^ \s* (\d+\.\d+\.\d+\.\d+) \s* $ }xms ) {
+            $ip = $1;
+            chomp $ip;
+            return $ip;
+        }
+    }
 }
 
 sub print_bug_report {
