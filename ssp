@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.121';
+our $VERSION = '4.99.122';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -1744,9 +1744,15 @@ sub print_apache_info {
     local $SIG{'ALRM'} = sub { };
     alarm 5;
 
+    my $apache_configured_port = 80;
+    my $attempted_port = ( split(':', $CPCONF{'apache_port'}) )[1];
+    if ( $attempted_port ) {
+        $apache_configured_port = $attempted_port;
+    }
+
     my $sock = IO::Socket::INET->new(
         PeerAddr => '127.0.0.1',
-        PeerPort => 80,
+        PeerPort => $apache_configured_port,
         Proto    => 'tcp',
         Timeout  => 3,
     );
@@ -1776,7 +1782,12 @@ sub print_apache_info {
         }
     }
     else {
-        my $warning = 'Is Apache up/slow to respond? (failed: http://localhost/whm-server-status). ';
+        my $warning = "";
+        if ( $apache_configured_port == 80 ) {
+            $warning = 'Is Apache up/slow to respond? (failed: http://localhost/whm-server-status). ';
+        } else {
+            $warning = 'Is Apache up/slow to respond? (failed: http://localhost:'.$apache_configured_port.'/whm-server-status). ';
+        }
 
         if (@LSOF_80) {
             $warning .= 'Something is listening on port 80.';
