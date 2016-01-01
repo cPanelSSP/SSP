@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.121';
+our $VERSION = '4.99.122';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -4170,6 +4170,69 @@ sub check_for_cpsources_conf {
     if ( -f $cpsources_conf and !-z $cpsources_conf ) {
         print_warn('/etc/cpsources.conf: ');
         print_warning('exists! This can affect upcp and EA.');
+
+        open (my $cpsources_conf_fh, '<', $cpsources_conf);
+        my @cpsources_servers;
+        while (<$cpsources_conf_fh>) {
+            my ($key, $value) = split('=', $_);
+            if ( $key eq 'HTTPUPDATE' ) {
+                push @cpsources_servers, $value;
+            }
+        }
+
+        CPSOURCES_SERVER:
+        foreach my $cpsources_server (@cpsources_servers) {
+            chomp $cpsources_server;
+            my ($host, $port) = split(':', $cpsources_server);
+            if (!defined($port)) {
+                $port = 80;
+            }
+
+            local $SIG{'ALRM'} = sub {
+                print_warn('/etc/cpsources.conf: ');
+                print_warning("Unresponsive mirror: http://$host:$port");
+                next CPSOURCES_SERVER;
+            };
+
+            my $sock = IO::Socket::INET->new(
+                PeerAddr => $host,
+                PeerPort => $port,
+                Proto    => 'tcp',
+                Timeout  => 3,
+            );
+
+            my $tiers_data;
+
+            if ($sock) {
+                print $sock "GET /cpanelsync/TIERS HTTP/1.1\r\nHost: $host\r\n\r\n";
+                sysread $sock, $tiers_data, 1000;
+                close $sock;
+            }
+
+            alarm 0;
+
+            if ( !$tiers_data ) {
+                print_warn('/etc/cpsources.conf: ');
+                print_warning("Unresponsive mirror: http://$host:$port");
+                next CPSOURCES_SERVER;
+            }
+
+            # We care about the first line.
+            # HTTP/1.1 200 OK
+
+            (my $http_response) = split('\n', $tiers_data);
+            ($http_response) = split('\r', $http_response);
+
+            if ( $http_response =~ /^HTTP\/(\d*?)\.(\d*?) (\d\d\d) (.*?)$/ ) {
+                if ( $3 != 200 ) {
+                    print_warn('/etc/cpsources.conf: ');
+                    print_warning("Server $host:$port responds with $http_response when grabbing TIERS file.");
+                }
+            } else {
+                print_warn('/etc/cpsources.conf: ');
+                print_warning("Server $host:$port responds with weird HTTP response $http_response");
+            }
+        }
     }
 }
 
