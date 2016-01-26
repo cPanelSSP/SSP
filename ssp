@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.122';
+our $VERSION = '4.99.123';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -6816,6 +6816,7 @@ sub check_for_readonly_filesystems {
     while (<$fh>) {
         if ( my @fs = split(' ') ) {
             next if grep( m{ / (virtfs|cagefs-skeleton|machine-id) / }x, $fs[1] );
+            next if "/sys/fs/cgroup" eq $fs[1] and version_compare($OS_RELEASE, qw( >= 7 ));
             if ( grep( m{ (^|,) ro (,|$) }x, $fs[3] ) ) {
                 push( @read_only_fs, $fs[1] );
             }
