@@ -6138,7 +6138,7 @@ sub check_for_processes_killed_by_oom {
 
             # CloudLinux LVE OOM
             if ( $line =~ /([[:alpha:]]{3}(?: \d\d|  \d) \d\d:\d\d:\d\d) (?:.*) kernel: \[ *\d*\.\d{6}\] Out of memory in UB (\d*): OOM killed process (\d*) \((.*)\) score \d* vm:(\d*)kB, rss:(\d*)kB, swap:(\d*)kB/ ) {
-                push @killed_by_oom, "[$1] [pid: $2] [cmd: $3] [LVE ID: $4] [vm: $5 kB] [rss: $6 kB] [swap: $7 kB]";
+                push @killed_by_oom, "[$1] [pid: $3] [cmd: $4] [LVE ID: $2] [vm: $5 kB] [rss: $6 kB] [swap: $7 kB]";
                 $count++;
                 last if $count >= 10;
             }
