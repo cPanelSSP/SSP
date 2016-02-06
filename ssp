@@ -6162,6 +6162,14 @@ sub check_for_processes_killed_by_oom {
                 $count++;
                 last if $count >= 10;
             }
+
+            # CloudLinux 7
+            # Feb  6 08:52:43 lin02 kernel: Killed process 22541 (php) in VE "0" total-vm:357304kB, anon-rss:77080kB, file-rss:11116kB
+            if ( $line =~ /([[:alpha:]]{3} (?:\d\d| \d) \d\d:\d\d:\d\d) (?:.*?) kernel: Killed process (\d*) \((.*?)\) in VE "(\d*)" total-vm:(\d*)kB, anon-rss:(\d*)kB, file-rss:(\d*)kB$/ ) {
+                push @killed_by_oom, "[$1] [pid: $2] [cmd: $3] [LVE ID: $4] [vm: $5 kB] [rss: $6 kB] [swap: $7 kB]";
+                $count++;
+                last if $count >= 10;
+            }
         }
 
         if (@killed_by_oom) {
