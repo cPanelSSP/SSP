@@ -3512,7 +3512,8 @@ sub check_for_unsupported_nat {
     }
     else {
         for my $ipaddr (@LOCAL_IPADDRS_LIST) {
-            if ( $ipaddr !~ m{ \A ( ?: 127\. | 192\.168\. | 10\. | 172\.(1[6-9]|2[0-9]|3[0-1]) ) }xms ) {
+            # Matches any local IP (127.0.0.0/8) or RFC-1918 IP (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+            if ( $ipaddr !~ /(?:10\.|127\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/ ) {
                 push @external_ipaddrs, $ipaddr;
             }
         }
