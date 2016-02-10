@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.123';
+our $VERSION = '4.99.124';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -3512,7 +3512,8 @@ sub check_for_unsupported_nat {
     }
     else {
         for my $ipaddr (@LOCAL_IPADDRS_LIST) {
-            if ( $ipaddr !~ m{ \A ( ?: 127\. | 192\.168\. | 10\. | 172\.(1[6-9]|2[0-9]|3[0-1]) ) }xms ) {
+            # Matches any local IP (127.0.0.0/8) or RFC-1918 IP (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+            if ( $ipaddr !~ /(?:10\.|127\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/ ) {
                 push @external_ipaddrs, $ipaddr;
             }
         }
@@ -6136,9 +6137,9 @@ sub check_for_processes_killed_by_oom {
 
         for my $line (@logs) {
 
-            # CloudLinux LVE OOM
+            # CloudLinux 6 LVE OOM, Virtuozzo + CentOS 6 OOM
             if ( $line =~ /([[:alpha:]]{3}(?: \d\d|  \d) \d\d:\d\d:\d\d) (?:.*) kernel: \[ *\d*\.\d{6}\] Out of memory in UB (\d*): OOM killed process (\d*) \((.*)\) score \d* vm:(\d*)kB, rss:(\d*)kB, swap:(\d*)kB/ ) {
-                push @killed_by_oom, "[$1] [pid: $2] [cmd: $3] [LVE ID: $4] [vm: $5 kB] [rss: $6 kB] [swap: $7 kB]";
+                push @killed_by_oom, "[$1] [pid: $3] [cmd: $4] [LVE ID: $2] [vm: $5 kB] [rss: $6 kB] [swap: $7 kB]";
                 $count++;
                 last if $count >= 10;
             }
@@ -6159,6 +6160,14 @@ sub check_for_processes_killed_by_oom {
             # CentOS 7
             if ( $line =~ /([[:alpha:]]{3}(?: \d\d|  \d) \d\d:\d\d:\d\d) (?:.*?) kernel: Killed process (\d*) \((.*)\) total-vm:(\d*?)kB, anon-rss:(\d*?)kB, file-rss:(\d*?)kB/ ) {
                 push @killed_by_oom, "[$1] [pid: $2] [cmd: $3] [vm: $4 kB] [rss: $5 kB] [swap: $6 kB]";
+                $count++;
+                last if $count >= 10;
+            }
+
+            # CloudLinux 7
+            # Feb  6 08:52:43 lin02 kernel: Killed process 22541 (php) in VE "0" total-vm:357304kB, anon-rss:77080kB, file-rss:11116kB
+            if ( $line =~ /([[:alpha:]]{3} (?:\d\d| \d) \d\d:\d\d:\d\d) (?:.*?) kernel: Killed process (\d*) \((.*?)\) in VE "(\d*)" total-vm:(\d*)kB, anon-rss:(\d*)kB, file-rss:(\d*)kB$/ ) {
+                push @killed_by_oom, "[$1] [pid: $2] [cmd: $3] [LVE ID: $4] [vm: $5 kB] [rss: $6 kB] [swap: $7 kB]";
                 $count++;
                 last if $count >= 10;
             }
