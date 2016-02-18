@@ -80,7 +80,7 @@ our $APACHE_EA_VERSION;         # EA version which built Apache
 our $APACHE_PER_USER;           # Type of per-user Apache module in effect such as Mod Ruid2 or MPM ITK
 our $APACHE_MODSEC;             # mod_security enabled
 our ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION );
-our ( $PHPVERSION, $PHP5VERSION, $PHP4VERSION, $PHP4HANDLER, $PHP5HANDLER, $SUEXEC );
+our ( $EA3_PHPVERSION, $EA3_PHP5VERSION, $EA3_PHP4VERSION, $EA3_PHP4HANDLER, $EA3_PHP5HANDLER, $EA3_SUEXEC );
 our @LSOF_80;
 our $OPENSSL_RPM_CHANGELOG;
 our $EA4_PHP_FPM;               # Boolean flag indicating if easyapache4's php fpm is running
@@ -1825,8 +1825,7 @@ sub print_apache_info {
 sub print_ea3_php_configuration {
     return if $EA4;
     my $phpconf;
-    $phpconf = '/usr/local/apache/conf/php.conf.yaml' if !$EA4;
-    $phpconf = '/etc/apache2/conf.d/php.conf.yaml'    if $EA4;
+    $phpconf = '/usr/local/apache/conf/php.conf.yaml';
 
     if ( !-f $phpconf ) {
         print_info('PHP: ');
@@ -1838,92 +1837,92 @@ sub print_ea3_php_configuration {
     while (<$phpconf_fh>) {
         chomp;
         if (/^phpversion: (\d)/) {
-            $PHPVERSION = $1;
+            $EA3_PHPVERSION = $1;
         }
         if (/^php4:[ \t]+['"]?([^'"]+)/) {
-            $PHP4HANDLER = $1;
+            $EA3_PHP4HANDLER = $1;
         }
         if (/^php5:[ \t]+['"]?([^'"]+)/) {
-            $PHP5HANDLER = $1;
+            $EA3_PHP5HANDLER = $1;
         }
         if (/^suexec:[ \t]+['"]?([^'"]+)/) {
-            $SUEXEC = $1;
+            $EA3_SUEXEC = $1;
         }
     }
     close $phpconf_fh;
 
-    if ( $SUEXEC && $SUEXEC eq '1' ) {
-        $SUEXEC = 'with suexec';
+    if ( $EA3_SUEXEC && $EA3_SUEXEC eq '1' ) {
+        $EA3_SUEXEC = 'with suexec';
     }
     else {
-        $SUEXEC = 'without suexec';
+        $EA3_SUEXEC = 'without suexec';
     }
 
-    if ( !$EA4 && $PHPVERSION == 5 ) {
+    if ( $EA3_PHPVERSION == 5 ) {
         if ( -x '/usr/bin/php' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/bin/php', '-n', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $PHP5VERSION = $1;
+                $EA3_PHP5VERSION = $1;
             }
             else {
-                $PHP5VERSION = '(version unknown)';
+                $EA3_PHP5VERSION = '(version unknown)';
             }
 
-            if ($PHP5HANDLER) {
+            if ($EA3_PHP5HANDLER) {
                 print_info('PHP Default: ');
-                print_normal("PHP $PHP5VERSION $PHP5HANDLER $SUEXEC");
+                print_normal("PHP $EA3_PHP5VERSION $EA3_PHP5HANDLER $EA3_SUEXEC");
             }
         }
 
-        if ( $PHP4HANDLER && $PHP4HANDLER ne 'none' ) {
+        if ( $EA3_PHP4HANDLER && $EA3_PHP4HANDLER ne 'none' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/local/php4/bin/php', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $PHP4VERSION = $1;
+                $EA3_PHP4VERSION = $1;
             }
             else {
-                $PHP4VERSION = '(version unknown)';
+                $EA3_PHP4VERSION = '(version unknown)';
             }
 
             print_info('PHP Secondary: ');
-            print_normal("PHP $PHP4VERSION $PHP4HANDLER $SUEXEC");
+            print_normal("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $EA3_SUEXEC");
         }
     }
 
-    if ( $PHPVERSION && $PHPVERSION == 4 ) {
+    if ( $EA3_PHPVERSION && $EA3_PHPVERSION == 4 ) {
         if ( -x '/usr/local/php4/bin/php' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/local/php4/bin/php', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $PHP4VERSION = $1;
+                $EA3_PHP4VERSION = $1;
             }
             else {
-                $PHP4VERSION = '(version unknown)';
+                $EA3_PHP4VERSION = '(version unknown)';
             }
 
-            if ( $PHP4HANDLER && $PHP4HANDLER eq 'fcgi' ) {
+            if ( $EA3_PHP4HANDLER && $EA3_PHP4HANDLER eq 'fcgi' ) {
                 print_info('PHP Default: ');
-                print_warning("PHP $PHP4VERSION $PHP4HANDLER $SUEXEC (mod_userdir style URLs don't work with fcgi!)");
+                print_warning("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $EA3_SUEXEC (mod_userdir style URLs don't work with fcgi!)");
             }
             else {
                 print_info('PHP Default: ');
-                print_normal("PHP $PHP4VERSION $PHP4HANDLER $SUEXEC");
+                print_normal("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $EA3_SUEXEC");
             }
         }
 
-        if ( $PHP5HANDLER && $PHP5HANDLER ne 'none' ) {
+        if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER ne 'none' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/bin/php', '-n', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $PHP5VERSION = $1;
+                $EA3_PHP5VERSION = $1;
             }
             else {
-                $PHP5VERSION = '(version unknown)';
+                $EA3_PHP5VERSION = '(version unknown)';
             }
 
             print_info('PHP Secondary: ');
-            print_normal("PHP $PHP5VERSION $PHP5HANDLER $SUEXEC");
+            print_normal("PHP $EA3_PHP5VERSION $EA3_PHP5HANDLER $EA3_SUEXEC");
         }
     }
 
-    if ( ( ( $PHP4HANDLER && $PHP5HANDLER ) && ( $PHP4HANDLER eq 'none' && $PHP5HANDLER eq 'none' ) ) || !( $PHP4HANDLER && $PHP5HANDLER ) ) {
+    if ( ( ( $EA3_PHP4HANDLER && $EA3_PHP5HANDLER ) && ( $EA3_PHP4HANDLER eq 'none' && $EA3_PHP5HANDLER eq 'none' ) ) || !( $EA3_PHP4HANDLER && $EA3_PHP5HANDLER ) ) {
         print "\n";
         print_warn('PHP: ');
         print_warning('no handler defined for PHP4 or PHP5!');
@@ -5404,7 +5403,7 @@ sub check_for_rpm_dist_ver_unknown {
 }
 
 sub check_for_homeloader_php_extension {
-    return if ( $PHP5HANDLER && $PHP5HANDLER ne 'dso' );
+    return if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER ne 'dso' );
 
     if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? homeloader\.so ['"]? #xms } @PHPINI ) {
         print_warn('/usr/local/lib/php.ini: ');
@@ -5856,7 +5855,7 @@ sub check_for_stupid_touchfile {
 }
 
 sub check_for_phphandler_and_opcode_caching_incompatibility {
-    return if ( $PHP5HANDLER && $PHP5HANDLER ne 'suphp' );
+    return if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER ne 'suphp' );
 
     my $message;
 
@@ -5906,9 +5905,9 @@ sub check_for_invalid_HOMEDIR {
 }
 
 sub check_for_unsupported_options_in_phpini {    # FB-75397
-    return if !$PHP5VERSION;
+    return if !$EA3_PHP5VERSION;
 
-    my ( undef, $php5minor ) = split /\./, $PHP5VERSION;
+    my ( undef, $php5minor ) = split /\./, $EA3_PHP5VERSION;
     return if ( !$php5minor || $php5minor <= 3 );
 
     my $unsupported_options;
@@ -5927,12 +5926,12 @@ sub check_for_unsupported_options_in_phpini {    # FB-75397
     if ($unsupported_options) {
         $unsupported_options =~ s/\s$//g;
         print_warn('/usr/local/lib/php.ini: ');
-        print_warning("PHP $PHP5VERSION does not support $unsupported_options, but found enabled in php.ini. See FB-75397");
+        print_warning("PHP $EA3_PHP5VERSION does not support $unsupported_options, but found enabled in php.ini. See FB-75397");
     }
 }
 
 sub check_for_suphp_but_no_fileprotect {
-    if ( $PHP5HANDLER and $PHP5HANDLER eq 'suphp' ) {
+    if ( $EA3_PHP5HANDLER and $EA3_PHP5HANDLER eq 'suphp' ) {
         if ( !-e '/var/cpanel/fileprotect' ) {
             print_warn('suPHP: ');
             print_warning("enabled, but /var/cpanel/fileprotect not found. New users' public_htmls will be user:user");
@@ -6653,7 +6652,7 @@ sub check_for_missing_skiphttpauth {
 
 sub check_for_mpm_itk_and_suexec {
     return unless $APACHE_PER_USER eq "itk";
-    return unless $SUEXEC;
+    return unless $EA3_SUEXEC;
 
     print_warn('MPM ITK: ');
     print_warning('enabled with suEXEC. This can break redirects like /cpanel. See FB-83405.');
@@ -6664,7 +6663,7 @@ sub check_for_modruid2_warnings {
         if ( defined $CPCONF{'jailapache'} && $CPCONF{'jailapache'} == 1 ) {
             print_warn('Mod Ruid2: ');
             print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see FB-84393, FB-104017, and tickets 5015613, 5227891');
-            if ( $PHP5HANDLER && $PHP5HANDLER eq 'suphp' ) {
+            if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq 'suphp' ) {
                 print_warn('Mod Ruid2: ');
                 print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see FB-70561, FB-105901');
             }
@@ -6875,25 +6874,25 @@ sub check_for_readonly_filesystems {
 }
 
 sub check_for_unsupported_php {
-    return if !$PHPVERSION;
-    return if $PHPVERSION >= 6;
+    return if !$EA3_PHPVERSION;
+    return if $EA3_PHPVERSION >= 6;
     my $min_php5 = '5.3.0';
-    if ( $PHPVERSION == 4 ) {
-        return if !$PHP4VERSION;
+    if ( $EA3_PHPVERSION == 4 ) {
+        return if !$EA3_PHP4VERSION;
     }
-    if ( $PHPVERSION == 5 ) {
-        return if !$PHP5VERSION;
-        return if !version_compare( $PHP5VERSION, '<', $min_php5 );
+    if ( $EA3_PHPVERSION == 5 ) {
+        return if !$EA3_PHP5VERSION;
+        return if !version_compare( $EA3_PHP5VERSION, '<', $min_php5 );
     }
     print_critical();
     print_crit('!! RUNNING A VERSION OF PHP THAT IS NO LONGER SUPPORTED BY EASYAPACHE !! ');
     print_critical();
     print_critical('Do not run EasyApache without confirmation that this will replace PHP with a supported PHP version!');
-    if ($PHP4VERSION) {
-        print_critical( 'PHP4: ' . $PHP4VERSION );
+    if ($EA3_PHP4VERSION) {
+        print_critical( 'PHP4: ' . $EA3_PHP4VERSION );
     }
-    if ( $PHP5VERSION && version_compare( $PHP5VERSION, '<', $min_php5 ) ) {
-        print_critical( 'PHP5: ' . $PHP5VERSION );
+    if ( $EA3_PHP5VERSION && version_compare( $EA3_PHP5VERSION, '<', $min_php5 ) ) {
+        print_critical( 'PHP5: ' . $EA3_PHP5VERSION );
     }
     print_critical();
 }
@@ -6909,7 +6908,7 @@ sub check_for_cl_unsupported_memory_limits {
         print_warn('LiteSpeed: ');
         print_warning('in use on CL5 or earlier. CloudLinux memory limits not imposed on Apache processes.');
     }
-    if ( $PHP5HANDLER eq "dso" && version_compare( $OS_RELEASE, qw( < 6 ) ) ) {
+    if ( $EA3_PHP5HANDLER eq "dso" && version_compare( $OS_RELEASE, qw( < 6 ) ) ) {
         print_warn('PHP DSO: ');
         print_warning('in use on CL 5 or earlier. CloudLinux memory limits not imposed on Apache processes.');
     }
@@ -6987,7 +6986,7 @@ sub check_for_php_selector_incompatibilities {
         print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/php_selector.html');
     }
 
-    if ( $PHP5HANDLER && $PHP5HANDLER eq 'dso' ) {
+    if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq 'dso' ) {
         print_warn('DSO PHP handler: ');
         print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/php_selector.html');
     }
