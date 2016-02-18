@@ -6552,6 +6552,7 @@ sub check_for_easyparams_attributes {
 }
 
 sub check_for_stale_backup_pidfile {
+    return if cpanel_version_is(qw( >= 11.50.1 ));    # FB-82849
     my @pidfiles = qw(
       /var/cpanel/backuprunning
       /var/cpanel/new_backuprunning
@@ -6563,7 +6564,7 @@ sub check_for_stale_backup_pidfile {
     for my $pidfile (@pidfiles) {
         my $pid;
 
-        if ( -e $pidfile ) {
+        if ( -s $pidfile ) {
             open my $fh, '<', $pidfile or return;
             chomp( $pid = readline $fh );
             close $fh;
@@ -6582,11 +6583,7 @@ sub check_for_stale_backup_pidfile {
                 }
             }
 
-            if ( $found_pid == 0 ) {
-                print_warn('Backups: ');
-                print_warning("$pidfile exists, but pid $pid not found in process list");
-            }
-            elsif ( $found_pid == 1 and $found_process == 0 ) {
+            if ( $found_pid == 1 and $found_process == 0 ) {
                 print_warn('Backups: ');
                 print_warning("pid $pid from $pidfile does not match a valid backup process");
             }
