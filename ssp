@@ -1943,35 +1943,66 @@ sub print_ea4_php_configuration {
 
 sub _get_installed_ea4_php {
     my $php = {};
-    my ( $available_php, $current_php ) = split( /\nC/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
-    my @available_php = split( /\n/, $available_php );
-    my @current_php   = split( /\n/, $current_php );
-
-    @available_php = grep { !/handlers/ } @available_php;
-    @current_php   = grep { !/handlers/ } @current_php;
-
-    foreach my $line (@current_php) {
-        if ( $line =~ /(ea-php\d{1,2}):\s(\w+)/m ) {
-            my $pkg = $1;
-            $php->{$pkg}->{handler} = $2;
-            $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
-            if ( $line =~ /default/ ) {
+    my @available_php;
+    my @current_php;
+    my ( $available_php, $current_php );
+    if ( cpanel_version_is(qw ( >= 11.53 )) ) {
+        (@current_php) = split( /\n/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
+        foreach my $line (@current_php) {
+            my $pkg;
+            if ( $line =~ /DEFAULT PHP: (ea-php\d{1,2})/ ) {
+                $pkg                        = $1;
                 $php->{$pkg}->{default_php} = 1;
-                $php->{default} = $pkg;
+                $php->{default}             = $pkg;
+                next;
             }
-            foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
-                if (/PHP\s(\d\.\d+\.\d+)\s\(cli\)\s\(built:\s(\w+\s+\d+\s\d+\s\d+:\d+:\d+)/) {
-                    $php->{$pkg}->{release_version} = $1;
-                    $php->{$pkg}->{build_time}      = $2;
-                    $php->{$pkg}->{build_time} =~ s/  / /;
+            if ( $line =~ /(ea-php\d{1,2}) SAPI:\s(\w+)/ ) {
+                $pkg                    = $1;
+                $php->{$pkg}->{handler} = $2;
+                $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
+                foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
+                    if (/PHP\s(\d\.\d+\.\d+)\s\(cli\)\s\(built:\s(\w+\s+\d+\s\d+\s\d+:\d+:\d+)/) {
+                        $php->{$pkg}->{release_version} = $1;
+                        $php->{$pkg}->{build_time}      = $2;
+                        $php->{$pkg}->{build_time} =~ s/  / /;
+                    }
+                    if (/Zend\sEngine\sv(\d+\.\d+\.\d+)/) {
+                        $php->{$pkg}->{zend} = $1;
+                    }
                 }
-                if (/Zend\sEngine\sv(\d+\.\d+\.\d+)/) {
-                    $php->{$pkg}->{zend} = $1;
-                }
-            }
 
-            # Gather a list of modules for this given PHP Binary
-            @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
+                # Gather a list of modules for this given PHP Binary
+                @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
+            }
+        }
+    }
+    else {    # WHM <= 11.52
+        ( $available_php, $current_php ) = split( /\nC/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
+        @available_php = grep { !/handlers/ } split( /\n/, $available_php );
+        @current_php   = grep { !/handlers/ } split( /\n/, $current_php );
+        foreach my $line (@current_php) {
+            if ( $line =~ /(ea-php\d{1,2}):\s(\w+)/m ) {
+                my $pkg = $1;
+                $php->{$pkg}->{handler} = $2;
+                $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
+                if ( $line =~ /DEFAULT/i ) {
+                    $php->{$pkg}->{default_php} = 1;
+                    $php->{default} = $pkg;
+                }
+                foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
+                    if (/PHP\s(\d\.\d+\.\d+)\s\(cli\)\s\(built:\s(\w+\s+\d+\s\d+\s\d+:\d+:\d+)/) {
+                        $php->{$pkg}->{release_version} = $1;
+                        $php->{$pkg}->{build_time}      = $2;
+                        $php->{$pkg}->{build_time} =~ s/  / /;
+                    }
+                    if (/Zend\sEngine\sv(\d+\.\d+\.\d+)/) {
+                        $php->{$pkg}->{zend} = $1;
+                    }
+                }
+
+                # Gather a list of modules for this given PHP Binary
+                @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
+            }
         }
     }
     return $php;
@@ -2985,9 +3016,9 @@ sub check_for_non_default_permissions {
         $check{'/etc/apache2/logs/error_log'}       = { mode    => ['0644'], user => '*', perms_help => 'If users can\'t read error_log, cPanel Errors (Last 300) won\'t work.' };
         $check{'/etc/apache2/logs/domlogs'}         = { mode    => ['0755'], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
         $check{'/etc/apache2/modules'}              = { symlink => '/usr/lib64/apache2/modules', check_missing => 1 };
-        $check{'/etc/apache2/run'}                  = { symlink => '/var/run/apache2', check_missing => 1 };
-        $check{'/etc/cpanel'}                       = { mode    => ['0755'], perms_help => 'cPanel MultiPHP needs read access to this directory.  See CPANEL-905.' };
-        $check{'/usr/local/apache/access_log'}      = { symlink => '/etc/apache2/logs/access_log', check_missing => 1 };
+        $check{'/etc/apache2/run'}                  = { symlink => '../../var/run/apache2', symlink_no_absolute => 1, check_missing => 1 };
+        $check{'/etc/cpanel'}                       = { mode    => [ '0755', '0751', '0711' ], perms_help => 'cPanel MultiPHP needs execute access to this directory.  See CPANEL-905.' };
+        $check{'/etc/cpanel/ea4'}                   = { mode    => ['0755'], perms_help => 'cPanel MultiPHP needs read access to this directory.  See CPANEL-905.' };
         $check{'/usr/local/apache/bin/apachectl'}   = { symlink => '/usr/sbin/apachectl', check_missing => 1 };
         $check{'/usr/local/apache/bin/httpd'}       = { symlink => '/usr/sbin/httpd', check_missing => 1 };
         $check{'/usr/local/apache/bin/suexec'}      = { symlink => '/usr/sbin/suexec', check_missing => 1 };
@@ -2996,7 +3027,6 @@ sub check_for_non_default_permissions {
         $check{'/usr/local/apache/conf/mime.types'} = { symlink => '/etc/mime.types', check_missing => 1 };
         $check{'/usr/local/apache/conf/php.conf'}   = { symlink => '/etc/apache2/conf.d/php.conf', check_missing => 1 };
         $check{'/usr/local/apache/domlogs'}         = { symlink => '/etc/apache2/logs/domlogs', check_missing => 1 };
-        $check{'/usr/local/apache/error_log'}       = { symlink => '/etc/apache2/logs/error_log', check_missing => 1 };
         $check{'/usr/local/apache/htdocs'}          = { symlink => '/var/www/html', check_missing => 1 };
         $check{'/usr/local/apache/logs'}            = { symlink => '/etc/apache2/logs', check_missing => 1 };
         $check{'/usr/local/apache/modules'}         = { symlink => '/etc/apache2/modules', check_missing => 1 };
