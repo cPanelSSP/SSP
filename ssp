@@ -2774,7 +2774,7 @@ sub check_for_missing_account_suspensions_conf {
         $templates{$template}[1] = 0;
         if ( open my $template_fh, '<', $template ) {
             while (<$template_fh>) {
-                if (m{ \A \s* Include \s+ \"? /usr/local/apache/conf/includes/account_suspensions.conf \"? }x) {
+                if (m{ \A \s* Include .+ account_suspensions.conf }x) {
                     $templates{$template}[1] = 1;
                 }
             }
