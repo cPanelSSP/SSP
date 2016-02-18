@@ -3034,10 +3034,13 @@ sub check_for_non_default_permissions {
         $check{'/sbin'}            = { mode => [ '0755', '0711', '0555' ] };
         $check{'/usr/bin/crontab'} = { mode => [ '6755', '4755', '4711', '4555' ] };
         $check{'/usr/bin/passwd'}  = { mode => [ '6755', '4755', '4555', '4511' ] };
+        $check{'/var/run'} = { mode => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
     }
     if ( version_compare( $OS_RELEASE, qw( >= 7 ) ) ) {
-        $check{'/bin'}  = { symlink => '/usr/bin' };
-        $check{'/sbin'} = { symlink => '/usr/sbin' };
+        $check{'/bin'}     = { symlink => '/usr/bin' };
+        $check{'/run'}     = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
+        $check{'/sbin'}    = { symlink => '/usr/sbin' };
+        $check{'/var/run'} = { symlink => '/run', check_missing => 1 };
     }
     if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
         $check{'/etc/localdomains'} = { group => 'root' };
