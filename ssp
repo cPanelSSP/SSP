@@ -1745,8 +1745,8 @@ sub print_apache_info {
     alarm 5;
 
     my $apache_configured_port = 80;
-    my $attempted_port = ( split(':', $CPCONF{'apache_port'}) )[1];
-    if ( $attempted_port ) {
+    my $attempted_port = ( split( ':', $CPCONF{'apache_port'} ) )[1];
+    if ($attempted_port) {
         $apache_configured_port = $attempted_port;
     }
 
@@ -1785,8 +1785,9 @@ sub print_apache_info {
         my $warning = "";
         if ( $apache_configured_port == 80 ) {
             $warning = 'Is Apache up/slow to respond? (failed: http://localhost/whm-server-status). ';
-        } else {
-            $warning = 'Is Apache up/slow to respond? (failed: http://localhost:'.$apache_configured_port.'/whm-server-status). ';
+        }
+        else {
+            $warning = 'Is Apache up/slow to respond? (failed: http://localhost:' . $apache_configured_port . '/whm-server-status). ';
         }
 
         if (@LSOF_80) {
@@ -3545,6 +3546,7 @@ sub check_for_unsupported_nat {
     }
     else {
         for my $ipaddr (@LOCAL_IPADDRS_LIST) {
+
             # Matches any local IP (127.0.0.0/8) or RFC-1918 IP (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
             if ( $ipaddr !~ /(?:10\.|127\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/ ) {
                 push @external_ipaddrs, $ipaddr;
@@ -4216,20 +4218,20 @@ sub check_for_cpsources_conf {
         print_warn('/etc/cpsources.conf: ');
         print_warning('exists! This can affect upcp and EA.');
 
-        open (my $cpsources_conf_fh, '<', $cpsources_conf);
+        open( my $cpsources_conf_fh, '<', $cpsources_conf );
         my @cpsources_servers;
         while (<$cpsources_conf_fh>) {
-            my ($key, $value) = split('=', $_);
+            my ( $key, $value ) = split( '=', $_ );
             if ( $key eq 'HTTPUPDATE' ) {
                 push @cpsources_servers, $value;
             }
         }
 
-        CPSOURCES_SERVER:
+      CPSOURCES_SERVER:
         foreach my $cpsources_server (@cpsources_servers) {
             chomp $cpsources_server;
-            my ($host, $port) = split(':', $cpsources_server);
-            if (!defined($port)) {
+            my ( $host, $port ) = split( ':', $cpsources_server );
+            if ( !defined($port) ) {
                 $port = 80;
             }
 
@@ -4265,15 +4267,16 @@ sub check_for_cpsources_conf {
             # We care about the first line.
             # HTTP/1.1 200 OK
 
-            (my $http_response) = split('\n', $tiers_data);
-            ($http_response) = split('\r', $http_response);
+            ( my $http_response ) = split( '\n', $tiers_data );
+            ($http_response) = split( '\r', $http_response );
 
             if ( $http_response =~ /^HTTP\/(\d*?)\.(\d*?) (\d\d\d) (.*?)$/ ) {
                 if ( $3 != 200 ) {
                     print_warn('/etc/cpsources.conf: ');
                     print_warning("Server $host:$port responds with $http_response when grabbing TIERS file.");
                 }
-            } else {
+            }
+            else {
                 print_warn('/etc/cpsources.conf: ');
                 print_warning("Server $host:$port responds with weird HTTP response $http_response");
             }
@@ -6858,7 +6861,7 @@ sub check_for_readonly_filesystems {
     while (<$fh>) {
         if ( my @fs = split(' ') ) {
             next if grep( m{ / (virtfs|cagefs-skeleton|machine-id) / }x, $fs[1] );
-            next if "/sys/fs/cgroup" eq $fs[1] and version_compare($OS_RELEASE, qw( >= 7 ));
+            next if "/sys/fs/cgroup" eq $fs[1] and version_compare( $OS_RELEASE, qw( >= 7 ) );
             if ( grep( m{ (^|,) ro (,|$) }x, $fs[3] ) ) {
                 push( @read_only_fs, $fs[1] );
             }
