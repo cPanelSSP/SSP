@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.124';
+our $VERSION = '4.99.125';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -80,7 +80,7 @@ our $APACHE_EA_VERSION;         # EA version which built Apache
 our $APACHE_PER_USER;           # Type of per-user Apache module in effect such as Mod Ruid2 or MPM ITK
 our $APACHE_MODSEC;             # mod_security enabled
 our ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION );
-our ( $PHPVERSION, $PHP5VERSION, $PHP4VERSION, $PHP4HANDLER, $PHP5HANDLER, $SUEXEC );
+our ( $EA3_PHPVERSION, $EA3_PHP5VERSION, $EA3_PHP4VERSION, $EA3_PHP4HANDLER, $EA3_PHP5HANDLER, $EA3_SUEXEC );
 our @LSOF_80;
 our $OPENSSL_RPM_CHANGELOG;
 our $EA4_PHP_FPM;               # Boolean flag indicating if easyapache4's php fpm is running
@@ -744,8 +744,8 @@ sub version_compare {
     # example: return if version_compare($ver_string, qw( >= 1.2.3.3 ));
     # Must be no more than four version numbers separated by periods and/or underscores.
     my ( $ver1, $mode, $ver2 ) = @_;
-    return if ( $ver1 =~ /[^\._0-9]/ );
-    return if ( $ver2 =~ /[^\._0-9]/ );
+    return if ( !defined($ver1) || ( $ver1 =~ /[^\._0-9]/ ) );
+    return if ( !defined($ver2) || ( $ver2 =~ /[^\._0-9]/ ) );
 
     # Shamelessly copied the comparison logic out of Cpanel::Version::Compare
     my %modes = (
@@ -1745,8 +1745,8 @@ sub print_apache_info {
     alarm 5;
 
     my $apache_configured_port = 80;
-    my $attempted_port = ( split(':', $CPCONF{'apache_port'}) )[1];
-    if ( $attempted_port ) {
+    my $attempted_port = ( split( ':', $CPCONF{'apache_port'} ) )[1];
+    if ($attempted_port) {
         $apache_configured_port = $attempted_port;
     }
 
@@ -1785,8 +1785,9 @@ sub print_apache_info {
         my $warning = "";
         if ( $apache_configured_port == 80 ) {
             $warning = 'Is Apache up/slow to respond? (failed: http://localhost/whm-server-status). ';
-        } else {
-            $warning = 'Is Apache up/slow to respond? (failed: http://localhost:'.$apache_configured_port.'/whm-server-status). ';
+        }
+        else {
+            $warning = 'Is Apache up/slow to respond? (failed: http://localhost:' . $apache_configured_port . '/whm-server-status). ';
         }
 
         if (@LSOF_80) {
@@ -1824,8 +1825,7 @@ sub print_apache_info {
 sub print_ea3_php_configuration {
     return if $EA4;
     my $phpconf;
-    $phpconf = '/usr/local/apache/conf/php.conf.yaml' if !$EA4;
-    $phpconf = '/etc/apache2/conf.d/php.conf.yaml'    if $EA4;
+    $phpconf = '/usr/local/apache/conf/php.conf.yaml';
 
     if ( !-f $phpconf ) {
         print_info('PHP: ');
@@ -1837,92 +1837,92 @@ sub print_ea3_php_configuration {
     while (<$phpconf_fh>) {
         chomp;
         if (/^phpversion: (\d)/) {
-            $PHPVERSION = $1;
+            $EA3_PHPVERSION = $1;
         }
         if (/^php4:[ \t]+['"]?([^'"]+)/) {
-            $PHP4HANDLER = $1;
+            $EA3_PHP4HANDLER = $1;
         }
         if (/^php5:[ \t]+['"]?([^'"]+)/) {
-            $PHP5HANDLER = $1;
+            $EA3_PHP5HANDLER = $1;
         }
         if (/^suexec:[ \t]+['"]?([^'"]+)/) {
-            $SUEXEC = $1;
+            $EA3_SUEXEC = $1;
         }
     }
     close $phpconf_fh;
 
-    if ( $SUEXEC && $SUEXEC eq '1' ) {
-        $SUEXEC = 'with suexec';
+    if ( $EA3_SUEXEC && $EA3_SUEXEC eq '1' ) {
+        $EA3_SUEXEC = 'with suexec';
     }
     else {
-        $SUEXEC = 'without suexec';
+        $EA3_SUEXEC = 'without suexec';
     }
 
-    if ( !$EA4 && $PHPVERSION == 5 ) {
+    if ( $EA3_PHPVERSION == 5 ) {
         if ( -x '/usr/bin/php' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/bin/php', '-n', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $PHP5VERSION = $1;
+                $EA3_PHP5VERSION = $1;
             }
             else {
-                $PHP5VERSION = '(version unknown)';
+                $EA3_PHP5VERSION = '(version unknown)';
             }
 
-            if ($PHP5HANDLER) {
+            if ($EA3_PHP5HANDLER) {
                 print_info('PHP Default: ');
-                print_normal("PHP $PHP5VERSION $PHP5HANDLER $SUEXEC");
+                print_normal("PHP $EA3_PHP5VERSION $EA3_PHP5HANDLER $EA3_SUEXEC");
             }
         }
 
-        if ( $PHP4HANDLER && $PHP4HANDLER ne 'none' ) {
+        if ( $EA3_PHP4HANDLER && $EA3_PHP4HANDLER ne 'none' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/local/php4/bin/php', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $PHP4VERSION = $1;
+                $EA3_PHP4VERSION = $1;
             }
             else {
-                $PHP4VERSION = '(version unknown)';
+                $EA3_PHP4VERSION = '(version unknown)';
             }
 
             print_info('PHP Secondary: ');
-            print_normal("PHP $PHP4VERSION $PHP4HANDLER $SUEXEC");
+            print_normal("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $EA3_SUEXEC");
         }
     }
 
-    if ( $PHPVERSION && $PHPVERSION == 4 ) {
+    if ( $EA3_PHPVERSION && $EA3_PHPVERSION == 4 ) {
         if ( -x '/usr/local/php4/bin/php' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/local/php4/bin/php', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $PHP4VERSION = $1;
+                $EA3_PHP4VERSION = $1;
             }
             else {
-                $PHP4VERSION = '(version unknown)';
+                $EA3_PHP4VERSION = '(version unknown)';
             }
 
-            if ( $PHP4HANDLER && $PHP4HANDLER eq 'fcgi' ) {
+            if ( $EA3_PHP4HANDLER && $EA3_PHP4HANDLER eq 'fcgi' ) {
                 print_info('PHP Default: ');
-                print_warning("PHP $PHP4VERSION $PHP4HANDLER $SUEXEC (mod_userdir style URLs don't work with fcgi!)");
+                print_warning("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $EA3_SUEXEC (mod_userdir style URLs don't work with fcgi!)");
             }
             else {
                 print_info('PHP Default: ');
-                print_normal("PHP $PHP4VERSION $PHP4HANDLER $SUEXEC");
+                print_normal("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $EA3_SUEXEC");
             }
         }
 
-        if ( $PHP5HANDLER && $PHP5HANDLER ne 'none' ) {
+        if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER ne 'none' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/bin/php', '-n', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $PHP5VERSION = $1;
+                $EA3_PHP5VERSION = $1;
             }
             else {
-                $PHP5VERSION = '(version unknown)';
+                $EA3_PHP5VERSION = '(version unknown)';
             }
 
             print_info('PHP Secondary: ');
-            print_normal("PHP $PHP5VERSION $PHP5HANDLER $SUEXEC");
+            print_normal("PHP $EA3_PHP5VERSION $EA3_PHP5HANDLER $EA3_SUEXEC");
         }
     }
 
-    if ( ( ( $PHP4HANDLER && $PHP5HANDLER ) && ( $PHP4HANDLER eq 'none' && $PHP5HANDLER eq 'none' ) ) || !( $PHP4HANDLER && $PHP5HANDLER ) ) {
+    if ( ( ( $EA3_PHP4HANDLER && $EA3_PHP5HANDLER ) && ( $EA3_PHP4HANDLER eq 'none' && $EA3_PHP5HANDLER eq 'none' ) ) || !( $EA3_PHP4HANDLER && $EA3_PHP5HANDLER ) ) {
         print "\n";
         print_warn('PHP: ');
         print_warning('no handler defined for PHP4 or PHP5!');
@@ -1943,35 +1943,66 @@ sub print_ea4_php_configuration {
 
 sub _get_installed_ea4_php {
     my $php = {};
-    my ( $available_php, $current_php ) = split( /\nC/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
-    my @available_php = split( /\n/, $available_php );
-    my @current_php   = split( /\n/, $current_php );
-
-    @available_php = grep { !/handlers/ } @available_php;
-    @current_php   = grep { !/handlers/ } @current_php;
-
-    foreach my $line (@current_php) {
-        if ( $line =~ /(ea-php\d{1,2}):\s(\w+)/m ) {
-            my $pkg = $1;
-            $php->{$pkg}->{handler} = $2;
-            $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
-            if ( $line =~ /default/ ) {
+    my @available_php;
+    my @current_php;
+    my ( $available_php, $current_php );
+    if ( cpanel_version_is(qw ( >= 11.53 )) ) {
+        (@current_php) = split( /\n/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
+        foreach my $line (@current_php) {
+            my $pkg;
+            if ( $line =~ /DEFAULT PHP: (ea-php\d{1,2})/ ) {
+                $pkg                        = $1;
                 $php->{$pkg}->{default_php} = 1;
-                $php->{default} = $pkg;
+                $php->{default}             = $pkg;
+                next;
             }
-            foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
-                if (/PHP\s(\d\.\d+\.\d+)\s\(cli\)\s\(built:\s(\w+\s+\d+\s\d+\s\d+:\d+:\d+)/) {
-                    $php->{$pkg}->{release_version} = $1;
-                    $php->{$pkg}->{build_time}      = $2;
-                    $php->{$pkg}->{build_time} =~ s/  / /;
+            if ( $line =~ /(ea-php\d{1,2}) SAPI:\s(\w+)/ ) {
+                $pkg                    = $1;
+                $php->{$pkg}->{handler} = $2;
+                $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
+                foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
+                    if (/PHP\s(\d\.\d+\.\d+)\s\(cli\)\s\(built:\s(\w+\s+\d+\s\d+\s\d+:\d+:\d+)/) {
+                        $php->{$pkg}->{release_version} = $1;
+                        $php->{$pkg}->{build_time}      = $2;
+                        $php->{$pkg}->{build_time} =~ s/  / /;
+                    }
+                    if (/Zend\sEngine\sv(\d+\.\d+\.\d+)/) {
+                        $php->{$pkg}->{zend} = $1;
+                    }
                 }
-                if (/Zend\sEngine\sv(\d+\.\d+\.\d+)/) {
-                    $php->{$pkg}->{zend} = $1;
-                }
-            }
 
-            # Gather a list of modules for this given PHP Binary
-            @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
+                # Gather a list of modules for this given PHP Binary
+                @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
+            }
+        }
+    }
+    else {    # WHM <= 11.52
+        ( $available_php, $current_php ) = split( /\nC/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
+        @available_php = grep { !/handlers/ } split( /\n/, $available_php );
+        @current_php   = grep { !/handlers/ } split( /\n/, $current_php );
+        foreach my $line (@current_php) {
+            if ( $line =~ /(ea-php\d{1,2}):\s(\w+)/m ) {
+                my $pkg = $1;
+                $php->{$pkg}->{handler} = $2;
+                $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
+                if ( $line =~ /DEFAULT/i ) {
+                    $php->{$pkg}->{default_php} = 1;
+                    $php->{default} = $pkg;
+                }
+                foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
+                    if (/PHP\s(\d\.\d+\.\d+)\s\(cli\)\s\(built:\s(\w+\s+\d+\s\d+\s\d+:\d+:\d+)/) {
+                        $php->{$pkg}->{release_version} = $1;
+                        $php->{$pkg}->{build_time}      = $2;
+                        $php->{$pkg}->{build_time} =~ s/  / /;
+                    }
+                    if (/Zend\sEngine\sv(\d+\.\d+\.\d+)/) {
+                        $php->{$pkg}->{zend} = $1;
+                    }
+                }
+
+                # Gather a list of modules for this given PHP Binary
+                @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
+            }
         }
     }
     return $php;
@@ -2743,7 +2774,7 @@ sub check_for_missing_account_suspensions_conf {
         $templates{$template}[1] = 0;
         if ( open my $template_fh, '<', $template ) {
             while (<$template_fh>) {
-                if (m{ \A \s* Include \s+ \"? /usr/local/apache/conf/includes/account_suspensions.conf \"? }x) {
+                if (m{ \A \s* Include .+ account_suspensions.conf }x) {
                     $templates{$template}[1] = 1;
                 }
             }
@@ -2985,9 +3016,9 @@ sub check_for_non_default_permissions {
         $check{'/etc/apache2/logs/error_log'}       = { mode    => ['0644'], user => '*', perms_help => 'If users can\'t read error_log, cPanel Errors (Last 300) won\'t work.' };
         $check{'/etc/apache2/logs/domlogs'}         = { mode    => ['0755'], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
         $check{'/etc/apache2/modules'}              = { symlink => '/usr/lib64/apache2/modules', check_missing => 1 };
-        $check{'/etc/apache2/run'}                  = { symlink => '/var/run/apache2', check_missing => 1 };
-        $check{'/etc/cpanel'}                       = { mode    => ['0755'], perms_help => 'cPanel MultiPHP needs read access to this directory.  See CPANEL-905.' };
-        $check{'/usr/local/apache/access_log'}      = { symlink => '/etc/apache2/logs/access_log', check_missing => 1 };
+        $check{'/etc/apache2/run'}                  = { symlink => '../../var/run/apache2', symlink_no_absolute => 1, check_missing => 1 };
+        $check{'/etc/cpanel'}                       = { mode    => [ '0755', '0751', '0711' ], perms_help => 'cPanel MultiPHP needs execute access to this directory.  See CPANEL-905.' };
+        $check{'/etc/cpanel/ea4'}                   = { mode    => ['0755'], perms_help => 'cPanel MultiPHP needs read access to this directory.  See CPANEL-905.' };
         $check{'/usr/local/apache/bin/apachectl'}   = { symlink => '/usr/sbin/apachectl', check_missing => 1 };
         $check{'/usr/local/apache/bin/httpd'}       = { symlink => '/usr/sbin/httpd', check_missing => 1 };
         $check{'/usr/local/apache/bin/suexec'}      = { symlink => '/usr/sbin/suexec', check_missing => 1 };
@@ -2996,7 +3027,6 @@ sub check_for_non_default_permissions {
         $check{'/usr/local/apache/conf/mime.types'} = { symlink => '/etc/mime.types', check_missing => 1 };
         $check{'/usr/local/apache/conf/php.conf'}   = { symlink => '/etc/apache2/conf.d/php.conf', check_missing => 1 };
         $check{'/usr/local/apache/domlogs'}         = { symlink => '/etc/apache2/logs/domlogs', check_missing => 1 };
-        $check{'/usr/local/apache/error_log'}       = { symlink => '/etc/apache2/logs/error_log', check_missing => 1 };
         $check{'/usr/local/apache/htdocs'}          = { symlink => '/var/www/html', check_missing => 1 };
         $check{'/usr/local/apache/logs'}            = { symlink => '/etc/apache2/logs', check_missing => 1 };
         $check{'/usr/local/apache/modules'}         = { symlink => '/etc/apache2/modules', check_missing => 1 };
@@ -3034,10 +3064,13 @@ sub check_for_non_default_permissions {
         $check{'/sbin'}            = { mode => [ '0755', '0711', '0555' ] };
         $check{'/usr/bin/crontab'} = { mode => [ '6755', '4755', '4711', '4555' ] };
         $check{'/usr/bin/passwd'}  = { mode => [ '6755', '4755', '4555', '4511' ] };
+        $check{'/var/run'} = { mode => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
     }
     if ( version_compare( $OS_RELEASE, qw( >= 7 ) ) ) {
-        $check{'/bin'}  = { symlink => '/usr/bin' };
-        $check{'/sbin'} = { symlink => '/usr/sbin' };
+        $check{'/bin'}     = { symlink => '/usr/bin' };
+        $check{'/run'}     = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
+        $check{'/sbin'}    = { symlink => '/usr/sbin' };
+        $check{'/var/run'} = { symlink => '/run', check_missing => 1 };
     }
     if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
         $check{'/etc/localdomains'} = { group => 'root' };
@@ -3512,6 +3545,7 @@ sub check_for_unsupported_nat {
     }
     else {
         for my $ipaddr (@LOCAL_IPADDRS_LIST) {
+
             # Matches any local IP (127.0.0.0/8) or RFC-1918 IP (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
             if ( $ipaddr !~ /(?:10\.|127\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/ ) {
                 push @external_ipaddrs, $ipaddr;
@@ -4183,20 +4217,20 @@ sub check_for_cpsources_conf {
         print_warn('/etc/cpsources.conf: ');
         print_warning('exists! This can affect upcp and EA.');
 
-        open (my $cpsources_conf_fh, '<', $cpsources_conf);
+        open( my $cpsources_conf_fh, '<', $cpsources_conf );
         my @cpsources_servers;
         while (<$cpsources_conf_fh>) {
-            my ($key, $value) = split('=', $_);
+            my ( $key, $value ) = split( '=', $_ );
             if ( $key eq 'HTTPUPDATE' ) {
                 push @cpsources_servers, $value;
             }
         }
 
-        CPSOURCES_SERVER:
+      CPSOURCES_SERVER:
         foreach my $cpsources_server (@cpsources_servers) {
             chomp $cpsources_server;
-            my ($host, $port) = split(':', $cpsources_server);
-            if (!defined($port)) {
+            my ( $host, $port ) = split( ':', $cpsources_server );
+            if ( !defined($port) ) {
                 $port = 80;
             }
 
@@ -4232,15 +4266,16 @@ sub check_for_cpsources_conf {
             # We care about the first line.
             # HTTP/1.1 200 OK
 
-            (my $http_response) = split('\n', $tiers_data);
-            ($http_response) = split('\r', $http_response);
+            ( my $http_response ) = split( '\n', $tiers_data );
+            ($http_response) = split( '\r', $http_response );
 
             if ( $http_response =~ /^HTTP\/(\d*?)\.(\d*?) (\d\d\d) (.*?)$/ ) {
                 if ( $3 != 200 ) {
                     print_warn('/etc/cpsources.conf: ');
                     print_warning("Server $host:$port responds with $http_response when grabbing TIERS file.");
                 }
-            } else {
+            }
+            else {
                 print_warn('/etc/cpsources.conf: ');
                 print_warning("Server $host:$port responds with weird HTTP response $http_response");
             }
@@ -5368,7 +5403,7 @@ sub check_for_rpm_dist_ver_unknown {
 }
 
 sub check_for_homeloader_php_extension {
-    return if ( $PHP5HANDLER && $PHP5HANDLER ne 'dso' );
+    return if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER ne 'dso' );
 
     if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? homeloader\.so ['"]? #xms } @PHPINI ) {
         print_warn('/usr/local/lib/php.ini: ');
@@ -5567,12 +5602,12 @@ sub check_for_license_info {
 
     if ( $IS_KERNELCARE && $is_licensed_for_kernelcare_through_cpanel == 0 ) {
         print_warn('KernelCare: ');
-        print_warning("license via cPanel store not detected -- manually check at [ ${helper_url} ]");
+        print_warning("POTENTIALLY NOT LICENSED! - manually verify at [ ${helper_url} ] -- use \"LICENSE - CloudLinux Not Licensed through cPanel\" if not licensed and CL support is needed");
     }
 
     if ( $IS_CLOUDLINUX && $is_licensed_for_cloudlinux_through_cpanel == 0 ) {
         print_warn('CloudLinux: ');
-        print_warning("license via cPanel store not detected -- manually check at [ ${helper_url} ] -- use \"LICENSE - CloudLinux Not Licensed through cPanel\" if not licensed and CL support is needed");
+        print_warning("POTENTIALLY NOT LICENSED! - manually verify at [ ${helper_url} ] -- use \"LICENSE - CloudLinux Not Licensed through cPanel\" if not licensed and CL support is needed");
     }
 
     if ($is_one_time_license) {
@@ -5820,7 +5855,7 @@ sub check_for_stupid_touchfile {
 }
 
 sub check_for_phphandler_and_opcode_caching_incompatibility {
-    return if ( $PHP5HANDLER && $PHP5HANDLER ne 'suphp' );
+    return if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER ne 'suphp' );
 
     my $message;
 
@@ -5870,9 +5905,9 @@ sub check_for_invalid_HOMEDIR {
 }
 
 sub check_for_unsupported_options_in_phpini {    # FB-75397
-    return if !$PHP5VERSION;
+    return if !$EA3_PHP5VERSION;
 
-    my ( undef, $php5minor ) = split /\./, $PHP5VERSION;
+    my ( undef, $php5minor ) = split /\./, $EA3_PHP5VERSION;
     return if ( !$php5minor || $php5minor <= 3 );
 
     my $unsupported_options;
@@ -5891,12 +5926,12 @@ sub check_for_unsupported_options_in_phpini {    # FB-75397
     if ($unsupported_options) {
         $unsupported_options =~ s/\s$//g;
         print_warn('/usr/local/lib/php.ini: ');
-        print_warning("PHP $PHP5VERSION does not support $unsupported_options, but found enabled in php.ini. See FB-75397");
+        print_warning("PHP $EA3_PHP5VERSION does not support $unsupported_options, but found enabled in php.ini. See FB-75397");
     }
 }
 
 sub check_for_suphp_but_no_fileprotect {
-    if ( $PHP5HANDLER and $PHP5HANDLER eq 'suphp' ) {
+    if ( $EA3_PHP5HANDLER and $EA3_PHP5HANDLER eq 'suphp' ) {
         if ( !-e '/var/cpanel/fileprotect' ) {
             print_warn('suPHP: ');
             print_warning("enabled, but /var/cpanel/fileprotect not found. New users' public_htmls will be user:user");
@@ -6517,6 +6552,7 @@ sub check_for_easyparams_attributes {
 }
 
 sub check_for_stale_backup_pidfile {
+    return if cpanel_version_is(qw( >= 11.50.1 ));    # FB-82849
     my @pidfiles = qw(
       /var/cpanel/backuprunning
       /var/cpanel/new_backuprunning
@@ -6528,7 +6564,7 @@ sub check_for_stale_backup_pidfile {
     for my $pidfile (@pidfiles) {
         my $pid;
 
-        if ( -e $pidfile ) {
+        if ( -s $pidfile ) {
             open my $fh, '<', $pidfile or return;
             chomp( $pid = readline $fh );
             close $fh;
@@ -6547,11 +6583,7 @@ sub check_for_stale_backup_pidfile {
                 }
             }
 
-            if ( $found_pid == 0 ) {
-                print_warn('Backups: ');
-                print_warning("$pidfile exists, but pid $pid not found in process list");
-            }
-            elsif ( $found_pid == 1 and $found_process == 0 ) {
+            if ( $found_pid == 1 and $found_process == 0 ) {
                 print_warn('Backups: ');
                 print_warning("pid $pid from $pidfile does not match a valid backup process");
             }
@@ -6617,7 +6649,7 @@ sub check_for_missing_skiphttpauth {
 
 sub check_for_mpm_itk_and_suexec {
     return unless $APACHE_PER_USER eq "itk";
-    return unless $SUEXEC;
+    return unless $EA3_SUEXEC;
 
     print_warn('MPM ITK: ');
     print_warning('enabled with suEXEC. This can break redirects like /cpanel. See FB-83405.');
@@ -6628,7 +6660,7 @@ sub check_for_modruid2_warnings {
         if ( defined $CPCONF{'jailapache'} && $CPCONF{'jailapache'} == 1 ) {
             print_warn('Mod Ruid2: ');
             print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see FB-84393, FB-104017, and tickets 5015613, 5227891');
-            if ( $PHP5HANDLER && $PHP5HANDLER eq 'suphp' ) {
+            if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq 'suphp' ) {
                 print_warn('Mod Ruid2: ');
                 print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see FB-70561, FB-105901');
             }
@@ -6825,7 +6857,7 @@ sub check_for_readonly_filesystems {
     while (<$fh>) {
         if ( my @fs = split(' ') ) {
             next if grep( m{ / (virtfs|cagefs-skeleton|machine-id) / }x, $fs[1] );
-            next if "/sys/fs/cgroup" eq $fs[1] and version_compare($OS_RELEASE, qw( >= 7 ));
+            next if "/sys/fs/cgroup" eq $fs[1] and version_compare( $OS_RELEASE, qw( >= 7 ) );
             if ( grep( m{ (^|,) ro (,|$) }x, $fs[3] ) ) {
                 push( @read_only_fs, $fs[1] );
             }
@@ -6839,25 +6871,25 @@ sub check_for_readonly_filesystems {
 }
 
 sub check_for_unsupported_php {
-    return if !$PHPVERSION;
-    return if $PHPVERSION >= 6;
+    return if !$EA3_PHPVERSION;
+    return if $EA3_PHPVERSION >= 6;
     my $min_php5 = '5.3.0';
-    if ( $PHPVERSION == 4 ) {
-        return if !$PHP4VERSION;
+    if ( $EA3_PHPVERSION == 4 ) {
+        return if !$EA3_PHP4VERSION;
     }
-    if ( $PHPVERSION == 5 ) {
-        return if !$PHP5VERSION;
-        return if !version_compare( $PHP5VERSION, '<', $min_php5 );
+    if ( $EA3_PHPVERSION == 5 ) {
+        return if !$EA3_PHP5VERSION;
+        return if !version_compare( $EA3_PHP5VERSION, '<', $min_php5 );
     }
     print_critical();
     print_crit('!! RUNNING A VERSION OF PHP THAT IS NO LONGER SUPPORTED BY EASYAPACHE !! ');
     print_critical();
     print_critical('Do not run EasyApache without confirmation that this will replace PHP with a supported PHP version!');
-    if ($PHP4VERSION) {
-        print_critical( 'PHP4: ' . $PHP4VERSION );
+    if ($EA3_PHP4VERSION) {
+        print_critical( 'PHP4: ' . $EA3_PHP4VERSION );
     }
-    if ( $PHP5VERSION && version_compare( $PHP5VERSION, '<', $min_php5 ) ) {
-        print_critical( 'PHP5: ' . $PHP5VERSION );
+    if ( $EA3_PHP5VERSION && version_compare( $EA3_PHP5VERSION, '<', $min_php5 ) ) {
+        print_critical( 'PHP5: ' . $EA3_PHP5VERSION );
     }
     print_critical();
 }
@@ -6873,7 +6905,7 @@ sub check_for_cl_unsupported_memory_limits {
         print_warn('LiteSpeed: ');
         print_warning('in use on CL5 or earlier. CloudLinux memory limits not imposed on Apache processes.');
     }
-    if ( $PHP5HANDLER eq "dso" && version_compare( $OS_RELEASE, qw( < 6 ) ) ) {
+    if ( $EA3_PHP5HANDLER eq "dso" && version_compare( $OS_RELEASE, qw( < 6 ) ) ) {
         print_warn('PHP DSO: ');
         print_warning('in use on CL 5 or earlier. CloudLinux memory limits not imposed on Apache processes.');
     }
@@ -6951,7 +6983,7 @@ sub check_for_php_selector_incompatibilities {
         print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/php_selector.html');
     }
 
-    if ( $PHP5HANDLER && $PHP5HANDLER eq 'dso' ) {
+    if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq 'dso' ) {
         print_warn('DSO PHP handler: ');
         print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/php_selector.html');
     }
