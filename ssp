@@ -5567,12 +5567,12 @@ sub check_for_license_info {
 
     if ( $IS_KERNELCARE && $is_licensed_for_kernelcare_through_cpanel == 0 ) {
         print_warn('KernelCare: ');
-        print_warning("license via cPanel store not detected -- manually check at [ ${helper_url} ]");
+        print_warning("POTENTIALLY NOT LICENSED! - manually verify at [ ${helper_url} ] -- use \"LICENSE - CloudLinux Not Licensed through cPanel\" if not licensed and CL support is needed");
     }
 
     if ( $IS_CLOUDLINUX && $is_licensed_for_cloudlinux_through_cpanel == 0 ) {
         print_warn('CloudLinux: ');
-        print_warning("license via cPanel store not detected -- manually check at [ ${helper_url} ] -- use \"LICENSE - CloudLinux Not Licensed through cPanel\" if not licensed and CL support is needed");
+        print_warning("POTENTIALLY NOT LICENSED! - manually verify at [ ${helper_url} ] -- use \"LICENSE - CloudLinux Not Licensed through cPanel\" if not licensed and CL support is needed");
     }
 
     if ($is_one_time_license) {
