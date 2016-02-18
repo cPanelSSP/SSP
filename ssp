@@ -744,8 +744,8 @@ sub version_compare {
     # example: return if version_compare($ver_string, qw( >= 1.2.3.3 ));
     # Must be no more than four version numbers separated by periods and/or underscores.
     my ( $ver1, $mode, $ver2 ) = @_;
-    return if ( $ver1 =~ /[^\._0-9]/ );
-    return if ( $ver2 =~ /[^\._0-9]/ );
+    return if ( !defined($ver1) || ( $ver1 =~ /[^\._0-9]/ ) );
+    return if ( !defined($ver2) || ( $ver2 =~ /[^\._0-9]/ ) );
 
     # Shamelessly copied the comparison logic out of Cpanel::Version::Compare
     my %modes = (
