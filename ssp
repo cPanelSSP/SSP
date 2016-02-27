@@ -3393,23 +3393,29 @@ sub check_for_hooks_in_scripts_directory {
 }
 
 sub check_for_huge_logs {
-    my @logs = qw(  /usr/local/apache/logs/access_log
-      /usr/local/apache/logs/error_log
-      /usr/local/apache/logs/mod_jk.log
-      /usr/local/apache/logs/modsec_audit.log
-      /usr/local/apache/logs/modsec_debug.log
-      /usr/local/apache/logs/suexec_log
-      /usr/local/apache/logs/suphp_log
-      /var/named/data/named.run
-    );
 
-    for my $log (@logs) {
+    # Default size is 2_100_000_000, with no additional help text.
+    # Example: '/path/to/file' => { size => 1_000_000_000, help => 'If file is too hyooge, THERE IS MUCH FAIL' }
+    my %logs = (
+        '/usr/local/apache/logs/access_log'       => {},
+        '/usr/local/apache/logs/error_log'        => {},
+        '/usr/local/apache/logs/mod_jk.log'       => {},
+        '/usr/local/apache/logs/modsec_audit.log' => {},
+        '/usr/local/apache/logs/modsec_debug.log' => {},
+        '/usr/local/apache/logs/suexec_log'       => {},
+        '/usr/local/apache/logs/suphp_log'        => {},
+        '/var/cpanel/secdatadir/ip.pag'           => { help => 'Apache using a lot of CPU for no good reason? Try moving aside and restarting Apache. See EA-4092.' },
+        '/var/named/data/named.run'               => {},
+    );
+    for my $log ( keys(%logs) ) {
         if ( -e $log ) {
-            my $size = ( stat($log) )[7];
-            if ( $size > 2_100_000_000 ) {
+            my $size       = ( stat($log) )[7];
+            my $check_size = exists( $logs{$log}->{size} ) ? $logs{$log}->{size} : 2_100_000_000;
+            my $help       = exists( $logs{$log}->{help} ) ? ' - ' . $logs{$log}->{help} : '';
+            if ( $size > $check_size ) {
                 $size = sprintf( "%0.2fGB", $size / 1073741824 );
                 print_warn('M-M-M-MONSTER LOG!: ');
-                print_warning("$log ($size)");
+                print_warning( $log . ' (' . $size . ')' . $help );
             }
         }
     }
