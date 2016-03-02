@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.126';
+our $VERSION = '4.99.125';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -460,7 +460,6 @@ sub run {
     # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
     check_for_unsupported_php();          # Extreme care!
     check_for_bash_secadv_20140924();     # advisory
-    check_for_exim_cve_2016_1531();       # advisory
     check_for_UMBREON_rootkit();          # malware
     check_for_jynx2_rootkit();            # malware
     check_for_cdorked_A();                # malware
@@ -3394,29 +3393,23 @@ sub check_for_hooks_in_scripts_directory {
 }
 
 sub check_for_huge_logs {
-
-    # Default size is 2_100_000_000, with no additional help text.
-    # Example: '/path/to/file' => { size => 1_000_000_000, help => 'If file is too hyooge, THERE IS MUCH FAIL' }
-    my %logs = (
-        '/usr/local/apache/logs/access_log'       => {},
-        '/usr/local/apache/logs/error_log'        => {},
-        '/usr/local/apache/logs/mod_jk.log'       => {},
-        '/usr/local/apache/logs/modsec_audit.log' => {},
-        '/usr/local/apache/logs/modsec_debug.log' => {},
-        '/usr/local/apache/logs/suexec_log'       => {},
-        '/usr/local/apache/logs/suphp_log'        => {},
-        '/var/cpanel/secdatadir/ip.pag'           => { help => 'Apache using a lot of CPU for no good reason? Try moving aside and restarting Apache. See EA-4092.' },
-        '/var/named/data/named.run'               => {},
+    my @logs = qw(  /usr/local/apache/logs/access_log
+      /usr/local/apache/logs/error_log
+      /usr/local/apache/logs/mod_jk.log
+      /usr/local/apache/logs/modsec_audit.log
+      /usr/local/apache/logs/modsec_debug.log
+      /usr/local/apache/logs/suexec_log
+      /usr/local/apache/logs/suphp_log
+      /var/named/data/named.run
     );
-    for my $log ( keys(%logs) ) {
+
+    for my $log (@logs) {
         if ( -e $log ) {
-            my $size       = ( stat($log) )[7];
-            my $check_size = exists( $logs{$log}->{size} ) ? $logs{$log}->{size} : 2_100_000_000;
-            my $help       = exists( $logs{$log}->{help} ) ? ' - ' . $logs{$log}->{help} : '';
-            if ( $size > $check_size ) {
+            my $size = ( stat($log) )[7];
+            if ( $size > 2_100_000_000 ) {
                 $size = sprintf( "%0.2fGB", $size / 1073741824 );
                 print_warn('M-M-M-MONSTER LOG!: ');
-                print_warning( $log . ' (' . $size . ')' . $help );
+                print_warning("$log ($size)");
             }
         }
     }
@@ -6836,27 +6829,6 @@ sub check_for_broken_mysqldump {
     if ( $exit_status && $exit_status != 1 ) {
         print_warn("$md: ");
         print_warning('may be broken (exit status != 1). This can cause eximstats and other issues. See FB-98477');
-    }
-}
-
-sub check_for_exim_cve_2016_1531 {
-    my $eximbin = '/usr/sbin/exim';
-    return if !-x $eximbin;
-    my $eximver;
-
-    chomp( my $exim_out = timed_run( 0, $eximbin, '--version' ) );
-    return if !$exim_out;
-
-    if ( $exim_out =~ m{version (\d+\.\d+(?:[._](\d+))?)}ms ) {
-        $eximver = $1;
-    }
-
-    if ( $eximver && version_compare( $eximver, qw( < 4.86_1 ) ) ) {
-        print_critical();
-        print_crit('Exim ');
-        print_critical( 'may be vulnerable to CVE-2016-1531 which is fixed in Exim 4.86_1 and later (detected ' . $eximver . ')' );
-        print_critical('         \_ Send customer this premade: "SECURITY - EXIM CVE-2016-1531 - DISCOVERY"');
-        print_critical();
     }
 }
 
