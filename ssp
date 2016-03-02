@@ -460,6 +460,7 @@ sub run {
     # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
     check_for_unsupported_php();          # Extreme care!
     check_for_bash_secadv_20140924();     # advisory
+    check_for_exim_cve_2016_1531();       # advisory
     check_for_UMBREON_rootkit();          # malware
     check_for_jynx2_rootkit();            # malware
     check_for_cdorked_A();                # malware
@@ -6835,6 +6836,27 @@ sub check_for_broken_mysqldump {
     if ( $exit_status && $exit_status != 1 ) {
         print_warn("$md: ");
         print_warning('may be broken (exit status != 1). This can cause eximstats and other issues. See FB-98477');
+    }
+}
+
+sub check_for_exim_cve_2016_1531 {
+    my $eximbin = '/usr/sbin/exim';
+    return if !-x $eximbin;
+    my $eximver;
+
+    chomp( my $exim_out = timed_run( 0, $eximbin, '--version' ) );
+    return if !$exim_out;
+
+    if ( $exim_out =~ m{version (\d+\.\d+(?:[._](\d+))?)}ms ) {
+        $eximver = $1;
+    }
+
+    if ( $eximver && version_compare( $eximver, qw( < 4.86_1 ) ) ) {
+        print_critical();
+        print_crit('Exim ');
+        print_critical( 'may be vulnerable to CVE-2016-1531 which is fixed in Exim 4.86_1 and later (detected ' . $eximver . ')' );
+        print_critical('         \_ Send customer this premade: "SECURITY - EXIM CVE-2016-1531 - DISCOVERY"');
+        print_critical();
     }
 }
 
