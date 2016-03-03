@@ -6218,7 +6218,7 @@ sub check_for_processes_killed_by_oom {
         }
 
         if (@killed_by_oom) {
-            print_warn("Last $count processes killed by Linux Out of memory killer (grep \"Out of memory\" /var/log/messages):\n");
+            print_warn("Last $count processes killed by Linux Out of memory killer (grep -i \"Out of memory\" /var/log/messages):\n");
             for my $killed_process (@killed_by_oom) {
                 print_magenta("\t \\_ $killed_process");
             }
