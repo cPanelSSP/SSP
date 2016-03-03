@@ -6975,7 +6975,7 @@ sub check_for_prelink {
             while (<$file_fh>) {
                 if (m{ \A PRELINKING= \s* yes }x) {
                     print_warn('Prelink: ');
-                    print_warning('RPM installed and enabled. Recommend disabling to customer by setting PRELINKING=no in /etc/sysconfig/prelink.');
+                    print_warning('RPM installed and enabled. Recommend disabling to customer by setting PRELINKING=no in /etc/sysconfig/prelink. See case CPANEL-4332.');
                     last;
                 }
             }
