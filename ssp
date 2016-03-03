@@ -2994,7 +2994,6 @@ sub check_for_non_default_permissions {
         '/var/cpanel/locale/themes'             => { mode => ['0755'] },
         '/var/cpanel/resellers'                 => { mode => ['0644'] },
         '/var/cpanel/userhomes'                 => { mode => [ '0755', '0711' ] },
-        '/var/cpanel/userhomes/cpanelhorde'     => { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' },
         '/var/cpanel/userhomes/cpanelroundcube' => { mode => ['0711'], user => 'cpanelroundcube', group => 'cpanelroundcube' },
         '/var/lib'                              => { mode => ['0755'] },
         '/var/lib/mysql'                        => { mode => ['0751'], user => 'mysql', group => 'mysql' },
@@ -3072,6 +3071,9 @@ sub check_for_non_default_permissions {
         $check{'/run'}     = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
         $check{'/sbin'}    = { symlink => '/usr/sbin' };
         $check{'/var/run'} = { symlink => '/run', check_missing => 1 };
+    }
+    if ( cpanel_version_is(qw( < 11.49.0.0 )) ) {
+        $check{'/var/cpanel/userhomes/cpanelhorde'} = { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' };
     }
     if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
         $check{'/etc/localdomains'} = { group => 'root' };
