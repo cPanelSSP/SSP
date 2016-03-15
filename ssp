@@ -3152,12 +3152,23 @@ sub check_for_non_default_permissions {
             }
             my $immutable_help = exists $check{$path}->{immutable_help}      ? ' - ' . $check{$path}->{immutable_help} : '';
             my $is_recursive   = exists $check{$path}->{immutable_recursive} ? $check{$path}->{immutable_recursive}    : 0;
-            my $test_ref       = sub {
-                return if $is_recursive && exists $check{$_} && !exists $check{$_}->{immutable_recursive};    # If we check a path directly then we don't need to check it in a recursive sweep.
+            my $recursive_report_limit = 15;
+            my %recursive_report_count_by_path;
+            my $test_ref = sub {
+                if ($is_recursive) {
+                    return if exists $check{$_} && !exists $check{$_}->{immutable_recursive};    # If we check a path directly then we don't need to check it in a recursive sweep.
+                    $recursive_report_count_by_path{$path} = 0 if !defined( $recursive_report_count_by_path{$path} );
+                    return if $recursive_report_count_by_path{$path} >= $recursive_report_limit;
+                }
                 if ( ( -f $_ || -d _ ) && ( my %attr = get_attributes( $_, qw ( APPEND-ONLY IMMUTABLE UNDELETABLE ) ) ) ) {
                     my $attributes = join( ' & ', keys(%attr) );
                     print_warn('Non-default Perms: ');
                     print_warning( $_ . ' [' . $attributes . '] ' . $immutable_help );
+                    $recursive_report_count_by_path{$path}++;
+                    if ( $recursive_report_count_by_path{$path} >= $recursive_report_limit ) {
+                        print_warn('Non-default Perms: ');
+                        print_warning( 'recursive reporting limit reached for ' . $path . ' -- there may be more files like this!' );
+                    }
                 }
             };
             if ($is_recursive) {
@@ -3192,13 +3203,13 @@ sub get_attributes {
     my ( $path, @want ) = @_;
     open( my $fh, '<', $path ) or return;
     my %attributes = (
-        'APPEND-ONLY' => 0x00000020,    # EXT2_APPEND_FL in ext2fs/ext2_fs.h
-        'IMMUTABLE'   => 0x00000010,    # EXT2_IMMUTABLE_FL in ext2fs/ext2_fs.h
-        'UNDELETABLE' => 0x00000002,    # EXT2_UNRM_FL in ext2fs/ext2_fs.h
+        'APPEND-ONLY' => 0x00000020,    # FS_APPEND_FL in linux/fs.h
+        'IMMUTABLE'   => 0x00000010,    # FS_IMMUTABLE_FL in linux/fs.h
+        'UNDELETABLE' => 0x00000002,    # FS_UNRM_FL in linux/fs.h
     );
-    my $EXT2_IOC_GETFLAGS = 0x80086601;    # Tested on CentOS 6.6 using: strace -e trace=ioctl -e raw=ioctl lsattr -d /
+    my $FS_IOC_GETFLAGS = 0x80086601;    # Tested on CentOS 6.7 and 7.2 using: strace -e trace=ioctl -e raw=ioctl lsattr -d /
     my $flags = pack 'i', 0;
-    return unless defined ioctl( $fh, $EXT2_IOC_GETFLAGS, $flags );
+    return unless defined ioctl( $fh, $FS_IOC_GETFLAGS, $flags );
     close $fh;
     $flags = unpack 'i', $flags;
     @want = keys(%attributes) if !scalar @want;
