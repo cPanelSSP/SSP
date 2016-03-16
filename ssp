@@ -6865,10 +6865,15 @@ sub check_for_exim_cve_2016_1531 {
         $eximver = $1;
     }
 
-    if ( $eximver && version_compare( $eximver, qw( < 4.86_1 ) ) ) {
+    my $expected_version = "4.86_1";
+    if ( cpanel_version_is(qw( < 11.52 )) ) {
+        $expected_version = "4.85_1";
+    }
+
+    if ( $eximver && version_compare( $eximver, '<', $expected_version ) ) {
         print_critical();
         print_crit('Exim ');
-        print_critical( 'may be vulnerable to CVE-2016-1531 which is fixed in Exim 4.86_1 and later (detected ' . $eximver . ')' );
+        print_critical( 'may be vulnerable to CVE-2016-1531 (detected version ' . $eximver . ')' );
         print_critical('         \_ Send customer this premade: "SECURITY - EXIM CVE-2016-1531 - DISCOVERY"');
         print_critical();
     }
