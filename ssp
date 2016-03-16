@@ -2975,6 +2975,7 @@ sub check_for_non_default_permissions {
         '/usr/local/cpanel/bin/cpwrap'          => { mode => ['0755'] },
         '/usr/local/cpanel/bin/sendmail'        => { mode => ['0755'] },
         '/usr/local/cpanel/cpanel.lisc'         => { mode => ['0644'] },
+        '/usr/local/cpanel/cpsanitycheck.so'    => { mode => ['0754'] },
         '/usr/local/cpanel/php/cpanel.php'      => { mode => ['0644'] },
         '/usr/local/sbin'                       => { mode => [ '0755', '0711', '0555' ] },
         '/usr/sbin'                             => { mode => [ '0755', '0711', '0555' ] },
