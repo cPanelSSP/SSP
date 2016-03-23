@@ -3124,10 +3124,10 @@ sub check_for_non_default_permissions {
 
             # the first element will be an empty string. We don't want to check the permissions of /.
             shift @backup_path_parts;
-            my $backup_path_parent = '/';
+            my $backup_path_parent;
             foreach my $part (@backup_path_parts) {
-                $backup_path_parent .= "$part/";
-                $check{$backup_path_parent} = { mode => ['0711'], perms_help => "backups subtly wrong unless the backup directory and all its parents have w+x. See CPANEL-4336." };
+                $backup_path_parent .= '/' . $part;
+                $check{$backup_path_parent} = { mode => [ '0755', '0751', '0711' ], perms_help => "All backup directories MUST be traversable (+x) by all users. See CPANEL-4336." };
             }
         }
     }
