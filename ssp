@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.129';
+our $VERSION = '4.99.130';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -4591,6 +4591,12 @@ sub check_mysql_config {
     if ( cpanel_version_is(qw( >= 11.49.0.0 )) && cpanel_version_is(qw( < 11.50.0.11 )) ) {
         $mysqld_checks{'collationdatabase'} = [ '', '- Did horde fail to convert to SQLite?  See FB-127529.' ];
         $mysqld_checks{'collationserver'}   = [ '', '- Did horde fail to convert to SQLite?  See FB-127529.' ];
+    }
+
+    if ( $CPCONF{'mysql-version'} >= 5.6 ) {
+        if ( $MYSQL_CONF->{'mysqld'}->{'performanceschema'}[1] ) {
+            print_warn("MySQL has performance_schema enabled: on this version of MySQL it can cause load issues\n");
+        }
     }
 
     for my $check ( sort( keys(%mysqld_checks) ) ) {
