@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.128';
+our $VERSION = '4.99.129';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -2989,6 +2989,7 @@ sub check_for_non_default_permissions {
         '/usr/local/cpanel/bin/cpwrap'          => { mode => ['0755'] },
         '/usr/local/cpanel/bin/sendmail'        => { mode => ['0755'] },
         '/usr/local/cpanel/cpanel.lisc'         => { mode => ['0644'] },
+        '/usr/local/cpanel/cpsanitycheck.so'    => { mode => ['0754'] },
         '/usr/local/cpanel/php/cpanel.php'      => { mode => ['0644'] },
         '/usr/local/sbin'                       => { mode => [ '0755', '0711', '0555' ] },
         '/usr/sbin'                             => { mode => [ '0755', '0711', '0555' ] },
@@ -3008,7 +3009,6 @@ sub check_for_non_default_permissions {
         '/var/cpanel/locale/themes'             => { mode => ['0755'] },
         '/var/cpanel/resellers'                 => { mode => ['0644'] },
         '/var/cpanel/userhomes'                 => { mode => [ '0755', '0711' ] },
-        '/var/cpanel/userhomes/cpanelhorde'     => { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' },
         '/var/cpanel/userhomes/cpanelroundcube' => { mode => ['0711'], user => 'cpanelroundcube', group => 'cpanelroundcube' },
         '/var/lib'                              => { mode => ['0755'] },
         '/var/lib/mysql'                        => { mode => ['0751'], user => 'mysql', group => 'mysql' },
@@ -3087,6 +3087,9 @@ sub check_for_non_default_permissions {
         $check{'/sbin'}    = { symlink => '/usr/sbin' };
         $check{'/var/run'} = { symlink => '/run', check_missing => 1 };
     }
+    if ( cpanel_version_is(qw( < 11.49.0.0 )) ) {
+        $check{'/var/cpanel/userhomes/cpanelhorde'} = { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' };
+    }
     if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
         $check{'/etc/localdomains'} = { group => 'root' };
     }
@@ -3121,10 +3124,10 @@ sub check_for_non_default_permissions {
 
             # the first element will be an empty string. We don't want to check the permissions of /.
             shift @backup_path_parts;
-            my $backup_path_parent = '/';
+            my $backup_path_parent;
             foreach my $part (@backup_path_parts) {
-                $backup_path_parent .= "$part/";
-                $check{$backup_path_parent} = { mode => ['0711'], perms_help => "backups subtly wrong unless the backup directory and all its parents have w+x. See CPANEL-4336." };
+                $backup_path_parent .= '/' . $part;
+                $check{$backup_path_parent} = { mode => [ '0755', '0751', '0711' ], perms_help => "All backup directories MUST be traversable (+x) by all users. See CPANEL-4336." };
             }
         }
     }
@@ -3178,12 +3181,23 @@ sub check_for_non_default_permissions {
             }
             my $immutable_help = exists $check{$path}->{immutable_help}      ? ' - ' . $check{$path}->{immutable_help} : '';
             my $is_recursive   = exists $check{$path}->{immutable_recursive} ? $check{$path}->{immutable_recursive}    : 0;
-            my $test_ref       = sub {
-                return if $is_recursive && exists $check{$_} && !exists $check{$_}->{immutable_recursive};    # If we check a path directly then we don't need to check it in a recursive sweep.
+            my $recursive_report_limit = 15;
+            my %recursive_report_count_by_path;
+            my $test_ref = sub {
+                if ($is_recursive) {
+                    return if exists $check{$_} && !exists $check{$_}->{immutable_recursive};    # If we check a path directly then we don't need to check it in a recursive sweep.
+                    $recursive_report_count_by_path{$path} = 0 if !defined( $recursive_report_count_by_path{$path} );
+                    return if $recursive_report_count_by_path{$path} >= $recursive_report_limit;
+                }
                 if ( ( -f $_ || -d _ ) && ( my %attr = get_attributes( $_, qw ( APPEND-ONLY IMMUTABLE UNDELETABLE ) ) ) ) {
                     my $attributes = join( ' & ', keys(%attr) );
                     print_warn('Non-default Perms: ');
                     print_warning( $_ . ' [' . $attributes . '] ' . $immutable_help );
+                    $recursive_report_count_by_path{$path}++;
+                    if ( $recursive_report_count_by_path{$path} >= $recursive_report_limit ) {
+                        print_warn('Non-default Perms: ');
+                        print_warning( 'recursive reporting limit reached for ' . $path . ' -- there may be more files like this!' );
+                    }
                 }
             };
             if ($is_recursive) {
@@ -3218,13 +3232,13 @@ sub get_attributes {
     my ( $path, @want ) = @_;
     open( my $fh, '<', $path ) or return;
     my %attributes = (
-        'APPEND-ONLY' => 0x00000020,    # EXT2_APPEND_FL in ext2fs/ext2_fs.h
-        'IMMUTABLE'   => 0x00000010,    # EXT2_IMMUTABLE_FL in ext2fs/ext2_fs.h
-        'UNDELETABLE' => 0x00000002,    # EXT2_UNRM_FL in ext2fs/ext2_fs.h
+        'APPEND-ONLY' => 0x00000020,    # FS_APPEND_FL in linux/fs.h
+        'IMMUTABLE'   => 0x00000010,    # FS_IMMUTABLE_FL in linux/fs.h
+        'UNDELETABLE' => 0x00000002,    # FS_UNRM_FL in linux/fs.h
     );
-    my $EXT2_IOC_GETFLAGS = 0x80086601;    # Tested on CentOS 6.6 using: strace -e trace=ioctl -e raw=ioctl lsattr -d /
+    my $FS_IOC_GETFLAGS = 0x80086601;    # Tested on CentOS 6.7 and 7.2 using: strace -e trace=ioctl -e raw=ioctl lsattr -d /
     my $flags = pack 'i', 0;
-    return unless defined ioctl( $fh, $EXT2_IOC_GETFLAGS, $flags );
+    return unless defined ioctl( $fh, $FS_IOC_GETFLAGS, $flags );
     close $fh;
     $flags = unpack 'i', $flags;
     @want = keys(%attributes) if !scalar @want;
@@ -6244,7 +6258,7 @@ sub check_for_processes_killed_by_oom {
         }
 
         if (@killed_by_oom) {
-            print_warn("Last $count processes killed by Linux Out of memory killer (grep \"Out of memory\" /var/log/messages):\n");
+            print_warn("Last $count processes killed by Linux Out of memory killer (grep -i \"Out of memory\" /var/log/messages):\n");
             for my $killed_process (@killed_by_oom) {
                 print_magenta("\t \\_ $killed_process");
             }
@@ -6879,10 +6893,15 @@ sub check_for_exim_cve_2016_1531 {
         $eximver = $1;
     }
 
-    if ( $eximver && version_compare( $eximver, qw( < 4.86_1 ) ) ) {
+    my $expected_version = "4.86_1";
+    if ( cpanel_version_is(qw( < 11.52 )) ) {
+        $expected_version = "4.85_1";
+    }
+
+    if ( $eximver && version_compare( $eximver, '<', $expected_version ) ) {
         print_critical();
         print_crit('Exim ');
-        print_critical( 'may be vulnerable to CVE-2016-1531 which is fixed in Exim 4.86_1 and later (detected ' . $eximver . ')' );
+        print_critical( 'may be vulnerable to CVE-2016-1531 (detected version ' . $eximver . ')' );
         print_critical('         \_ Send customer this premade: "SECURITY - EXIM CVE-2016-1531 - DISCOVERY"');
         print_critical();
     }
@@ -7001,7 +7020,7 @@ sub check_for_prelink {
             while (<$file_fh>) {
                 if (m{ \A PRELINKING= \s* yes }x) {
                     print_warn('Prelink: ');
-                    print_warning('RPM installed and enabled. Recommend disabling to customer by setting PRELINKING=no in /etc/sysconfig/prelink.');
+                    print_warning('RPM installed and enabled. Recommend disabling to customer by setting PRELINKING=no in /etc/sysconfig/prelink. See case CPANEL-4332.');
                     last;
                 }
             }
