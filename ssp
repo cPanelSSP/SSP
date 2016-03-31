@@ -4579,35 +4579,47 @@ sub get_mysql_error_log {
 
 sub check_mysql_config {
     return if !$MYSQL_CONF->{'LINES'};
-    my %mysqld_checks = (    # 'optionwithoutdashesorunderscores' => ['defaultvalue', '- Help text'],
-        'datadir' => [ '/var/lib/mysql', '' ],
-        'innodbforcerecovery' => [ '0', '- Makes all InnoDB databases read-only, will break MySQL upgrades.' ],
-        'logerror' => [ '/var/lib/mysql/' . $HOSTNAME . '.err', '' ],
-        'skipnameresolve' => [ '', '- Seeing "Can\'t find any matching row"? That may be why.' ],
-        'skipnetworking'  => [ '', '- Webmail or other MySQL related items not functioning properly? That may be why.' ],
-        'sqlmode'         => [ '', '- Seeing "Field \'ssl_cipher\' doesn\'t have a default value"? That may be why.' ]
+
+    # Example: 'optionwithoutdashesorunderscores' => { default => 'defaultvalue', check_missing => 1, orig_name => 'option_with_underscores-or-dashes', help => '- Help text' },
+    # default, check_missing, and help are optional, but orig_name should be defined if check_missing is used so that its name can be properly printed
+    # If check_missing exists, a warning is generated if the item is NOT in my.cnf and does not match the default (if given)
+
+    my %mysqld_checks = (
+        'datadir'             => { default => '/var/lib/mysql' },
+        'innodbforcerecovery' => { default => '0', help => 'Makes all InnoDB databases read-only, will break MySQL upgrades.' },
+        'logerror'            => { default => '/var/lib/mysql/' . $HOSTNAME . '.err' },
+        'skipnameresolve'     => { help    => 'Seeing "Can\'t find any matching row"? That may be why.' },
+        'skipnetworking'      => { help    => 'Webmail or other MySQL related items not functioning properly? That may be why.' },
+        'sqlmode'             => { help    => 'Seeing "Field \'ssl_cipher\' doesn\'t have a default value"? That may be why.' }
     );
 
     if ( cpanel_version_is(qw( >= 11.49.0.0 )) && cpanel_version_is(qw( < 11.50.0.11 )) ) {
-        $mysqld_checks{'collationdatabase'} = [ '', '- Did horde fail to convert to SQLite?  See FB-127529.' ];
-        $mysqld_checks{'collationserver'}   = [ '', '- Did horde fail to convert to SQLite?  See FB-127529.' ];
+        $mysqld_checks{'collationdatabase'} = { help => 'Did horde fail to convert to SQLite?  See FB-127529.' };
+        $mysqld_checks{'collationserver'}   = { help => 'Did horde fail to convert to SQLite?  See FB-127529.' };
     }
 
-    if ( $CPCONF{'mysql-version'} >= 5.6 ) {
-        if ( $MYSQL_CONF->{'mysqld'}->{'performanceschema'}[1] ) {
-            print_warn("MySQL has performance_schema enabled: on this version of MySQL it can cause load issues\n");
-        }
+    if ( version_compare( $CPCONF{'mysql-version'}, qw( >= 5.6 ) ) ) {
+        $mysqld_checks{'performanceschema'} = { default => '0', check_missing => 1, orig_name => "performance_schema", help => 'Performance Schema is enabled by default and could use a significant amount of memory, recommend "performance_schema = 0" on systems with less than 2GB RAM.' };
     }
 
     for my $check ( sort( keys(%mysqld_checks) ) ) {
-        if ( $MYSQL_CONF->{'mysqld'}{$check} && !( $MYSQL_CONF->{'mysqld'}{$check}[1] eq $mysqld_checks{$check}[0] ) ) {
+        $mysqld_checks{$check}->{default}       = "" unless defined( $mysqld_checks{$check}->{default} );
+        $mysqld_checks{$check}->{check_missing} = 0  unless defined( $mysqld_checks{$check}->{check_missing} );
+        $mysqld_checks{$check}->{help}          = "" unless defined( $mysqld_checks{$check}->{help} );
+        my $help = $mysqld_checks{$check}->{help} ? ' - ' . $mysqld_checks{$check}->{help} : '';
+        if ( defined( $MYSQL_CONF->{'mysqld'}{$check} ) && !( $MYSQL_CONF->{'mysqld'}{$check}[1] eq $mysqld_checks{$check}->{default} ) ) {
             print_warn('MySQL /etc/my.cnf: ');
             if ( $MYSQL_CONF->{'mysqld'}{$check}[1] eq "enabled" ) {
-                print_warning( '[ ' . $MYSQL_CONF->{'mysqld'}{$check}[0] . ' ] found ' . $mysqld_checks{$check}[1] );
+                print_warning( '[ ' . $MYSQL_CONF->{'mysqld'}{$check}[0] . ' ] found ' . $help );
             }
             else {
-                print_warning( '[ ' . $MYSQL_CONF->{'mysqld'}{$check}[0] . ' = ' . $MYSQL_CONF->{'mysqld'}{$check}[1] . ' ] ' . $mysqld_checks{$check}[1] );
+                print_warning( '[ ' . $MYSQL_CONF->{'mysqld'}{$check}[0] . ' = ' . $MYSQL_CONF->{'mysqld'}{$check}[1] . ' ] ' . $help );
             }
+        }
+        elsif ( $mysqld_checks{$check}->{check_missing} && !defined( $MYSQL_CONF->{'mysqld'}{$check} ) ) {
+            my $optname = defined( $mysqld_checks{$check}->{orig_name} ) ? $mysqld_checks{$check}->{orig_name} : $check;
+            print_warn('MySQL /etc/my.cnf: ');
+            print_warning( '[ ' . $optname . ' ] not found ' . $help );
         }
     }
 }
