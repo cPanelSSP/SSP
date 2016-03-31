@@ -59,6 +59,7 @@ our $PORT_REF;          # List of ports being listened on along with user/pid/et
 our $IPCS_REF;
 our $HOSTINFO;
 our $CPUINFO;
+our $MEMINFO;
 our $SYSCTL;
 our $MYSQL_CONF;
 our $MYSQL_DATADIR;
@@ -124,6 +125,7 @@ sub init {
     $IPCS_REF                 = get_ipcs_hash();
     $HOSTINFO                 = get_hostinfo();
     $CPUINFO                  = get_cpuinfo();
+    $MEMINFO                  = get_meminfo();
     $SYSCTL                   = get_sysctl();
     $MYSQL_CONF               = get_mysql_conf();
     $MYSQL_DATADIR            = get_mysql_datadir();             # needs $MYSQL_CONF
@@ -1181,6 +1183,24 @@ sub get_cpuinfo {
 
     chomp %cpuinfos;
     return \%cpuinfos;
+}
+
+sub get_meminfo {
+    my $proc_meminfo = '/proc/meminfo';
+    my %meminfo;
+
+    if ( open my $proc_meminfo_fh, '<', $proc_meminfo ) {
+        while (<$proc_meminfo_fh>) {
+            if (m{ \A MemTotal: \s+ (\d+) \s+ kB \s+ \z }xms) {
+                $meminfo{memtotal} = $1;
+                last;
+            }
+        }
+        close $proc_meminfo_fh;
+    }
+
+    chomp %meminfo;
+    return \%meminfo;
 }
 
 sub get_sysctl {
@@ -3991,27 +4011,14 @@ sub check_php_libmysqlclient_mismatch {
 }
 
 sub check_for_system_mem_below_required {
-    my $meminfo = '/proc/meminfo';
-    my $memtotal;
+    return unless defined( $MEMINFO->{memtotal} );
 
-    if ( open my $meminfo_fh, '<', $meminfo ) {
-        while (<$meminfo_fh>) {
-            if (m{ \A MemTotal: \s+ (\d+) \s+ kB \s+ \z }xms) {
-                $memtotal = $1 / 1024;
-                last;
-            }
-        }
-        close $meminfo_fh;
-    }
+    my $memtotal = int( $MEMINFO->{memtotal} / 1024 );
 
-    if ( $memtotal =~ /^(\d+)\./ ) {
-        $memtotal = $1;
-    }
-
-    # Close-enough factor 768M
+    # Close-enough factor 768MB
     if ( $memtotal < 741 ) {
         print_warn('Memory: ');
-        print_warning("Server has less than 768M physical memory! [$memtotal MB]");
+        print_warning("Server has less than 768MB physical memory! [$memtotal MB]");
     }
 }
 
@@ -4598,8 +4605,13 @@ sub check_mysql_config {
         $mysqld_checks{'collationserver'}   = { help => 'Did horde fail to convert to SQLite?  See FB-127529.' };
     }
 
-    if ( version_compare( $CPCONF{'mysql-version'}, qw( >= 5.6 ) ) ) {
-        $mysqld_checks{'performanceschema'} = { default => '0', check_missing => 1, orig_name => "performance_schema", help => 'Performance Schema is enabled by default and could use a significant amount of memory, recommend "performance_schema = 0" on systems with less than 2GB RAM.' };
+    if ( defined( $MEMINFO->{memtotal} ) ) {
+        my $mem_mb = int( $MEMINFO->{memtotal} / 1024 );
+
+        # Systems w/2GB RAM report around 1800MB total after overhead, so 1700 should be a good tipping point
+        if ( $mem_mb < 1700 && version_compare( $CPCONF{'mysql-version'}, qw( >= 5.6 ) ) ) {
+            $mysqld_checks{'performanceschema'} = { default => '0', check_missing => 1, orig_name => "performance_schema", help => 'performance_schema is enabled by default in MySQL 5.6+ and could use a significant amount of memory, recommend "performance_schema = 0" with less than 2GB RAM [detected ' . $mem_mb . 'MB].' };
+        }
     }
 
     for my $check ( sort( keys(%mysqld_checks) ) ) {
