@@ -3163,7 +3163,19 @@ sub check_for_non_default_permissions {
     }
 
     for my $path ( sort keys %check ) {
-        lstat $path;    # _ can now be used in place of $path for -d, -e, -f, -l, etc...
+        my ( $mode, $uid, $gid ) = ( lstat($path) )[ 2, 4, 5 ];    # _ can now be used in place of $path for -d, -e, -f, -l, etc...
+        if ( exists $check{$path}->{check_missing} ) {
+            my $symlink    = '';
+            my $perms_help = '';
+            if ( exists $check{$path}->{symlink} && !-l _ ) {
+                $symlink = exists $check{$path}->{symlink} ? ' symlink to ' . $check{$path}->{symlink} : '';
+            }
+            if ( $symlink || !-e _ ) {
+                $perms_help = exists $check{$path}->{perms_help} ? ' - ' . $check{$path}->{perms_help} : '';
+                print_warn('Missing: ');
+                print_warning( $path . $symlink . $perms_help );
+            }
+        }
         if ( -l _ ) {
             my $linktarget = readlink($path);
             if ( !exists $check{$path}{'symlink_no_absolute'} || $check{$path}{'symlink_no_absolute'} == 0 ) {
@@ -3183,7 +3195,6 @@ sub check_for_non_default_permissions {
         }
         elsif ( -e _ ) {
             if ( exists $check{$path}->{mode} ) {
-                my ( $mode, $uid, $gid ) = ( stat(_) )[ 2, 4, 5 ];
                 $mode &= 07777;
                 $mode = sprintf "%lo", $mode;
                 my $user = getpwuid($uid);
@@ -3246,12 +3257,6 @@ sub check_for_non_default_permissions {
                 local $_ = $path;
                 &$test_ref();
             }
-        }
-        elsif ( exists $check{$path}->{check_missing} ) {
-            my $perms_help = exists $check{$path}->{perms_help} ? ' - ' . $check{$path}->{perms_help}       : '';
-            my $symlink    = exists $check{$path}->{symlink}    ? ' symlink to ' . $check{$path}->{symlink} : '';
-            print_warn('Missing: ');
-            print_warning( $path . $symlink . $perms_help );
         }
     }
 }
