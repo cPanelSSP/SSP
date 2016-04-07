@@ -1956,13 +1956,18 @@ sub print_ea3_php_configuration {
 sub print_ea4_php_configuration {
     return if !$EA4;
     my $php = _get_installed_ea4_php();
-    if ($php) {
-        $php->{print_line} = "PHP Default: $php->{$php->{default}}->{release_version}";
-        $php->{print_line} .= " ( $php->{default} )"                    if ( $php->{default} );
-        $php->{print_line} .= " \\w $php->{$php->{default}}->{handler}" if ( $php->{ $php->{default} }->{handler} );
-        $php->{print_line} .= "\n";
+    my $info;
+    print_info("PHP Default: ");
+    if ( defined($php) && defined( $php->{default} ) && defined( $php->{ $php->{default} }->{release_version} ) && defined( $php->{ $php->{default} }->{handler} ) ) {
+        $info .= $php->{ $php->{default} }->{release_version};
+        $info .= " ( $php->{default} )" if ( $php->{default} );
+        $info .= " [ $php->{$php->{default}}->{handler} ]" if ( $php->{ $php->{default} }->{handler} );
     }
-    print_info( $php->{print_line} );
+    else {
+        $info .= "UNKNOWN";
+    }
+    $info .= "\n";
+    print_normal($info);
 }
 
 sub _get_installed_ea4_php {
