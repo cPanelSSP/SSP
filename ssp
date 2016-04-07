@@ -7020,7 +7020,7 @@ sub check_for_cl_unsupported_memory_limits {
         print_warn('LiteSpeed: ');
         print_warning('in use on CL5 or earlier. CloudLinux memory limits not imposed on Apache processes.');
     }
-    if ( $EA3_PHP5HANDLER eq "dso" && version_compare( $OS_RELEASE, qw( < 6 ) ) ) {
+    if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq "dso" && version_compare( $OS_RELEASE, qw( < 6 ) ) ) {
         print_warn('PHP DSO: ');
         print_warning('in use on CL 5 or earlier. CloudLinux memory limits not imposed on Apache processes.');
     }
