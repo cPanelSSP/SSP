@@ -2524,10 +2524,10 @@ sub check_runlevel {
 
         # CentOS 5.7, 5.8:
         #         run-level 3  2012-01-25 10:38                   last=S
-        if ( $who_r =~ m{ \A \s+ run-level \s (\d) }xms ) {
+        if ( $who_r =~ m{ \A \s* run-level \s (\S+) }xms ) {
             $runlevel = $1;
 
-            if ( $runlevel != 3 ) {
+            if ( $runlevel ne "3" ) {
                 print_warn('Runlevel: ');
                 print_warning("runlevel is not 3 (current runlevel: $runlevel)");
             }
