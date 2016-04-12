@@ -419,7 +419,6 @@ sub run {
     check_for_easyparams_attributes();
     check_for_stale_backup_pidfile();
     check_for_allow_update_in_named_conf();
-    check_for_mailman_low_uid();
     check_for_missing_skiphttpauth();
     check_for_mpm_itk_and_suexec();
     check_for_modruid2_warnings();
@@ -4108,6 +4107,7 @@ sub check_bash_history_for_certain_commands {
 }
 
 sub check_wwwacctconf_for_incorrect_minuid {
+    return unless cpanel_version_is(qw ( < 11.52.0.0 ));
     my $wwwacctconf = '/etc/wwwacct.conf';
     my $minuid;
     my $floor = 500;
@@ -6703,33 +6703,6 @@ sub check_for_allow_update_in_named_conf {
     if ( $has_allow_update == 1 ) {
         print_warn('named.conf: ');
         print_warning('allow-update found. This can possibly prevent rndc from reloading. See ticket 4717591');
-    }
-}
-
-sub check_for_mailman_low_uid {
-    my $wwwacctconf = '/etc/wwwacct.conf';
-    return if !-e $wwwacctconf;
-    my $minuid;
-
-    if ( open my $fh, '<', $wwwacctconf ) {
-        while (<$fh>) {
-            if (/^MINUID\s(\d+)$/) {
-                $minuid = $1;
-                last;
-            }
-        }
-        close $fh;
-    }
-    else {
-        return;
-    }
-
-    return if !$minuid;
-
-    my $mailman_uid = getpwnam('mailman');
-    if ( defined $mailman_uid and $mailman_uid < $minuid ) {
-        print_warn('Mailman: ');
-        print_warning('user mailman has uid lower than MINUID from wwwacct.conf. Is mailman rpm installed? See ticket 4717977');
     }
 }
 
