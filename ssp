@@ -461,6 +461,7 @@ sub run {
     check_for_bash_secadv_20140924();     # advisory
     check_for_exim_cve_2016_1531();       # advisory
     check_for_UMBREON_rootkit();          # malware
+    check_for_libms_rootkit();            # malware
     check_for_jynx2_rootkit();            # malware
     check_for_cdorked_A();                # malware
     check_for_cdorked_B();                # malware
@@ -598,6 +599,7 @@ sub check_for_dnsonly {
         ## [CRIT]
         check_for_bash_secadv_20140924();     # advisory
         check_for_UMBREON_rootkit();          # malware
+        check_for_libms_rootkit();            # malware
         check_for_jynx2_rootkit();            # malware
         check_for_libkeyutils_filenames();    # malware
         check_sha1_sigs_libkeyutils();        # malware
@@ -7126,6 +7128,17 @@ sub check_for_UMBREON_rootkit {
         print_critical('The following directory was found:');
         print_critical( "\t" . $dir );
         print_critical("\tL3: use \"L3 - Jynx2 Predef [L3 Only]\"");
+        print_critical();
+    }
+}
+
+sub check_for_libms_rootkit {
+    my $dir = '/lib/udev/x.modules';
+    if ( chdir $dir ) {
+        print_generic_hack_predef('LIBMS ROOTKIT');
+        print_critical('The following directory was found:');
+        print_critical( "\t" . $dir );
+        print_critical("\tL3: see ticket 7488621\"");
         print_critical();
     }
 }
