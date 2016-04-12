@@ -48,7 +48,7 @@ our $HOSTNAME;
 our $OS;
 our $IS_CLOUDLINUX = 0;
 our $IS_KERNELCARE = 0;
-our ( $OS_RELEASE, $OS_ISES );
+our ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES );
 our $EXTERNAL_IP_ADDRESS;
 our $EXTERNAL_LICENSE_ADDRESS;
 our $TIERS;
@@ -132,7 +132,8 @@ sub init {
     $MYSQL_ERROR_LOG          = get_mysql_error_log();           # needs $MYSQL_CONF
     $EA4_PHP_FPM              = get_ea4_php_fpm_status();
     $APACHE_PER_USER          = "none";
-    ( $OS_RELEASE,        $OS_ISES )              = get_release_version();
+    ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES ) = get_os_info();
+    if ( $OS_TYPE eq "cloudlinux" ) { $IS_CLOUDLINUX = 1; }
     ( $OLD_BACKUP_CONF,   $NEW_BACKUP_CONF )      = get_backup_config();
     ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION ) = get_lsws_version();
 
@@ -894,28 +895,43 @@ sub get_os {
 }
 
 # ripped from /usr/local/cpanel/Cpanel/Sys/OS.pm
-sub get_release_version {
+sub get_os_info {
     my $ises = 0;
-    my $ver;
+    my $version;
+    my $os      = "UNKNOWN";
+    my $release = "UNKNOWN";
+    my $os_release_file;
 
-    if ( open my $fh, '<', '/etc/redhat-release' ) {
+    foreach my $test_release_file ( 'CentOS-release', 'redhat-release', 'system-release' ) {
+        if ( -e '/etc/' . $test_release_file ) {
+            if ( ( ($os) = $test_release_file =~ m/^([^\-_]+)/ )[0] ) {
+                $os              = lc $os;                         #lc ok here as no danger of utf-8 data
+                $os_release_file = '/etc/' . $test_release_file;
+
+                if ( $os eq 'system' ) {
+                    $os = 'amazon';
+                }
+
+                last;
+            }
+        }
+    }
+
+    if ( open my $fh, '<', $os_release_file ) {
         my $line = readline $fh;
         close $fh;
         chomp $line;
-        if    ( $line =~ m/(?:Corporate|Advanced\sServer|Enterprise)/i ) { $ises = 1; }
-        elsif ( $line =~ /CloudLinux|CentOS/i )                          { $ises = 2; }
-        elsif ( $line =~ /WhiteBox/i )                                   { $ises = 3; }
-        elsif ( $line =~ /caos/i )                                       { $ises = 4; }
-        if    ( $line =~ /(\d+\.\d+)/ )                                  { $ver  = $1; }
-        elsif ( $line =~ /(\d+)/ )                                       { $ver  = $1; }
+        if    ( length $line >= 4 )                                             { $release = $line; }
+        if    ( $line =~ m/(?:Corporate|Advanced\sServer|Enterprise|Amazon)/i ) { $ises    = 1; }
+        elsif ( $line =~ /CloudLinux|CentOS/i )                                 { $ises    = 2; }
+
+        if    ( $line =~ /(\d+\.\d+)/ ) { $version = $1; }
+        elsif ( $line =~ /(\d+)/ )      { $version = $1; }
+
+        if ( $line =~ /(centos|cloudlinux|amazon)/i ) { $os = lc $1; }
     }
 
-    if ($ises) {
-        return ( $ver, $ises );
-    }
-    else {
-        return ( $ver, 0 );
-    }
+    return ( $release, $os, $version, $ises );
 }
 
 sub print_version {
@@ -1393,7 +1409,7 @@ sub get_lsws_version {
 }
 
 sub check_for_os_release_7 {
-    return if ( version_compare( $OS_RELEASE, qw( < 7 ) ) );
+    return if ( version_compare( $OS_VERSION, qw( < 7 ) ) );
     print_crit('RHEL/CentOS/CL 7+: ');
     print_critical('Use /scripts/restartsrv to restart services, not /etc/init.d scripts.');
 }
@@ -1414,32 +1430,12 @@ sub print_hostname {
     }
 }
 
-sub get_os_release {
-    my $release_info;
-
-    if ( -e '/etc/redhat-release' ) {
-        if ( open my $rr_fh, '<', '/etc/redhat-release' ) {
-            while (<$rr_fh>) {
-                chomp( $release_info = $_ );
-            }
-            close $rr_fh;
-        }
-    }
-    else {
-        $release_info = 'Unknown (no /etc/redhat-release)';
-    }
-
-    return $release_info;
-}
-
 sub print_os {
-    my $release_info          = get_os_release();
-    my $os_info               = $release_info . " [$HOSTINFO->{'environment'}]";
+    my $os_info               = $OS_RELEASE . " [$HOSTINFO->{'environment'}]";
     my $php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
     my $php_selector_disabled = 0;
 
-    if ( $release_info and $release_info =~ /cloudlinux/i ) {
-        $IS_CLOUDLINUX = 1;
+    if ($IS_CLOUDLINUX) {
         if ( -f $php_selector_conf ) {
             if ( open my $file_fh, '<', $php_selector_conf ) {
                 while (<$file_fh>) {
@@ -2055,7 +2051,7 @@ sub check_sysinfo {
                 }
             }
             if (m{ \A release=(.*) }xms) {
-                if ( $OS_RELEASE ne $1 ) {
+                if ( $OS_VERSION ne $1 ) {
                     $rebuild = 1;
                 }
             }
@@ -3100,14 +3096,14 @@ sub check_for_non_default_permissions {
         close $wwwacctconf_fh;
     }
 
-    if ( version_compare( $OS_RELEASE, qw( < 7 ) ) ) {
+    if ( version_compare( $OS_VERSION, qw( < 7 ) ) ) {
         $check{'/bin'}             = { mode => [ '0755', '0711', '0555' ] };
         $check{'/sbin'}            = { mode => [ '0755', '0711', '0555' ] };
         $check{'/usr/bin/crontab'} = { mode => [ '6755', '4755', '4711', '4555' ] };
         $check{'/usr/bin/passwd'}  = { mode => [ '6755', '4755', '4555', '4511' ] };
         $check{'/var/run'} = { mode => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
     }
-    if ( version_compare( $OS_RELEASE, qw( >= 7 ) ) ) {
+    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {
         $check{'/bin'}     = { symlink => '/usr/bin' };
         $check{'/run'}     = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
         $check{'/sbin'}    = { symlink => '/usr/sbin' };
@@ -3135,7 +3131,7 @@ sub check_for_non_default_permissions {
         $check{'/usr/local/cpanel/3rdparty/bin/webalizer_lang/english'} = { mode => ['0755'], user => 'bin', group => 'bin' };
     }
     if ($IS_CLOUDLINUX) {
-        if ( version_compare( $OS_RELEASE, qw( >= 7 ) ) ) {
+        if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {
             $check{'/usr/bin/python'} = { symlink => '/usr/bin/python2.7', check_missing => 1, perms_help => 'If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' };
             $check{'/usr/bin/python2.7'} = { mode => ['0755'], perms_help => 'If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' };
         }
@@ -4115,7 +4111,7 @@ sub check_wwwacctconf_for_incorrect_minuid {
     my $wwwacctconf = '/etc/wwwacct.conf';
     my $minuid;
     my $floor = 500;
-    if ( version_compare( $OS_RELEASE, qw( >= 7 ) ) ) {
+    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {
         $floor = 1000;
     }
 
@@ -5516,7 +5512,7 @@ sub check_for_homeloader_php_extension {
 }
 
 sub check_for_networkmanager {
-    return if version_compare( $OS_RELEASE, qw( >= 7 ) );
+    return if version_compare( $OS_VERSION, qw( >= 7 ) );
     my $networkmanager_running;
 
     for my $line (@PROCESS_LIST) {
@@ -6964,7 +6960,7 @@ sub check_for_readonly_filesystems {
     while (<$fh>) {
         if ( my @fs = split(' ') ) {
             next if grep( m{ / (virtfs|cagefs-skeleton|machine-id) / }x, $fs[1] );
-            next if "/sys/fs/cgroup" eq $fs[1] and version_compare( $OS_RELEASE, qw( >= 7 ) );
+            next if "/sys/fs/cgroup" eq $fs[1] and version_compare( $OS_VERSION, qw( >= 7 ) );
             if ( grep( m{ (^|,) ro (,|$) }x, $fs[3] ) ) {
                 push( @read_only_fs, $fs[1] );
             }
@@ -7003,17 +6999,17 @@ sub check_for_unsupported_php {
 }
 
 sub check_for_cl_unsupported_memory_limits {
-    return if !$IS_CLOUDLINUX;
+    return unless $IS_CLOUDLINUX;
 
     # See ticket # 5557825 - Several memory limits are not imposed: URL: https://helpdesk.cloudlinux.com/index.php?/Knowledgebase/Article/View/69/3/memory-limits-are-not-working
     # Per Igor:
     # CL 5 - doesn't support memory limits for: mod_php, mod_ruid2, MPM ITK & LiteSpeed.
     # CL 6 - doesn't support memory limits for: mod_php & mod_ruid2
-    if ( $LSWS_FULL_VERSION && version_compare( $OS_RELEASE, qw( < 6 ) ) ) {
+    if ( $LSWS_FULL_VERSION && version_compare( $OS_VERSION, qw( < 6 ) ) ) {
         print_warn('LiteSpeed: ');
         print_warning('in use on CL5 or earlier. CloudLinux memory limits not imposed on Apache processes.');
     }
-    if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq "dso" && version_compare( $OS_RELEASE, qw( < 6 ) ) ) {
+    if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq "dso" && version_compare( $OS_VERSION, qw( < 6 ) ) ) {
         print_warn('PHP DSO: ');
         print_warning('in use on CL 5 or earlier. CloudLinux memory limits not imposed on Apache processes.');
     }
@@ -8382,13 +8378,13 @@ sub get_external_ip {
 }
 
 sub print_bug_report {
-    my $version     = $CPANEL_VERSION ? $CPANEL_VERSION : 'Unknown';
-    my $os          = get_os_release();
-    my $kernel      = $HOSTINFO->{'kernel'} ? $HOSTINFO->{'kernel'} : 'Unknown';
-    my $arch        = $HOSTINFO->{'hardware'} ? $HOSTINFO->{'hardware'} : 'Unknown';
+    my $version     = $CPANEL_VERSION            ? $CPANEL_VERSION            : 'Unknown';
+    my $os          = $OS_RELEASE                ? $OS_RELEASE                : 'Unknown';
+    my $kernel      = $HOSTINFO->{'kernel'}      ? $HOSTINFO->{'kernel'}      : 'Unknown';
+    my $arch        = $HOSTINFO->{'hardware'}    ? $HOSTINFO->{'hardware'}    : 'Unknown';
     my $environment = $HOSTINFO->{'environment'} ? $HOSTINFO->{'environment'} : 'Unknown';
-    my $cpu         = $CPUINFO->{'model'} ? $CPUINFO->{'model'} : 'Unknown';
-    my $cores       = $CPUINFO->{'numcores'} ? $CPUINFO->{'numcores'} : 'Unknown';
+    my $cpu         = $CPUINFO->{'model'}        ? $CPUINFO->{'model'}        : 'Unknown';
+    my $cores       = $CPUINFO->{'numcores'}     ? $CPUINFO->{'numcores'}     : 'Unknown';
     my $ticket      = "";
     if ( $ENV{HISTFILE} =~ /ticket.(\d+)$/ ) {
         $ticket = $1;
