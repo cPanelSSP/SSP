@@ -3774,8 +3774,10 @@ sub check_for_empty_postgres_config {
 }
 
 sub check_for_empty_easyapache_profiles {
+    return if $EA4;
     my $templates;
     my $dir = '/var/cpanel/easy/apache/profile';
+    return unless -d $dir;
     find( \&find_easyapache_templates, $dir );
 
     if (@EASYAPACHE_TEMPLATES) {
