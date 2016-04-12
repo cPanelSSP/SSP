@@ -230,11 +230,6 @@ sub run {
         exit;
     }
 
-    if ($EA4) {
-        print "\n";
-        print BOLD GREEN ON_RED "\t!!!!! EA4 DETECTED. Deployment is NOT SUPPORTED. !!!!!" . RESET . "\n";
-    }
-
     print "\n";
     for ( 1 .. 3 ) {
         print BOLD GREEN ON_RED "\tPlease DO NOT paste output from SSP into tickets unless it is relevant to an issue" . RESET . "\n";
