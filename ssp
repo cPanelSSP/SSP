@@ -7128,6 +7128,10 @@ sub check_for_missing_cloudlinux_files {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/bin/python - check/repair python RPM');
     }
+    if ( -e "/var/.cagefs" ) {
+        print_warn('CloudLinux: ');
+        print_warning('/var/.cagefs - EXISTS! Should never exist outside of CageFS, will break many things.');
+    }
 }
 
 sub check_for_UMBREON_rootkit {
