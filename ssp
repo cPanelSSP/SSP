@@ -5497,6 +5497,7 @@ sub check_for_rpm_dist_ver_unknown {
 }
 
 sub check_for_homeloader_php_extension {
+    return if $EA4;
     return if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER ne 'dso' );
 
     if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? homeloader\.so ['"]? #xms } @PHPINI ) {
@@ -5949,6 +5950,7 @@ sub check_for_stupid_touchfile {
 }
 
 sub check_for_phphandler_and_opcode_caching_incompatibility {
+    return if $EA4;
     return if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER ne 'suphp' );
 
     my $message;
@@ -5999,6 +6001,7 @@ sub check_for_invalid_HOMEDIR {
 }
 
 sub check_for_unsupported_options_in_phpini {    # FB-75397
+    return if $EA4;
     return if !$EA3_PHP5VERSION;
 
     my ( undef, $php5minor ) = split /\./, $EA3_PHP5VERSION;
@@ -6025,6 +6028,7 @@ sub check_for_unsupported_options_in_phpini {    # FB-75397
 }
 
 sub check_for_suphp_but_no_fileprotect {
+    return if $EA4;
     if ( $EA3_PHP5HANDLER and $EA3_PHP5HANDLER eq 'suphp' ) {
         if ( !-e '/var/cpanel/fileprotect' ) {
             print_warn('suPHP: ');
@@ -6742,6 +6746,7 @@ sub check_for_missing_skiphttpauth {
 }
 
 sub check_for_mpm_itk_and_suexec {
+    return if $EA4;
     return unless $APACHE_PER_USER eq "itk";
     return unless $EA3_SUEXEC;
 
@@ -6991,6 +6996,7 @@ sub check_for_readonly_filesystems {
 }
 
 sub check_for_unsupported_php {
+    return if $EA4;
     return if !$EA3_PHPVERSION;
     return if $EA3_PHPVERSION >= 6;
     my $min_php5 = '5.3.0';
