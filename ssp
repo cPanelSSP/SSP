@@ -71,8 +71,8 @@ our @EASYAPACHE_TEMPLATES;      # items in /var/cpanel/easy/apache/profile/
 our @EXTENDED_RPM_LIST;         # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n'
 our @RPM_LIST;                  # rpm -qa
 our %CPCONF;                    # cpanel.config
-our %PUREFTPDCONF;              # /etc/pure-ftpd.conf
-our %PROFTPDCONF;               # /etc/proftpd.conf
+our $PUREFTPDCONF;              # /etc/pure-ftpd.conf
+our $PROFTPDCONF;               # /etc/proftpd.conf
 our $OLD_BACKUP_CONF;           # /etc/cpbackup.conf
 our $NEW_BACKUP_CONF;           # /var/cpanel/backups/config
 our @APACHE_VERSION_OUTPUT;     # httpd -v
@@ -130,6 +130,8 @@ sub init {
     $MYSQL_CONF               = get_mysql_conf();
     $MYSQL_DATADIR            = get_mysql_datadir();             # needs $MYSQL_CONF
     $MYSQL_ERROR_LOG          = get_mysql_error_log();           # needs $MYSQL_CONF
+    $PUREFTPDCONF             = get_pureftpd_conf();
+    $PROFTPDCONF              = get_proftpd_conf();
     $EA4_PHP_FPM              = get_ea4_php_fpm_status();
     $APACHE_PER_USER          = "none";
     ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES ) = get_os_info();
@@ -1143,6 +1145,36 @@ sub get_mysql_conf {
     }
     $hash{'LINES'} = $lines;
     return \%hash;
+}
+
+sub get_pureftpd_conf {
+    my %conf;
+    if ( open( my $pureftpdconf_fh, '<', '/etc/pure-ftpd.conf' ) ) {
+        while (<$pureftpdconf_fh>) {
+            next if /^(#|$)/;
+            if (m{ \A \s* ([^\s]+?) \s+ (.*) \Z }x) {
+                my $key = lc($1);
+                $conf{$key} = { name => $1, value => $2 };
+            }
+        }
+        close $pureftpdconf_fh;
+    }
+    return \%conf;
+}
+
+sub get_proftpd_conf {
+    my %conf;
+    if ( open( my $proftpdconf_fh, '<', '/etc/proftpd.conf' ) ) {
+        while (<$proftpdconf_fh>) {
+            next if /^(#|$)/;
+            if (m{ \A \s* ([^\s]+?) \s+ (.*) \Z }x) {
+                my $key = lc($1);
+                $conf{$key} = { name => $1, value => $2 };
+            }
+        }
+        close $proftpdconf_fh;
+    }
+    return \%conf;
 }
 
 sub get_hostinfo {
@@ -2337,27 +2369,18 @@ sub print_ftpserver_info {
 
     my $passiveports = "";
 
-    if ( $CPCONF{'ftpserver'} eq 'pure-ftpd' ) {
-        if ( open( my $pureftpdconf_fh, '<', '/etc/pure-ftpd.conf' ) ) {
-            local $/ = undef;
-            %PUREFTPDCONF = map { ( split( /\s+/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($pureftpdconf_fh) );
-            close $pureftpdconf_fh;
+    if ( defined( $CPCONF{'ftpserver'} ) ) {
+        if ( $CPCONF{'ftpserver'} eq 'pure-ftpd' ) {
+            if ( defined( $PUREFTPDCONF->{'passiveportrange'} ) && defined( $PUREFTPDCONF->{'passiveportrange'}->{value} ) ) {
+                $passiveports = $PUREFTPDCONF->{'passiveportrange'}->{value};
+            }
         }
-        if ( $PUREFTPDCONF{'PassivePortRange'} ) {
-            $passiveports = $PUREFTPDCONF{'PassivePortRange'};
-        }
-    }
-    if ( $CPCONF{'ftpserver'} eq 'proftpd' ) {
-        if ( open( my $proftpdconf_fh, '<', '/etc/proftpd.conf' ) ) {
-            local $/ = undef;
-            %PROFTPDCONF = map { ( split( /\s+/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($proftpdconf_fh) );
-            close $proftpdconf_fh;
-        }
-        if ( $PROFTPDCONF{'PassivePorts'} ) {
-            $passiveports = $PROFTPDCONF{'PassivePorts'};
+        if ( $CPCONF{'ftpserver'} eq 'proftpd' ) {
+            if ( defined( $PROFTPDCONF->{'passiveports'} ) && defined( $PROFTPDCONF->{'passiveports'}->{value} ) ) {
+                $passiveports = $PROFTPDCONF->{'passiveports'}->{value};
+            }
         }
     }
-
     my $fwppactive = 0;
     if ($passiveports) {
         $passiveports =~ s/\s+/:/;
@@ -2373,7 +2396,7 @@ sub print_ftpserver_info {
 
     my $passivetext = $passiveports ? "enabled - " . ( $fwppactive ? "allowed in iptables" : "not found in iptables" ) : "not enabled";
 
-    if ( defined $CPCONF{'ftpserver'} ) {
+    if ( defined( $CPCONF{'ftpserver'} ) ) {
         print_normal( $CPCONF{'ftpserver'} . " ( Passive ports " . $passivetext . " )" );
     }
     else {
@@ -8217,14 +8240,8 @@ sub check_cpanel_config {
 }
 
 sub check_pure_ftpd_conf_for_upload_script_and_dead {
-    return unless $CPCONF{'ftpserver'} && $CPCONF{'ftpserver'} eq 'pure-ftpd';
-
-    if ( open( my $pureftpdconf_fh, '<', '/etc/pure-ftpd.conf' ) ) {
-        local $/ = undef;
-        %PUREFTPDCONF = map { ( split( /\s+/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($pureftpdconf_fh) );
-    }
-
-    if ( $PUREFTPDCONF{'CallUploadScript'} && $PUREFTPDCONF{'CallUploadScript'} eq 'yes' ) {
+    return unless defined( $CPCONF{'ftpserver'} ) && $CPCONF{'ftpserver'} eq 'pure-ftpd';
+    if ( defined( $PUREFTPDCONF->{'calluploadscript'} ) && $PUREFTPDCONF->{'calluploadscript'}->{value} eq 'yes' ) {
         if ( !-e '/var/run/pure-ftpd.upload.pipe' ) {
             print_warn("/etc/pure-ftpd.conf: ");
             print_warning("CallUploadScript set to yes, /var/run/pure-ftpd.upload.pipe is missing [might be broken ConfigServer's cxs ( http://configserver.com/cp/cxs.html )]");
