@@ -341,7 +341,6 @@ sub run {
     check_mysqld_warnings_errors();
     check_mysql_config();
     check_for_extra_mysql_config_files();
-    check_for_C_compiler_optimization();
     check_perl_version_less_than_588();
     check_for_low_ulimit_for_root();
     check_for_fork_bomb_protection();
@@ -407,10 +406,8 @@ sub run {
     check_ssl_db_perms();
     check_for_nat_plus_mod_evasive();
     check_for_stray_index_php();
-    check_for_missing_cpanelconfig_items();
     check_for_port_80_not_apache();
     check_for_missing_groups();
-    check_for_cgihidepass();
     check_for_noquotafs();
     check_for_mod_rpaf();
     check_for_mod_spdy();
@@ -422,7 +419,6 @@ sub run {
     check_for_easyparams_attributes();
     check_for_stale_backup_pidfile();
     check_for_allow_update_in_named_conf();
-    check_for_missing_skiphttpauth();
     check_for_mpm_itk_and_suexec();
     check_for_modruid2_warnings();
     check_for_broken_mysqldump();
@@ -4701,11 +4697,45 @@ sub check_for_extra_mysql_config_files {
     print_warning( "\t " . '\_ These may replace or be merged with /etc/my.cnf settings!' );
 }
 
-sub check_for_C_compiler_optimization {
-    return if ( not defined $CPCONF{'enablecompileroptimizations'} or $CPCONF{'enablecompileroptimizations'} == 0 );
+sub check_cpanel_config {
+    return if !keys(%CPCONF);
 
-    print_warn('Tweak Setting: ');
-    print_warning('"Enable optimizations for the C compiler" enabled. If Sandy Bridge CPU, problems MAY occur (see ticket 3355885)');
+    # Example: 'exact_option_name' => { default => 'defaultvalue', check_missing => 1, help => '- Help text' },
+    # default, check_missing, and help are optional
+    # If check_missing exists, a warning is generated if the item is NOT in cpanel.config and does not match the default (if given) or is empty
+
+    my %cpanel_checks = (
+        'enablecompileroptimizations' => { default => '0', help => 'Tweak setting "Enable optimizations for the C compiler" enabled. If Sandy Bridge CPU, problems MAY occur (see ticket 3355885)' },
+        'ftpserver'     => { check_missing => 1 },
+        'mailserver'    => { check_missing => 1 },
+        'mysql-version' => { check_missing => 1 },
+        'nativessl'     => { default       => '1', help => 'Native SSL support for WHM/cPanel services is disabled' },
+        'skiphttpauth'  => { default       => '1', help => 'HTTP auth enabled' },
+    );
+
+    if ( cpanel_version_is(qw( < 11.48.0.0 )) ) {
+        $cpanel_checks{'use_safe_quotas'} = { default => '0', help => 'Suspend and unsuspend will be slow. Useless on RHEL/CentOS 5+. See FB-63646.' };
+    }
+    if ( defined $CPCONF{'maxmem'} && $CPCONF{'maxmem'} < 512 ) {
+        $cpanel_checks{'maxmem'} = { default => '512', help => '< 512M, phpmyadmin may fail' };
+    }
+    if ( cpanel_version_is(qw( < 11.42.1.1 )) ) {
+        $cpanel_checks{'cgihidepass'} = { default => '0', help => 'Tweak setting "Hide login password from cgi scripts" is enabled. Expired passwords can\'t be changed via WHM. See FB-87581' };
+    }
+
+    for my $check ( sort( keys(%cpanel_checks) ) ) {
+        $cpanel_checks{$check}->{check_missing} = 0  unless defined( $cpanel_checks{$check}->{check_missing} );
+        $cpanel_checks{$check}->{help}          = "" unless defined( $cpanel_checks{$check}->{help} );
+        my $help = $cpanel_checks{$check}->{help} ? ' - ' . $cpanel_checks{$check}->{help} : '';
+        if ( defined( $CPCONF{$check} ) && defined( $cpanel_checks{$check}->{default} ) && !( $CPCONF{$check} eq $cpanel_checks{$check}->{default} ) ) {
+            print_warn('cpanel.config: ');
+            print_warning( '[ ' . $check . '=' . $CPCONF{$check} . ' ]' . $help );
+        }
+        elsif ( $cpanel_checks{$check}->{check_missing} && ( !defined( $CPCONF{$check} ) || ( defined( $CPCONF{$check} ) && $CPCONF{$check} eq "" ) ) ) {
+            print_warn('cpanel.config: ');
+            print_warning( '[ ' . $check . ' ] not found or has empty value' . $help );
+        }
+    }
 }
 
 sub check_for_low_ulimit_for_root {
@@ -6455,15 +6485,6 @@ sub check_for_stray_index_php {
     }
 }
 
-sub check_for_missing_cpanelconfig_items {
-    for my $checkvar (qw( ftpserver mailserver mysql-version )) {
-        if ( not defined $CPCONF{$checkvar} or $CPCONF{$checkvar} =~ /^(?:[ \t]+|$)/ ) {
-            print_warn('/var/cpanel/cpanel.config: ');
-            print_warning( 'empty or missing "' . $checkvar . '" setting' );
-        }
-    }
-}
-
 sub check_for_port_80_not_apache {
     my ( $filename, $pid, $cmdline );
     my $unknown_httpd = 0;
@@ -6548,14 +6569,6 @@ sub check_for_missing_groups {
     if ($missing_groups) {
         print_warn('Missing groups: ');
         print_warning($missing_groups);
-    }
-}
-
-sub check_for_cgihidepass {
-    return if cpanel_version_is(qw( >= 11.42.1.1 ));
-    if ( defined $CPCONF{'cgihidepass'} and $CPCONF{'cgihidepass'} == 1 ) {
-        print_warn('cgihidepass: ');
-        print_warning('Tweak Settings >> "Hide login password from cgi scripts" is enabled. Expired passwords can\'t be changed via WHM. See FB-87581');
     }
 }
 
@@ -6737,13 +6750,6 @@ sub check_for_allow_update_in_named_conf {
         print_warn('named.conf: ');
         print_warning('allow-update found. This can possibly prevent rndc from reloading. See ticket 4717591');
     }
-}
-
-sub check_for_missing_skiphttpauth {
-    return if defined $CPCONF{'skiphttpauth'};
-
-    print_warn('skiphttpauth: ');
-    print_warning('not found in cpanel.config. HTTP auth will be enabled by default. See FB-95681');
 }
 
 sub check_for_mpm_itk_and_suexec {
@@ -8224,18 +8230,6 @@ sub check_for_cloudlinux_mysql_gov {
     if ( my @cl_mysql_rpms = grep ( m{^cl-MySQL-}, @RPM_LIST ) ) {
         print_warn("CloudLinux MySQL (see FB-64017): ");
         print_warning( join( " ", @cl_mysql_rpms ) );
-    }
-}
-
-sub check_cpanel_config {
-    if ( defined $CPCONF{'maxmem'} && $CPCONF{'maxmem'} < 512 ) {
-        print_warn("/var/cpanel/cpanel.config: ");
-        print_warning("maxmem < 512M, value=$CPCONF{'maxmem'} phpmyadmin may fail");
-    }
-
-    if ( cpanel_version_is(qw( < 11.48.0.0 )) && defined $CPCONF{'use_safe_quotas'} && $CPCONF{'use_safe_quotas'} == 1 ) {
-        print_warn("/var/cpanel/cpanel.config: ");
-        print_warning("use_safe_quotas=1 suspend and unsuspend will be slow. Useless on RHEL/CentOS 5+. See FB-63646.");
     }
 }
 
