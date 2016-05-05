@@ -350,6 +350,7 @@ sub run {
     check_for_maxclients_or_maxrequestworkers_reached();
     check_for_non_default_umask();
     check_for_multiple_imagemagick_installs();
+    check_for_CVE_ImageMagick();
     check_for_custom_locales();
     check_eximstats_size();
 
@@ -4868,6 +4869,16 @@ sub check_for_non_default_umask {
         print_warn('umask: ');
         print_warning("Non-default value [$umask] (check FB-62683 if permissions error when running convert_roundcube_mysql2sqlite)");
     }
+}
+
+sub check_for_CVE_ImageMagick {
+      if ( -x '/usr/bin/convert' and !-l '/usr/bin/convert' ) {
+        my $test = `/usr/bin/convert 'https:";echo vulnerable"' - 2>&-`;
+        if ( $test eq "vulnerable\n" ) {
+          print_crit("ImageMagick: ");
+          print_critical("Server is possibly vulnerable to CVE-2016-3714!! Check policy and delegates files!");
+        }
+      }
 }
 
 sub check_for_multiple_imagemagick_installs {
