@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.133';
+our $VERSION = '4.99.134';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -242,6 +242,7 @@ sub run {
     check_for_hacked_server_touchfile();
     check_for_multiple_tech_logins();
     check_for_lve_environment();
+    check_for_os_release_5();
     check_for_os_release_7();
 
     ## [INFO]
@@ -525,6 +526,7 @@ sub check_for_dnsonly {
         check_for_hacked_server_touchfile();
         check_for_multiple_tech_logins();
         check_for_lve_environment();
+        check_for_os_release_5();
         check_for_os_release_7();
 
         ## [INFO]
@@ -1226,21 +1228,83 @@ sub get_cpuinfo {
 }
 
 sub get_meminfo {
-    my $proc_meminfo = '/proc/meminfo';
+
+    # General logic from WHM 56 Cpanel::Sys::Hardware::Memory
+    my $proc_meminfo      = '/proc/meminfo';
+    my $proc_beancounters = '/proc/user_beancounters';
     my %meminfo;
 
-    if ( open my $proc_meminfo_fh, '<', $proc_meminfo ) {
+    if ( defined( $HOSTINFO->{'environment'} ) && $HOSTINFO->{'environment'} eq 'virtuozzo' ) {
+
+        # https://wiki.openvz.org/UBC_primary_parameters#vmguarpages
+        # https://wiki.openvz.org/UBC_secondary_parameters#privvmpages
+        if ( open( my $proc_beancounters_fh, '<', $proc_beancounters ) ) {
+            while (<$proc_beancounters_fh>) {
+                if (m/^\s*(privvmpages|physpages|vmguarpages|oomguarpages|swappages)\s+(.*)/) {
+                    my $type = $1;
+                    my $parm = $2;
+                    chomp($parm);
+                    my ( $held, $maxheld, $barrier, $limit, $failcnt ) = split( /\s+/, $parm );
+                    next if $held eq '-';
+
+                    # NOTE: VZ uses the # of 4-KiB pages, convert to KiB.
+                    # installed value is the lowest of privvmpages, physpages, or vmguarpages barrier
+                    if ( $type eq 'privvmpages' ) {
+                        unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
+                            $meminfo{'installed'} = $barrier * 4;
+                        }
+                    }
+                    elsif ( $type eq 'physpages' ) {
+                        unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
+                            $meminfo{'installed'} = $barrier * 4;
+                        }
+                    }
+                    elsif ( $type eq 'vmguarpages' ) {
+                        unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
+                            $meminfo{'installed'} = $barrier * 4;
+                        }
+                    }
+                    elsif ( $type eq 'oomguarpages' ) {
+                        $meminfo{'used'} = $held * 4;
+                    }
+                    elsif ( $type eq 'swappages' ) {
+                        $meminfo{'swapinstalled'} = $limit * 4;
+                    }
+                }
+            }
+            close($proc_beancounters_fh);
+            $meminfo{'available'} = $meminfo{'installed'} - $meminfo{'used'};
+        }
+    }
+    elsif ( open my $proc_meminfo_fh, '<', $proc_meminfo ) {
         while (<$proc_meminfo_fh>) {
-            if (m{ \A MemTotal: \s+ (\d+) \s+ kB \s+ \z }xms) {
-                $meminfo{memtotal} = $1;
-                last;
+            if (/^\s*([^\:]+):\s+(\d+)/) {
+                $meminfo{ lc($1) } = $2;
             }
         }
         close $proc_meminfo_fh;
+        $meminfo{'available'}     = $meminfo{'memfree'} + $meminfo{'buffers'} + $meminfo{'cached'};
+        $meminfo{'installed'}     = $meminfo{'memtotal'};
+        $meminfo{'used'}          = sprintf( '%u', $meminfo{'memtotal'} - $meminfo{'memfree'} );
+        $meminfo{'swapinstalled'} = $meminfo{'swaptotal'};
     }
 
     chomp %meminfo;
     return \%meminfo;
+}
+
+sub format_meminfo {
+    my ($num) = @_;
+    return 'unknown' if ( !defined($num) );
+
+    # The original values are 9223372036854775807 and 2147483647 4-KiB pages
+    if ( defined( $HOSTINFO->{'environment'} ) && $HOSTINFO->{'environment'} eq 'virtuozzo' ) {
+        return $num = 'unlimited' if $num == '36893488147419103228' + 0;    # KiB
+        if ( defined( $HOSTINFO->{'hardware'} ) && $HOSTINFO->{'hardware'} eq 'i386' ) {
+            return $num = 'unlimited' if $num == '8589934588' + 0;          # KiB
+        }
+    }
+    return int( $num / 1024 ) . "MB";
 }
 
 sub get_sysctl {
@@ -1436,9 +1500,16 @@ sub get_lsws_version {
     return ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION );
 }
 
+sub check_for_os_release_5 {
+    return unless version_compare( $OS_VERSION, qw( < 6 ) );
+    print_crit('CentOS/RHEL/CL 5 (or older): ');
+    print_critical('This operating system will be EOL soon, if it is not already (March 31, 2017 for version 5).');
+    print_critical('         \_ Send customer this premade: "MIGRATION - CentOS/RHEL/CL 5 EOL"');
+}
+
 sub check_for_os_release_7 {
-    return if ( version_compare( $OS_VERSION, qw( < 7 ) ) );
-    print_crit('RHEL/CentOS/CL 7+: ');
+    return unless version_compare( $OS_VERSION, qw( >= 7 ) );
+    print_crit('CentOS/RHEL/CL 7+: ');
     print_critical('Use /scripts/restartsrv to restart services, not /etc/init.d scripts.');
 }
 
@@ -4039,14 +4110,32 @@ sub check_php_libmysqlclient_mismatch {
 }
 
 sub check_for_system_mem_below_required {
-    return unless defined( $MEMINFO->{memtotal} );
 
-    my $memtotal = int( $MEMINFO->{memtotal} / 1024 );
+    # Calculations have a 64-96MB fudge factor for overhead
+    return unless defined( $MEMINFO->{installed} ) && $MEMINFO->{installed} =~ /[0-9]+/;
+    my $memtotal   = int( $MEMINFO->{installed} / 1024 );
+    my $memmin     = 704;                                   # 768 - 64
+    my $memmintext = "768MB";
 
-    # Close-enough factor 768MB
-    if ( $memtotal < 741 ) {
+    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {
+        $memmin     = 928;                                  # 1024 - 96
+        $memmintext = "1024MB";
+    }
+
+    if ( $memtotal < $memmin ) {
         print_warn('Memory: ');
-        print_warning("Server has less than 768MB physical memory! [$memtotal MB]");
+        print_warning( "Server has less than ${memmintext} installed memory! [ " . format_meminfo( $MEMINFO->{installed} ) . " ]" );
+    }
+
+    #TECH-74 recommends >= 1024MB swap on systems with <= 1024MB RAM
+    return if $memtotal > 928;
+    my $swaptotal = 0;
+    $swaptotal = int( $MEMINFO->{swapinstalled} / 1024 ) if defined( $MEMINFO->{swapinstalled} ) && $MEMINFO->{swapinstalled} =~ /[0-9]+/;
+    my $swapmin     = 928;
+    my $swapmintext = "1024MB";
+    if ( $swaptotal < $swapmin ) {
+        print_warn('Memory: ');
+        print_warning( "Server has less than ${swapmintext} swap! [ " . format_meminfo( $MEMINFO->{swapinstalled} ) . " ]" );
     }
 }
 
