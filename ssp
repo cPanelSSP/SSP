@@ -1242,7 +1242,7 @@ sub get_meminfo {
         # https://wiki.openvz.org/UBC_secondary_parameters#privvmpages
         if ( open( my $proc_beancounters_fh, '<', $proc_beancounters ) ) {
             while (<$proc_beancounters_fh>) {
-                if (m/^\s*(privvmpages|physpages|vmguarpages|oomguarpages|swappages)\s+(.*)/) {
+                if (m/^\s*(\S+)\s+(.*)/) {
                     my $type = $1;
                     my $parm = $2;
                     chomp($parm);
@@ -1250,19 +1250,9 @@ sub get_meminfo {
                     next if $held eq '-';
 
                     # NOTE: VZ uses the # of 4-KiB pages, convert to KiB.
-                    # installed value is the lowest of privvmpages, physpages, or vmguarpages barrier
-                    if ( $type eq 'privvmpages' ) {
-                        unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
-                            $meminfo{'installed'} = $barrier * 4;
-                        }
-                    }
-                    elsif ( $type eq 'physpages' ) {
-                        unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
-                            $meminfo{'installed'} = $barrier * 4;
-                        }
-                    }
-                    elsif ( $type eq 'vmguarpages' ) {
-                        unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
+                    # installed value is the lowest of privvmpages, physpages, or vmguarpages barrier (ignoring 0)
+                    if ( $type =~ /^(privvmpages|physpages|vmguarpages)$/ ) {
+                        unless ( $barrier eq "0" || ( defined( $meminfo{'installed'} ) && $meminfo{'installed'} <= ( $barrier * 4 ) ) ) {
                             $meminfo{'installed'} = $barrier * 4;
                         }
                     }
@@ -1297,7 +1287,7 @@ sub get_meminfo {
 
 sub format_meminfo {
     my ($num) = @_;
-    return 'unknown' if ( !defined($num) );
+    return 'none or unknown' if ( !defined($num) );
 
     # The original values are 9223372036854775807 and 2147483647 4-KiB pages
     if ( defined( $HOSTINFO->{'environment'} ) && $HOSTINFO->{'environment'} eq 'virtuozzo' ) {
