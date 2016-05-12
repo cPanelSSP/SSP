@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.134';
+our $VERSION = '4.99.135';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -1251,17 +1251,23 @@ sub get_meminfo {
                     # installed value is the lowest of privvmpages, physpages, or vmguarpages barrier
                     if ( $type eq 'privvmpages' ) {
                         unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
-                            $meminfo{'installed'} = $barrier * 4;
+                            unless ( int( $barrier ) == 0 ) {
+                                $meminfo{'installed'} = $barrier * 4;
+                            }
                         }
                     }
                     elsif ( $type eq 'physpages' ) {
                         unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
-                            $meminfo{'installed'} = $barrier * 4;
+                            unless ( int( $barrier ) == 0 ) {
+                                $meminfo{'installed'} = $barrier * 4;
+                            }
                         }
                     }
                     elsif ( $type eq 'vmguarpages' ) {
                         unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
-                            $meminfo{'installed'} = $barrier * 4;
+                            unless ( int( $barrier ) == 0 ) {
+                                $meminfo{'installed'} = $barrier * 4;
+                            }
                         }
                     }
                     elsif ( $type eq 'oomguarpages' ) {
@@ -1273,6 +1279,9 @@ sub get_meminfo {
                 }
             }
             close($proc_beancounters_fh);
+            if (!defined( $meminfo{'swapinstalled'} ) ) {
+                $meminfo{'swapinstalled'} = 0;
+            }
             $meminfo{'available'} = $meminfo{'installed'} - $meminfo{'used'};
         }
     }
