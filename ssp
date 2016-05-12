@@ -3713,7 +3713,7 @@ sub check_for_unsupported_nat {
     my @external_ipaddrs;
     return if -e '/var/cpanel/cpnat';
 
-    if ( $EXTERNAL_IP_ADDRESS && $EXTERNAL_IP_ADDRESS =~ m{ \A \d+\.\d+\.\d+\.\d+ }xms ) {
+    if ( defined($EXTERNAL_IP_ADDRESS) ) {
         if ( !grep { /$EXTERNAL_IP_ADDRESS/ } @LOCAL_IPADDRS_LIST ) {
             print_warn('NAT: ');
             print_warning("external IP address $EXTERNAL_IP_ADDRESS is not bound to server");
@@ -5816,12 +5816,7 @@ sub check_for_license_info {
         print_critical("external IP detected via port 80 [ ${EXTERNAL_IP_ADDRESS} ] does not match IP detected via port 2089 [ ${EXTERNAL_LICENSE_ADDRESS} ] which can result in unexpected cPanel license update behavior.");
     }
 
-    if ( !$EXTERNAL_LICENSE_ADDRESS ) {
-        print_warn('cPanel license IP: ');
-        print_warning('external IP was not detected via outbound connection using port 2089, may cause license update issue.  Verify with [ curl -w \'\n\' http://myip.cpanel.net:2089/v1.0/ ]');
-    }
-
-    if ($EXTERNAL_IP_ADDRESS) {
+    if ( defined($EXTERNAL_IP_ADDRESS) ) {
         my $url = '/index.cgi?ip=' . $EXTERNAL_IP_ADDRESS;
         $helper_url .= $url;
         my $sock = IO::Socket::INET->new(
@@ -8471,20 +8466,23 @@ sub get_external_ip {
             Timeout  => 5,
         );
 
+        my $header_host = ( $port != 80 ) ? $host . ":" . $port : $host;
+
         if ($sock) {
-            print $sock "GET ${path} HTTP/1.1\r\nUser-Agent: SSP/" . $VERSION . "\r\nHost: ${host}\r\n\r\n";
+            print $sock "GET ${path} HTTP/1.1\r\nUser-Agent: SSP/" . $VERSION . "\r\nHost: ${header_host}\r\n\r\n";
             sysread $sock, $reply, 1500;
             close $sock;
         }
 
         alarm 0;
 
-        if ( $reply and $reply =~ m{ ^ \s* (\d+\.\d+\.\d+\.\d+) \s* $ }xms ) {
+        if ( defined($reply) && $reply =~ m{ ^ \s* ([0-9]+.[0-9]+.[0-9]+.[0-9]+) \s* $ }xms ) {
             $ip = $1;
             chomp $ip;
             return $ip;
         }
     }
+    return undef;
 }
 
 sub print_bug_report {
