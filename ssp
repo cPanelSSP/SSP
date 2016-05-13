@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.134';
+our $VERSION = '4.99.135';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -244,6 +244,7 @@ sub run {
     check_for_lve_environment();
     check_for_os_release_5();
     check_for_os_release_7();
+    check_for_os_release_32bit();
 
     ## [INFO]
     print "\n";
@@ -528,6 +529,7 @@ sub check_for_dnsonly {
         check_for_lve_environment();
         check_for_os_release_5();
         check_for_os_release_7();
+        check_for_os_release_32bit();
 
         ## [INFO]
         print_hostname();
@@ -1240,7 +1242,7 @@ sub get_meminfo {
         # https://wiki.openvz.org/UBC_secondary_parameters#privvmpages
         if ( open( my $proc_beancounters_fh, '<', $proc_beancounters ) ) {
             while (<$proc_beancounters_fh>) {
-                if (m/^\s*(privvmpages|physpages|vmguarpages|oomguarpages|swappages)\s+(.*)/) {
+                if (m/^\s*(\S+)\s+(.*)/) {
                     my $type = $1;
                     my $parm = $2;
                     chomp($parm);
@@ -1248,19 +1250,9 @@ sub get_meminfo {
                     next if $held eq '-';
 
                     # NOTE: VZ uses the # of 4-KiB pages, convert to KiB.
-                    # installed value is the lowest of privvmpages, physpages, or vmguarpages barrier
-                    if ( $type eq 'privvmpages' ) {
-                        unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
-                            $meminfo{'installed'} = $barrier * 4;
-                        }
-                    }
-                    elsif ( $type eq 'physpages' ) {
-                        unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
-                            $meminfo{'installed'} = $barrier * 4;
-                        }
-                    }
-                    elsif ( $type eq 'vmguarpages' ) {
-                        unless ( defined( $meminfo{'installed'} ) && ( $barrier * 4 ) > $meminfo{'installed'} ) {
+                    # installed value is the lowest of privvmpages, physpages, or vmguarpages barrier (ignoring 0)
+                    if ( $type =~ /^(privvmpages|physpages|vmguarpages)$/ ) {
+                        unless ( $barrier eq "0" || ( defined( $meminfo{'installed'} ) && $meminfo{'installed'} <= ( $barrier * 4 ) ) ) {
                             $meminfo{'installed'} = $barrier * 4;
                         }
                     }
@@ -1295,7 +1287,7 @@ sub get_meminfo {
 
 sub format_meminfo {
     my ($num) = @_;
-    return 'unknown' if ( !defined($num) );
+    return 'none or unknown' if ( !defined($num) );
 
     # The original values are 9223372036854775807 and 2147483647 4-KiB pages
     if ( defined( $HOSTINFO->{'environment'} ) && $HOSTINFO->{'environment'} eq 'virtuozzo' ) {
@@ -1503,7 +1495,7 @@ sub get_lsws_version {
 sub check_for_os_release_5 {
     return unless version_compare( $OS_VERSION, qw( < 6 ) );
     print_crit('CentOS/RHEL/CL 5 (or older): ');
-    print_critical('This operating system will be EOL soon, if it is not already (March 31, 2017 for version 5).');
+    print_critical('This operating system is not supported in WHM 58 and later (OS version 6+ only).');
     print_critical('         \_ Send customer this premade: "MIGRATION - CentOS/RHEL/CL 5 EOL"');
 }
 
@@ -1511,6 +1503,14 @@ sub check_for_os_release_7 {
     return unless version_compare( $OS_VERSION, qw( >= 7 ) );
     print_crit('CentOS/RHEL/CL 7+: ');
     print_critical('Use /scripts/restartsrv to restart services, not /etc/init.d scripts.');
+}
+
+sub check_for_os_release_32bit {
+    return unless ( defined( $HOSTINFO->{'hardware'} ) && $HOSTINFO->{'hardware'} eq 'i386' );
+    return unless version_compare( $OS_VERSION, qw( >= 6 ) );    # There is an unofficial CentOS 7 i386 build.
+    print_crit('CentOS/RHEL/CL i386 (32-bit): ');
+    print_critical('This operating system is not supported in WHM 58 and later (x86_64 only).');
+    print_critical('         \_ Send customer this premade: "MIGRATION - 32-bit CentOS/RHEL/CL EOL"');
 }
 
 ##############################
@@ -3703,7 +3703,7 @@ sub check_for_unsupported_nat {
     my @external_ipaddrs;
     return if -e '/var/cpanel/cpnat';
 
-    if ( $EXTERNAL_IP_ADDRESS && $EXTERNAL_IP_ADDRESS =~ m{ \A \d+\.\d+\.\d+\.\d+ }xms ) {
+    if ( defined($EXTERNAL_IP_ADDRESS) ) {
         if ( !grep { /$EXTERNAL_IP_ADDRESS/ } @LOCAL_IPADDRS_LIST ) {
             print_warn('NAT: ');
             print_warning("external IP address $EXTERNAL_IP_ADDRESS is not bound to server");
@@ -5806,12 +5806,7 @@ sub check_for_license_info {
         print_critical("external IP detected via port 80 [ ${EXTERNAL_IP_ADDRESS} ] does not match IP detected via port 2089 [ ${EXTERNAL_LICENSE_ADDRESS} ] which can result in unexpected cPanel license update behavior.");
     }
 
-    if ( !$EXTERNAL_LICENSE_ADDRESS ) {
-        print_warn('cPanel license IP: ');
-        print_warning('external IP was not detected via outbound connection using port 2089, may cause license update issue.  Verify with [ curl -w \'\n\' http://myip.cpanel.net:2089/v1.0/ ]');
-    }
-
-    if ($EXTERNAL_IP_ADDRESS) {
+    if ( defined($EXTERNAL_IP_ADDRESS) ) {
         my $url = '/index.cgi?ip=' . $EXTERNAL_IP_ADDRESS;
         $helper_url .= $url;
         my $sock = IO::Socket::INET->new(
@@ -8461,20 +8456,23 @@ sub get_external_ip {
             Timeout  => 5,
         );
 
+        my $header_host = ( $port != 80 ) ? $host . ":" . $port : $host;
+
         if ($sock) {
-            print $sock "GET ${path} HTTP/1.1\r\nUser-Agent: SSP/" . $VERSION . "\r\nHost: ${host}\r\n\r\n";
+            print $sock "GET ${path} HTTP/1.1\r\nUser-Agent: SSP/" . $VERSION . "\r\nHost: ${header_host}\r\n\r\n";
             sysread $sock, $reply, 1500;
             close $sock;
         }
 
         alarm 0;
 
-        if ( $reply and $reply =~ m{ ^ \s* (\d+\.\d+\.\d+\.\d+) \s* $ }xms ) {
+        if ( defined($reply) && $reply =~ m{ ^ \s* ([0-9]+.[0-9]+.[0-9]+.[0-9]+) \s* $ }xms ) {
             $ip = $1;
             chomp $ip;
             return $ip;
         }
     }
+    return undef;
 }
 
 sub print_bug_report {
