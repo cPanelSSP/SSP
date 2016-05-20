@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.135';
+our $VERSION = '4.99.136';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -569,11 +569,11 @@ sub check_for_dnsonly {
         check_bash_history_for_certain_commands();
         check_roots_cron_for_certain_commands();
         check_for_perl_env_var();
+        check_cpanel_config();
         check_cpanel_config_for_bad_root();
 
         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
         check_etc_hosts_sanity();
-        check_for_C_compiler_optimization();
         check_perl_version_less_than_588();
         check_for_fork_bomb_protection();
         check_for_cPanel_lower_than_11_30_7_3();
