@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.136';
+our $VERSION = '4.99.137';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -3034,17 +3034,18 @@ sub check_perl_sanity {
 sub check_for_non_default_permissions {
     local $OPT_TIMEOUT = $OPT_TIMEOUT ? $OPT_TIMEOUT : 10;    # This only applies to the recursive loop.
 
-    # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', immutable_recursive => 1, immutable_help => 'Additional info if immutable', symlink => '/path', symlink_no_absolute => 1, check_missing => 1 },
+    # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', attr_check => [ 'IMMUTABLE' ], attr_recursive => 1, attr_help => 'Additional info if immutable/append-only/etc', symlink => '/path', symlink_no_absolute => 1, check_missing => 1 },
     # Attributes are always checked, mode is only checked if specified.
     # User is always checked if mode is specified, which defaults to 'root'.
     # A '*' can be used to specify any user or group is allowed.
     # Only symlink ownership can be verified, not its mode.
-    # immutable_recursive only works on directories, default is 0 (do not recurse).
+    # attr_recursive only works on directories, default is 0 (do not recurse).
+    # attr_check is optional, default is to check all of IMMUTABLE, APPEND-ONLY, UNDELETABLE.
     # symlink_no_absolute defines whether the absolute target path of a symlink will be computed before comparing. Default behavior is to resolve the absolute target path.  Enabling this option allows you to compare a symlink at face-value.
     # check_missing causes a missing object to be reported
     # tidyoff
     my %check = (
-        '/'                                     => { mode => [ '0755', '0555' ], perms_help => '.ftpquota issues? see ticket 4429843', immutable_help => 'This can break EA. See ticket 4929961' },
+        '/'                                     => { mode => [ '0755', '0555' ], perms_help => '.ftpquota issues? see ticket 4429843', attr_help => 'This can break EA. See ticket 4929961' },
         '/bin/bash'                             => { mode => ['0755'] },
         '/bin/crontab'                          => { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' },
         '/bin/ln'                               => { mode => [ '0755', '0555' ] },
@@ -3083,7 +3084,7 @@ sub check_for_non_default_permissions {
         '/usr/bin'                              => { mode => [ '0755', '0711', '0555' ] },
         '/usr/bin/screen'                       => { mode => ['2755'], group => 'screen', perms_help => 'Screen doesn\'t work? Run "rpm --setugids screen && rpm --setperms screen" to fix.' },
         '/usr/local'                            => { mode => ['0755'] },
-        '/usr/local/apache'                     => { mode => ['0755'], immutable_recursive => 1 },
+        '/usr/local/apache'                     => { mode => ['0755'], attr_recursive => 1 },
         '/usr/local/apache/conf'                => { mode => ['0755'] },
         '/usr/local/bin'                        => { mode => [ '0755', '0711', '0555' ] },
         '/usr/local/cpanel'                     => { mode => ['0711'] },
@@ -3104,7 +3105,7 @@ sub check_for_non_default_permissions {
         '/usr/share'                            => { mode => ['0755'] },
         '/usr/share/zoneinfo'                   => { mode => ['0755'] },
         '/var'                                  => { mode => ['0755'] },
-        '/var/cpanel'                           => { mode => [ '0755', '0711', '0555' ], immutable_recursive => 1 },
+        '/var/cpanel'                           => { mode => [ '0755', '0711', '0555' ], attr_recursive => 1 },
         '/var/cpanel/backups'                   => { mode => [ '0755', '0750' ] },
         '/var/cpanel/backups/config'            => { mode => ['0644'] },
         '/var/cpanel/bandwidth.cache'           => { mode => ['0711'] },
@@ -3199,17 +3200,25 @@ sub check_for_non_default_permissions {
         $check{'/sbin'}    = { symlink => '/usr/sbin' };
         $check{'/var/run'} = { symlink => '/run', check_missing => 1 };
     }
+    if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {    # CPANEL-6180 results in these log files having the APPEND-ONLY attribute
+        $check{'/usr/local/cpanel/logs/cpdavd_error_log'} = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/dnsadmin_log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/error_log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/queueprocd.log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/stats_log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/tailwatchd_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+    }
     if ( cpanel_version_is(qw( < 11.49.0.0 )) ) {
         $check{'/var/cpanel/userhomes/cpanelhorde'} = { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' };
     }
     if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
         $check{'/etc/localdomains'} = { group => 'root' };
     }
-    if ( cpanel_version_is(qw( <= 11.36.0.0 )) ) {
-        $check{'/usr/local/cpanel/bin/cpwrap'} = { mode => ['4755'] };
-    }
     if ( ( cpanel_version_is(qw( >= 11.44.0.0 )) && cpanel_version_is(qw( < 11.44.0.8 )) ) || ( cpanel_version_is(qw( >= 11.42.0.0 )) && cpanel_version_is(qw( < 11.42.1.18 )) ) ) {
         $check{'/usr/local/cpanel/bin/sendmail'} = { mode => ['4755'], perms_help => 'CGIEmail wants suid /u/l/cpanel/bin/sendmail (FB-86561)' };
+    }
+    if ( cpanel_version_is(qw( <= 11.36.0.0 )) ) {
+        $check{'/usr/local/cpanel/bin/cpwrap'} = { mode => ['4755'] };
     }
     if ( cpanel_version_is(qw( >= 11.29.0.0)) ) {
         $check{'/scripts'} = { symlink => '/usr/local/cpanel/scripts', check_missing => 1 };
@@ -3302,20 +3311,25 @@ sub check_for_non_default_permissions {
                     print_warning( $path . ' [mode ' . sprintf( "%04d", $mode ) . '] (default ' . join( ' or ', @{ $check{$path}->{mode} } ) . ')' . $perms_help );
                 }
             }
-            my $immutable_help = exists $check{$path}->{immutable_help}      ? ' - ' . $check{$path}->{immutable_help} : '';
-            my $is_recursive   = exists $check{$path}->{immutable_recursive} ? $check{$path}->{immutable_recursive}    : 0;
+            my @attr_check   = exists $check{$path}->{attr_check}     ? @{ $check{$path}->{attr_check} }   : qw( APPEND-ONLY IMMUTABLE UNDELETABLE );
+            my $attr_help    = exists $check{$path}->{attr_help}      ? ' - ' . $check{$path}->{attr_help} : '';
+            my $is_recursive = exists $check{$path}->{attr_recursive} ? $check{$path}->{attr_recursive}    : 0;
             my $recursive_report_limit = 15;
             my %recursive_report_count_by_path;
             my $test_ref = sub {
+                my $linktarget;
                 if ($is_recursive) {
-                    return if exists $check{$_} && !exists $check{$_}->{immutable_recursive};    # If we check a path directly then we don't need to check it in a recursive sweep.
+                    $linktarget = -l $_ ? readlink($_) : "";
+                    return if exists $check{$_} && !exists $check{$_}->{attr_recursive};    # If we check a path directly then we don't need to check it in a recursive sweep.
+                    return if exists $check{$linktarget};                                   # Don't check a link target that we've explicitly checked.
                     $recursive_report_count_by_path{$path} = 0 if !defined( $recursive_report_count_by_path{$path} );
                     return if $recursive_report_count_by_path{$path} >= $recursive_report_limit;
                 }
-                if ( ( -f $_ || -d _ ) && ( my %attr = get_attributes( $_, qw ( APPEND-ONLY IMMUTABLE UNDELETABLE ) ) ) ) {
+                if ( ( -f $_ || -d _ ) && ( my %attr = get_attributes( $_, @attr_check ) ) ) {
                     my $attributes = join( ' & ', keys(%attr) );
+                    my $linktext = $linktarget ? " -> " . $linktarget : "";
                     print_warn('Non-default Perms: ');
-                    print_warning( $_ . ' [' . $attributes . '] ' . $immutable_help );
+                    print_warning( $_ . $linktext . ' [' . $attributes . '] ' . $attr_help );
                     $recursive_report_count_by_path{$path}++;
                     if ( $recursive_report_count_by_path{$path} >= $recursive_report_limit ) {
                         print_warn('Non-default Perms: ');
@@ -4982,16 +4996,25 @@ sub check_for_kernel_headers_rpm {
 }
 
 sub check_for_broken_rpm {
+    return unless @RPM_LIST;
     my %rpms = (    # 'rpm name' => [ ['check1', 'check2', ...], 'Additional info' ] # Check types should be ordered by dependency, first failure skips other checks for that RPM.
-        'cpp' => [ ['verify-fail'], 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"' ]
+        'cpp'      => [ ['verify-fail'], 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"' ],
+        'cpuspeed' => [ ['exists'],      'May cause yum to crash when updating kernel, "rpm -e --nodeps cpuspeed" to fix - https://bugzilla.redhat.com/show_bug.cgi?id=1259527' ]
     );
 
     my %rpm_checks = (
-        'missing-rpm' => [
+        'exists' => [
+            'RPM exists',
+            sub {    # Only care that the RPM exists.
+                my $rpm = shift;
+                return 1 if grep( /^${rpm}-/, @RPM_LIST );
+                return 0;
+            }
+        ],
+        'missing' => [
             'Missing RPM',
             sub {    # Only care that the RPM is missing.
                 my $rpm = shift;
-                return 0 if !@RPM_LIST;
                 return 0 if grep( /^${rpm}-/, @RPM_LIST );
                 return 1;
             }
@@ -5000,7 +5023,6 @@ sub check_for_broken_rpm {
             'Verify Failed',
             sub {    # Only performs check if the RPM exists.
                 my $rpm = shift;
-                return 0 if !@RPM_LIST;
                 return 0 if !grep( /^${rpm}-/, @RPM_LIST );
                 my $output = timed_run( 0, 'rpm', '-V', $rpm );
                 return 0 if $output eq "";
@@ -5014,7 +5036,7 @@ sub check_for_broken_rpm {
     for my $rpm ( sort keys %rpms ) {
         for my $check ( @{ $rpms{$rpm}[0] } ) {
             if ( $rpm_checks{$check}[1]->($rpm) ) {
-                my $additional_info = $rpms{$rpm}[1] ? ( "(" . $rpms{$rpm}[1] . ")" ) : '';
+                my $additional_info = $rpms{$rpm}[1] ? ( "( " . $rpms{$rpm}[1] . " )" ) : '';
                 print_warn('RPM check: ');
                 print_warning( $rpm_checks{$check}[0] . " - [ " . $rpm . " ] " . $additional_info );
                 last;
