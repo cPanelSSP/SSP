@@ -4982,16 +4982,25 @@ sub check_for_kernel_headers_rpm {
 }
 
 sub check_for_broken_rpm {
+    return unless @RPM_LIST;
     my %rpms = (    # 'rpm name' => [ ['check1', 'check2', ...], 'Additional info' ] # Check types should be ordered by dependency, first failure skips other checks for that RPM.
-        'cpp' => [ ['verify-fail'], 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"' ]
+        'cpp'      => [ ['verify-fail'], 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"' ],
+        'cpuspeed' => [ ['exists'],      'May cause yum to crash when updating kernel, "rpm -e --nodeps cpuspeed" to fix - https://bugzilla.redhat.com/show_bug.cgi?id=1259527' ]
     );
 
     my %rpm_checks = (
-        'missing-rpm' => [
+        'exists' => [
+            'RPM exists',
+            sub {    # Only care that the RPM exists.
+                my $rpm = shift;
+                return 1 if grep( /^${rpm}-/, @RPM_LIST );
+                return 0;
+            }
+        ],
+        'missing' => [
             'Missing RPM',
             sub {    # Only care that the RPM is missing.
                 my $rpm = shift;
-                return 0 if !@RPM_LIST;
                 return 0 if grep( /^${rpm}-/, @RPM_LIST );
                 return 1;
             }
@@ -5000,7 +5009,6 @@ sub check_for_broken_rpm {
             'Verify Failed',
             sub {    # Only performs check if the RPM exists.
                 my $rpm = shift;
-                return 0 if !@RPM_LIST;
                 return 0 if !grep( /^${rpm}-/, @RPM_LIST );
                 my $output = timed_run( 0, 'rpm', '-V', $rpm );
                 return 0 if $output eq "";
@@ -5014,7 +5022,7 @@ sub check_for_broken_rpm {
     for my $rpm ( sort keys %rpms ) {
         for my $check ( @{ $rpms{$rpm}[0] } ) {
             if ( $rpm_checks{$check}[1]->($rpm) ) {
-                my $additional_info = $rpms{$rpm}[1] ? ( "(" . $rpms{$rpm}[1] . ")" ) : '';
+                my $additional_info = $rpms{$rpm}[1] ? ( "( " . $rpms{$rpm}[1] . " )" ) : '';
                 print_warn('RPM check: ');
                 print_warning( $rpm_checks{$check}[0] . " - [ " . $rpm . " ] " . $additional_info );
                 last;
