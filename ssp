@@ -1847,6 +1847,8 @@ sub print_apache_info {
     my $output;
     my $apache_status;
 
+    $output .= "[ EA4 ] " if $EA4;
+
     if ( !$APACHE_VERSION or !$APACHE_BUILT or !$APACHE_EA_VERSION ) {
         $output .= 'could not determine Apache info!';
     }
@@ -2050,9 +2052,9 @@ sub print_ea4_php_configuration {
     my $info;
     print_info("PHP Default: ");
     if ( defined($php) && defined( $php->{default} ) && defined( $php->{ $php->{default} }->{release_version} ) && defined( $php->{ $php->{default} }->{handler} ) ) {
-        $info .= $php->{ $php->{default} }->{release_version};
-        $info .= " ( $php->{default} )" if ( $php->{default} );
-        $info .= " [ $php->{$php->{default}}->{handler} ]" if ( $php->{ $php->{default} }->{handler} );
+        $info .= "[ EA4 ]";
+        $info .= " [ " . $php->{ $php->{default} }->{release_version} . " ( " . $php->{default} . " ) ]";
+        $info .= " [ $php->{$php->{default}}->{handler} ]";
     }
     else {
         $info .= "UNKNOWN";
