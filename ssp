@@ -5002,7 +5002,7 @@ sub check_for_broken_rpm {
     return unless @RPM_LIST;
     my %rpms = (    # 'rpm name' => [ ['check1', 'check2', ...], 'Additional info' ] # Check types should be ordered by dependency, first failure skips other checks for that RPM.
         'cpp'      => [ ['verify-fail'], 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"' ],
-        'cpuspeed' => [ ['exists'],      'May cause yum to crash when updating kernel, "rpm -e --nodeps cpuspeed" to fix - https://bugzilla.redhat.com/show_bug.cgi?id=1259527' ]
+        'cpuspeed' => [ ['exists'],      'May cause yum to crash when updating kernel. Send "cpuspeed detected" predefined response.' ]
     );
 
     my %rpm_checks = (
