@@ -7393,20 +7393,16 @@ sub check_for_dragnet {
 sub check_for_xor_ddos {
     my @libs = qw(
       /lib/libgcc.so
-    );
-
-    my @hashes = qw(
-      d8ebf75697902e883006fc46410558d98c667bc50ebf374d2acd5cc3bfcdc2ff
+      /lib/libgcc.so.bak
+      /lib/libgcc4.4.so
+      /lib/libgcc4.so
+      /lib/libudev.so
     );
 
     my @matched;
     for my $lib (@libs) {
-        next unless my $hash = timed_run( 0, 'sha256sum', $lib );
-        chomp $hash;
-        $hash =~ s/\s.*//g;
-        if ( grep { /$hash/ } @hashes ) {
-            push @matched, $lib . "\n\t  SHA-256: " . $hash;
-        }
+        next if -l $lib;
+        push @matched, $lib if -f $lib;
     }
 
     if (@matched) {
