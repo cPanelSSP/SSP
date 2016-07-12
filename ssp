@@ -3201,12 +3201,15 @@ sub check_for_non_default_permissions {
         $check{'/var/run'} = { symlink => '/run', check_missing => 1 };
     }
     if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {    # CPANEL-6180 results in these log files having the APPEND-ONLY attribute
-        $check{'/usr/local/cpanel/logs/cpdavd_error_log'} = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/dnsadmin_log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/error_log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/queueprocd.log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/stats_log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/tailwatchd_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/cpdavd_error_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/cphulkd.log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/cphulkd_errors.log'} = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/cpdavd_error_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/dnsadmin_log'}       = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/error_log'}          = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/queueprocd.log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/stats_log'}          = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/tailwatchd_log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
     }
     if ( cpanel_version_is(qw( < 11.49.0.0 )) ) {
         $check{'/var/cpanel/userhomes/cpanelhorde'} = { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' };
