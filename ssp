@@ -5758,6 +5758,7 @@ sub check_for_disabled_services {
         '/etc/cpdavddisable'                     => 'cpdavd',
         '/etc/cpsrvdddisable'                    => 'cpsrvd',
         '/etc/eximdisable'                       => 'exim',
+        '/etc/exiscandisable'                    => 'exiscan',
         '/etc/disablehackcheck'                  => 'hackcheck',
         '/etc/ftpddisable'                       => 'ftpd',
         '/etc/ftpserverdisable'                  => 'ftpd',
