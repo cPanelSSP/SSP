@@ -3137,7 +3137,7 @@ sub check_for_non_default_permissions {
         $check{'/etc/apache2/conf.modules.d'}       = { mode    => ['0755'] };
         $check{'/etc/apache2/logs'}                 = { symlink => '/var/log/apache2', check_missing => 1 };
         $check{'/etc/apache2/logs/error_log'}       = { mode    => ['0644'], user => '*', perms_help => 'If users can\'t read error_log, cPanel Errors (Last 300) won\'t work.' };
-        $check{'/etc/apache2/logs/domlogs'}         = { mode    => ['0755'], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
+        $check{'/etc/apache2/logs/domlogs'}         = { mode    => [ '0711', '0755' ], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
         $check{'/etc/apache2/run'}                  = { symlink => '../../var/run/apache2', symlink_no_absolute => 1, check_missing => 1 };
         $check{'/etc/cpanel'}                       = { mode    => [ '0755', '0751', '0711' ], perms_help => 'cPanel MultiPHP needs execute access to this directory.  See CPANEL-905.' };
         $check{'/etc/cpanel/ea4'}                   = { mode    => ['0755'], perms_help => 'cPanel MultiPHP needs read access to this directory.  See CPANEL-905.' };
