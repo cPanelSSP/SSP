@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.137';
+our $VERSION = '4.99.138';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -434,6 +434,7 @@ sub run {
     check_for_modsec2_stage_files();
     check_for_cron_allow();
     check_for_license_info();
+    check_for_missing_fstab();
 
     # [3RDP]
     check_smtp_processes();
@@ -1847,6 +1848,8 @@ sub print_apache_info {
     my $output;
     my $apache_status;
 
+    $output .= "[ EA4 ] " if $EA4;
+
     if ( !$APACHE_VERSION or !$APACHE_BUILT or !$APACHE_EA_VERSION ) {
         $output .= 'could not determine Apache info!';
     }
@@ -2050,9 +2053,9 @@ sub print_ea4_php_configuration {
     my $info;
     print_info("PHP Default: ");
     if ( defined($php) && defined( $php->{default} ) && defined( $php->{ $php->{default} }->{release_version} ) && defined( $php->{ $php->{default} }->{handler} ) ) {
-        $info .= $php->{ $php->{default} }->{release_version};
-        $info .= " ( $php->{default} )" if ( $php->{default} );
-        $info .= " [ $php->{$php->{default}}->{handler} ]" if ( $php->{ $php->{default} }->{handler} );
+        $info .= "[ EA4 ]";
+        $info .= " [ " . $php->{ $php->{default} }->{release_version} . " ( " . $php->{default} . " ) ]";
+        $info .= " [ $php->{$php->{default}}->{handler} ]";
     }
     else {
         $info .= "UNKNOWN";
@@ -3137,7 +3140,7 @@ sub check_for_non_default_permissions {
         $check{'/etc/apache2/conf.modules.d'}       = { mode    => ['0755'] };
         $check{'/etc/apache2/logs'}                 = { symlink => '/var/log/apache2', check_missing => 1 };
         $check{'/etc/apache2/logs/error_log'}       = { mode    => ['0644'], user => '*', perms_help => 'If users can\'t read error_log, cPanel Errors (Last 300) won\'t work.' };
-        $check{'/etc/apache2/logs/domlogs'}         = { mode    => ['0755'], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
+        $check{'/etc/apache2/logs/domlogs'}         = { mode    => [ '0711', '0755' ], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
         $check{'/etc/apache2/run'}                  = { symlink => '../../var/run/apache2', symlink_no_absolute => 1, check_missing => 1 };
         $check{'/etc/cpanel'}                       = { mode    => [ '0755', '0751', '0711' ], perms_help => 'cPanel MultiPHP needs execute access to this directory.  See CPANEL-905.' };
         $check{'/etc/cpanel/ea4'}                   = { mode    => ['0755'], perms_help => 'cPanel MultiPHP needs read access to this directory.  See CPANEL-905.' };
@@ -3201,12 +3204,15 @@ sub check_for_non_default_permissions {
         $check{'/var/run'} = { symlink => '/run', check_missing => 1 };
     }
     if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {    # CPANEL-6180 results in these log files having the APPEND-ONLY attribute
-        $check{'/usr/local/cpanel/logs/cpdavd_error_log'} = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/dnsadmin_log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/error_log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/queueprocd.log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/stats_log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/tailwatchd_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/cpdavd_error_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/cphulkd.log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/cphulkd_errors.log'} = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/cpdavd_error_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/dnsadmin_log'}       = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/error_log'}          = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/queueprocd.log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/stats_log'}          = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/tailwatchd_log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
     }
     if ( cpanel_version_is(qw( < 11.49.0.0 )) ) {
         $check{'/var/cpanel/userhomes/cpanelhorde'} = { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' };
@@ -4997,31 +5003,38 @@ sub check_for_kernel_headers_rpm {
 
 sub check_for_broken_rpm {
     return unless @RPM_LIST;
-    my %rpms = (    # 'rpm name' => [ ['check1', 'check2', ...], 'Additional info' ] # Check types should be ordered by dependency, first failure skips other checks for that RPM.
-        'cpp'      => [ ['verify-fail'], 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"' ],
-        'cpuspeed' => [ ['exists'],      'May cause yum to crash when updating kernel, "rpm -e --nodeps cpuspeed" to fix - https://bugzilla.redhat.com/show_bug.cgi?id=1259527' ]
+    my %rpms = (    # 'rpm name' => { check => ['check1', 'check2', ...], help => 'Additional info' } # Check types should be ordered by dependency, first failure skips other checks for that RPM.
+        'cpuspeed' => { check => ['exists'], help => 'May cause yum to crash when updating kernel. Send "cpuspeed detected" predefined response.' }
     );
 
+    if ($EA4) {
+        $rpms{'ea-apache24-mod_lua'} = { check => ['exists'], help => 'Experimental. Potential security issues in shared hosting environments.' };
+        $rpms{'httpd-tools'}         = { check => ['exists'], help => 'Conflicts with ea-apache24-tools, will break EA4.' };
+    }
+    else {
+        $rpms{'cpp'} = { check => ['verify-fail'], help => 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"' };
+    }
+
     my %rpm_checks = (
-        'exists' => [
-            'RPM exists',
-            sub {    # Only care that the RPM exists.
+        'exists' => {
+            help => 'RPM exists',
+            run  => sub {           # Only care that the RPM exists.
                 my $rpm = shift;
                 return 1 if grep( /^${rpm}-/, @RPM_LIST );
                 return 0;
             }
-        ],
-        'missing' => [
-            'Missing RPM',
-            sub {    # Only care that the RPM is missing.
+        },
+        'missing' => {
+            help => 'Missing RPM',
+            run  => sub {            # Only care that the RPM is missing.
                 my $rpm = shift;
                 return 0 if grep( /^${rpm}-/, @RPM_LIST );
                 return 1;
             }
-        ],
-        'verify-fail' => [
-            'Verify Failed',
-            sub {    # Only performs check if the RPM exists.
+        },
+        'verify-fail' => {
+            help => 'Verify Failed',
+            run  => sub {              # Only performs check if the RPM exists.
                 my $rpm = shift;
                 return 0 if !grep( /^${rpm}-/, @RPM_LIST );
                 my $output = timed_run( 0, 'rpm', '-V', $rpm );
@@ -5030,15 +5043,15 @@ sub check_for_broken_rpm {
                 return 1 if $output =~ m{ \A ..5 }xms;
                 return 0;
             }
-        ]
+        }
     );
 
     for my $rpm ( sort keys %rpms ) {
-        for my $check ( @{ $rpms{$rpm}[0] } ) {
-            if ( $rpm_checks{$check}[1]->($rpm) ) {
-                my $additional_info = $rpms{$rpm}[1] ? ( "( " . $rpms{$rpm}[1] . " )" ) : '';
+        for my $check ( @{ $rpms{$rpm}{check} } ) {
+            if ( $rpm_checks{$check}{run}->($rpm) ) {
+                my $additional_info = $rpms{$rpm}{help} ? ( "( " . $rpms{$rpm}{help} . " )" ) : '';
                 print_warn('RPM check: ');
-                print_warning( $rpm_checks{$check}[0] . " - [ " . $rpm . " ] " . $additional_info );
+                print_warning( $rpm_checks{$check}{help} . " - [ " . $rpm . " ] " . $additional_info );
                 last;
             }
         }
@@ -5755,6 +5768,7 @@ sub check_for_disabled_services {
         '/etc/cpdavddisable'                     => 'cpdavd',
         '/etc/cpsrvdddisable'                    => 'cpsrvd',
         '/etc/eximdisable'                       => 'exim',
+        '/etc/exiscandisable'                    => 'exiscan',
         '/etc/disablehackcheck'                  => 'hackcheck',
         '/etc/ftpddisable'                       => 'ftpd',
         '/etc/ftpserverdisable'                  => 'ftpd',
@@ -7387,20 +7401,16 @@ sub check_for_dragnet {
 sub check_for_xor_ddos {
     my @libs = qw(
       /lib/libgcc.so
-    );
-
-    my @hashes = qw(
-      d8ebf75697902e883006fc46410558d98c667bc50ebf374d2acd5cc3bfcdc2ff
+      /lib/libgcc.so.bak
+      /lib/libgcc4.4.so
+      /lib/libgcc4.so
+      /lib/libudev.so
     );
 
     my @matched;
     for my $lib (@libs) {
-        next unless my $hash = timed_run( 0, 'sha256sum', $lib );
-        chomp $hash;
-        $hash =~ s/\s.*//g;
-        if ( grep { /$hash/ } @hashes ) {
-            push @matched, $lib . "\n\t  SHA-256: " . $hash;
-        }
+        next if -l $lib;
+        push @matched, $lib if -f $lib;
     }
 
     if (@matched) {
@@ -8449,6 +8459,12 @@ sub check_ea4_php_fpm {
     }
 
     return 1;
+}
+
+sub check_for_missing_fstab {
+    return if -e "/etc/fstab";
+    print_warn('Filesystem: ');
+    print_warning("/etc/fstab may be missing. Can cause /scripts/fixquotas to fail. See case CPANEL-6082.");
 }
 
 sub get_external_ip {
