@@ -434,6 +434,7 @@ sub run {
     check_for_modsec2_stage_files();
     check_for_cron_allow();
     check_for_license_info();
+    check_for_missing_fstab();
 
     # [3RDP]
     check_smtp_processes();
@@ -8458,6 +8459,12 @@ sub check_ea4_php_fpm {
     }
 
     return 1;
+}
+
+sub check_for_missing_fstab {
+    return if -e "/etc/fstab";
+    print_warn('Filesystem: ');
+    print_warning("/etc/fstab may be missing. Can cause /scripts/fixquotas to fail. See case CPANEL-6082.");
 }
 
 sub get_external_ip {
