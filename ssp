@@ -5002,31 +5002,37 @@ sub check_for_kernel_headers_rpm {
 
 sub check_for_broken_rpm {
     return unless @RPM_LIST;
-    my %rpms = (    # 'rpm name' => [ ['check1', 'check2', ...], 'Additional info' ] # Check types should be ordered by dependency, first failure skips other checks for that RPM.
-        'cpp'      => [ ['verify-fail'], 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"' ],
-        'cpuspeed' => [ ['exists'],      'May cause yum to crash when updating kernel. Send "cpuspeed detected" predefined response.' ]
+    my %rpms = (    # 'rpm name' => { check => ['check1', 'check2', ...], help => 'Additional info' } # Check types should be ordered by dependency, first failure skips other checks for that RPM.
+        'cpuspeed' => { check => ['exists'], help => 'May cause yum to crash when updating kernel. Send "cpuspeed detected" predefined response.' }
     );
 
+    if ($EA4) {
+        $rpms{'ea-apache24-mod_lua'} = { check => ['exists'], help => 'Experimental. Potential security issues in shared hosting environments.' };
+    }
+    else {
+        $rpms{'cpp'} = { check => ['verify-fail'], help => 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"' };
+    }
+
     my %rpm_checks = (
-        'exists' => [
-            'RPM exists',
-            sub {    # Only care that the RPM exists.
+        'exists' => {
+            help => 'RPM exists',
+            run  => sub {           # Only care that the RPM exists.
                 my $rpm = shift;
                 return 1 if grep( /^${rpm}-/, @RPM_LIST );
                 return 0;
             }
-        ],
-        'missing' => [
-            'Missing RPM',
-            sub {    # Only care that the RPM is missing.
+        },
+        'missing' => {
+            help => 'Missing RPM',
+            run  => sub {            # Only care that the RPM is missing.
                 my $rpm = shift;
                 return 0 if grep( /^${rpm}-/, @RPM_LIST );
                 return 1;
             }
-        ],
-        'verify-fail' => [
-            'Verify Failed',
-            sub {    # Only performs check if the RPM exists.
+        },
+        'verify-fail' => {
+            help => 'Verify Failed',
+            run  => sub {              # Only performs check if the RPM exists.
                 my $rpm = shift;
                 return 0 if !grep( /^${rpm}-/, @RPM_LIST );
                 my $output = timed_run( 0, 'rpm', '-V', $rpm );
@@ -5035,15 +5041,15 @@ sub check_for_broken_rpm {
                 return 1 if $output =~ m{ \A ..5 }xms;
                 return 0;
             }
-        ]
+        }
     );
 
     for my $rpm ( sort keys %rpms ) {
-        for my $check ( @{ $rpms{$rpm}[0] } ) {
-            if ( $rpm_checks{$check}[1]->($rpm) ) {
-                my $additional_info = $rpms{$rpm}[1] ? ( "( " . $rpms{$rpm}[1] . " )" ) : '';
+        for my $check ( @{ $rpms{$rpm}{check} } ) {
+            if ( $rpm_checks{$check}{run}->($rpm) ) {
+                my $additional_info = $rpms{$rpm}{help} ? ( "( " . $rpms{$rpm}{help} . " )" ) : '';
                 print_warn('RPM check: ');
-                print_warning( $rpm_checks{$check}[0] . " - [ " . $rpm . " ] " . $additional_info );
+                print_warning( $rpm_checks{$check}{help} . " - [ " . $rpm . " ] " . $additional_info );
                 last;
             }
         }
