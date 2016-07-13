@@ -274,6 +274,7 @@ sub run {
     print_ftpserver_info();
     check_for_custom_zonetemplates();
     print_news();
+    check_for_license_info();
 
     ## [WARN]
     check_port_hash();
@@ -433,7 +434,6 @@ sub run {
     check_for_missing_cloudlinux_files();
     check_for_modsec2_stage_files();
     check_for_cron_allow();
-    check_for_license_info();
     check_for_missing_fstab();
 
     # [3RDP]
@@ -5821,19 +5821,12 @@ sub check_for_disabled_services {
 }
 
 sub check_for_license_info {
-    my $host                                      = 'verify.cpanel.net';
-    my $helper_url                                = "http://" . $host;
-    my $is_licensed_for_kernelcare_through_cpanel = 0;
-    my $is_licensed_for_cloudlinux_through_cpanel = 0;
-    my $is_one_time_license                       = 0;
-
-    if ( ( defined($EXTERNAL_IP_ADDRESS) && defined($EXTERNAL_LICENSE_ADDRESS) ) && !( $EXTERNAL_IP_ADDRESS eq $EXTERNAL_LICENSE_ADDRESS ) ) {
-        print_crit('cPanel license IP: ');
-        print_critical("external IP detected via port 80 [ ${EXTERNAL_IP_ADDRESS} ] does not match IP detected via port 2089 [ ${EXTERNAL_LICENSE_ADDRESS} ] which can result in unexpected cPanel license update behavior.");
-    }
+    my $host       = 'verify.cpanel.net';
+    my $helper_url = "http://" . $host;
+    my %license;
 
     if ( defined($EXTERNAL_IP_ADDRESS) ) {
-        my $url = '/index.cgi?ip=' . $EXTERNAL_IP_ADDRESS;
+        my $url = '/?ip=' . $EXTERNAL_IP_ADDRESS;
         $helper_url .= $url;
         my $sock = IO::Socket::INET->new(
             PeerAddr => $host,
@@ -5850,32 +5843,50 @@ sub check_for_license_info {
         alarm 0;
         close $sock;
 
-        if ( $buffer =~ /alt="KernelCare"/ ) {
-            $is_licensed_for_kernelcare_through_cpanel = 1;
+        if ( $buffer =~ /alt="cPanel\/WHM"/ ) {
+            $license{'cpanel'} = "cPanel";
         }
 
-        if ( $buffer =~ /cloud_linux_os/ ) {
-            $is_licensed_for_cloudlinux_through_cpanel = 1;
+        if ( $buffer =~ /alt="CloudLinux"/ ) {
+            $license{'cloudlinux'} = "CloudLinux";
+        }
+
+        if ( $buffer =~ /alt="KernelCare"/ ) {
+            $license{'kernelcare'} = "KernelCare";
         }
 
         if ( $buffer =~ /ONE TIME FEE/ ) {
-            $is_one_time_license = 1;
+            $license{'onetime'} = "One-Time";
         }
     }
 
-    if ( $IS_KERNELCARE && $is_licensed_for_kernelcare_through_cpanel == 0 ) {
-        print_warn('KernelCare: ');
-        print_warning("POTENTIALLY NOT LICENSED! - manually verify at [ ${helper_url} ] -- use \"LICENSE - CloudLinux Not Licensed through cPanel\" if not licensed and CL support is needed");
+    if ( my $licenses = join " ", map { "[" . $license{$_} . "]" } sort keys %license ) {
+        print_info('License: ');
+        print_normal( $EXTERNAL_IP_ADDRESS . ' has ' . $licenses );
+    }
+    else {
+        print_info('License: ');
+        print_normal("Not detected - verify at ${helper_url}");
     }
 
-    if ( $IS_CLOUDLINUX && $is_licensed_for_cloudlinux_through_cpanel == 0 ) {
-        print_warn('CloudLinux: ');
-        print_warning("POTENTIALLY NOT LICENSED! - manually verify at [ ${helper_url} ] -- use \"LICENSE - CloudLinux Not Licensed through cPanel\" if not licensed and CL support is needed");
-    }
-
-    if ($is_one_time_license) {
+    if ( exists( $license{'onetime'} ) ) {
         print_warn('License: ');
-        print_warning("may be a one-time cPanel license -- manually check at [ ${helper_url} ]");
+        print_warning("may be a one-time cPanel license -- manually verify at [ ${helper_url} ]");
+    }
+
+    if ( ( defined($EXTERNAL_IP_ADDRESS) && defined($EXTERNAL_LICENSE_ADDRESS) ) && !( $EXTERNAL_IP_ADDRESS eq $EXTERNAL_LICENSE_ADDRESS ) ) {
+        print_crit('License: ');
+        print_critical("external IP detected via port 80 [ ${EXTERNAL_IP_ADDRESS} ] does not match IP detected via port 2089 [ ${EXTERNAL_LICENSE_ADDRESS} ] which can result in unexpected cPanel license update behavior.");
+    }
+
+    if ( $IS_CLOUDLINUX && !exists( $license{'cloudlinux'} ) ) {
+        print_warn('CloudLinux: ');
+        print_warning("MAY NOT BE LICENSED! - verify at ${helper_url} - use \"LICENSE - CloudLinux Not Licensed through cPanel\" if relevant");
+    }
+
+    if ( $IS_KERNELCARE && !exists( $license{'kernelcare'} ) ) {
+        print_warn('KernelCare: ');
+        print_warning("MAY NOT BE LICENSED! - verify at ${helper_url} - use \"LICENSE - CloudLinux Not Licensed through cPanel\" if relevant");
     }
 
 }
