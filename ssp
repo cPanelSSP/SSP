@@ -4785,19 +4785,9 @@ sub check_for_extra_mysql_config_files {
       /var/lib/mysql/my.cnf
     );
     my @found_locations = ();
-    my %ignore          = qw(
-      7dde279cefb53c7e2779af069f5569fb  /usr/my.cnf
-    );
 
     for my $loc (@extra_locations) {
-        if ( -f $loc && !-z $loc ) {
-            chomp( my $sum = timed_run( 0, 'md5sum', $loc ) );
-            if ( defined($sum) ) {
-                $sum =~ s/\s.*//g;
-                next if exists $ignore{$sum};
-            }
-            push @found_locations, $loc;
-        }
+        push @found_locations, $loc if -f $loc;
     }
 
     return if !@found_locations;
