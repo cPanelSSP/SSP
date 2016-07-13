@@ -5008,6 +5008,7 @@ sub check_for_broken_rpm {
 
     if ($EA4) {
         $rpms{'ea-apache24-mod_lua'} = { check => ['exists'], help => 'Experimental. Potential security issues in shared hosting environments.' };
+        $rpms{'httpd-tools'}         = { check => ['exists'], help => 'Conflicts with ea-apache24-tools, will break EA4.' };
     }
     else {
         $rpms{'cpp'} = { check => ['verify-fail'], help => 'Missing or modified files, may cause EasyApache to fail, verify with "rpm -V cpp"' };
