@@ -436,6 +436,7 @@ sub run {
     check_for_cron_allow();
     check_for_missing_fstab();
     check_for_dev_sandbox();
+    check_for_jail_owner();
 
     # [3RDP]
     check_smtp_processes();
@@ -573,7 +574,6 @@ sub check_for_dnsonly {
         check_for_perl_env_var();
         check_cpanel_config();
         check_cpanel_config_for_bad_root();
-        check_for_dev_sandbox();
 
         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
         check_etc_hosts_sanity();
@@ -592,6 +592,8 @@ sub check_for_dnsonly {
         check_for_harmful_php_mode_600_cron();
         check_updatelog();
         check_for_readonly_filesystems();
+        check_for_dev_sandbox();
+        check_for_jail_owner();
 
         ## [3RDP]
         check_for_apf();
@@ -6141,6 +6143,12 @@ sub check_for_dev_sandbox {
     return if !-e '/var/cpanel/dev_sandbox';
     print_warn('/var/cpanel/dev_sandbox: ');
     print_warning('exists! Should NEVER exist on production servers.');
+}
+
+sub check_for_jail_owner {
+    return if !-e '/jail_owner';
+    print_warn('/jail_owner: ');
+    print_warning('exists! Should NEVER exist outside of jailshell.  Will cause Exim mail delivery issues.');
 }
 
 sub check_for_phphandler_and_opcode_caching_incompatibility {
