@@ -435,6 +435,7 @@ sub run {
     check_for_modsec2_stage_files();
     check_for_cron_allow();
     check_for_missing_fstab();
+    check_for_dev_sandbox();
 
     # [3RDP]
     check_smtp_processes();
@@ -572,6 +573,7 @@ sub check_for_dnsonly {
         check_for_perl_env_var();
         check_cpanel_config();
         check_cpanel_config_for_bad_root();
+        check_for_dev_sandbox();
 
         # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
         check_etc_hosts_sanity();
@@ -6133,6 +6135,12 @@ sub check_for_stupid_touchfile {
     return if !-e '/etc/allowstupidstuff';
     print_warn('/etc/allowstupidstuff: ');
     print_warning('exists! Can allow usernames to be created that begin with digits.');
+}
+
+sub check_for_dev_sandbox {
+    return if !-e '/var/cpanel/dev_sandbox';
+    print_warn('/var/cpanel/dev_sandbox: ');
+    print_warning('exists! Should NEVER exist on production servers.');
 }
 
 sub check_for_phphandler_and_opcode_caching_incompatibility {
