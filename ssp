@@ -879,8 +879,12 @@ sub timed_run_trap_stderr {    # Borrowed from Cpanel::SafeRun::Timed and modifi
 
 sub get_local_ipaddrs {
     my @local_ipaddrs_list;
-    my @ifconfig = split /\n/, timed_run( 0, 'ifconfig', '-a' );
-    for my $line (@ifconfig) {
+    my @output;
+
+    unless ( @output = split /\n/, timed_run( 0, 'ip', 'addr' ) ) {
+        @output = split /\n/, timed_run( 0, 'ifconfig', '-a' );
+    }
+    for my $line (@output) {
         if ( $line =~ m{ (\d+\.\d+\.\d+\.\d+) }xms ) {
             my $ipaddr = $1;
             unless ( $ipaddr =~ m{ \A 127\. }xms ) {
