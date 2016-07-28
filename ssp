@@ -2697,10 +2697,13 @@ sub check_valid_upcp {
 
 sub check_interface_lo {
     my $is_up = 0;
+    my $output;
 
-    my $ifconfig_lo = timed_run( 0, 'ifconfig', 'lo' );
+    unless ( $output = timed_run( 0, 'ip', 'addr', 'show', 'dev', 'lo' ) ) {
+        $output = timed_run( 0, 'ifconfig', 'lo' );
+    }
 
-    if ( $ifconfig_lo =~ /UP.LOOPBACK/ ) {
+    if ( $output =~ /UP.LOOPBACK|LOOPBACK.UP/ ) {    # ip addr and ifconfig swap the LOOPBACK and UP keywords
         $is_up = 1;
     }
 
