@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.139';
+our $VERSION = '4.99.140';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -46,6 +46,7 @@ our $HTTPD_PATH;
 our $CPANEL_VERSION;    # Current cpanel version of system
 our $HOSTNAME;
 our $OS;
+our $IS_CPANEL     = 0;
 our $IS_CLOUDLINUX = 0;
 our $IS_KERNELCARE = 0;
 our ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES );
@@ -91,10 +92,6 @@ our $EA4_PHP_FPM;               # Boolean flag indicating if easyapache4's php f
 # Initialize application by setting loading all global variables
 # (except the RPM variables).  That's done within run()
 sub init {
-    if ( !-d '/usr/local/cpanel' ) {
-        die '/usr/local/cpanel not found';
-    }
-
     if ( $^O ne 'linux' ) {
         die "Unknown OS: $^O (only Linux is supported)";
     }
@@ -102,95 +99,96 @@ sub init {
     if ( $< != 0 ) {
         die "SSP must be run as root\n";
     }
-
     $ENV{'PATH'}                = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
     $|                          = 1;
     $Term::ANSIColor::AUTORESET = 1;
-
-    $CPANEL_VERSION           = get_cpanel_version();
-    $EA4                      = is_ea4();
-    $EXTERNAL_IP_ADDRESS      = get_external_ip('80');
-    $EXTERNAL_LICENSE_ADDRESS = get_external_ip('2089');
-    $HTTPD_PATH               = get_httpd_path();                # location of operative httpd
-    $IS_KERNELCARE            = is_kernelcare();
-    @PHPINI                   = get_phpini();
-    $LIBKEYUTILS_FILES_REF    = build_libkeyutils_file_list();
-    $HOSTNAME                 = hostname();
-    $OS                       = get_os();
-    $TIERS                    = get_tiers_file();
-    @LOCAL_IPADDRS_LIST       = get_local_ipaddrs();
-    @PROCESS_LIST             = get_process_list();
-    $PROCESS_REF              = get_process_pid_hash();
-    $PORT_REF                 = get_lsof_port_hash();
-    $IPCS_REF                 = get_ipcs_hash();
-    $HOSTINFO                 = get_hostinfo();
-    $CPUINFO                  = get_cpuinfo();
-    $MEMINFO                  = get_meminfo();
-    $SYSCTL                   = get_sysctl();
-    $MYSQL_CONF               = get_mysql_conf();
-    $MYSQL_DATADIR            = get_mysql_datadir();             # needs $MYSQL_CONF
-    $MYSQL_ERROR_LOG          = get_mysql_error_log();           # needs $MYSQL_CONF
-    $PUREFTPDCONF             = get_pureftpd_conf();
-    $PROFTPDCONF              = get_proftpd_conf();
-    $EA4_PHP_FPM              = get_ea4_php_fpm_status();
-    $APACHE_PER_USER          = "none";
+    @LOCAL_IPADDRS_LIST         = get_local_ipaddrs();
+    @PROCESS_LIST               = get_process_list();
+    $PROCESS_REF                = get_process_pid_hash();
+    $PORT_REF                   = get_lsof_port_hash();
+    $IPCS_REF                   = get_ipcs_hash();
+    $HOSTINFO                   = get_hostinfo();
+    $CPUINFO                    = get_cpuinfo();
+    $MEMINFO                    = get_meminfo();
+    $SYSCTL                     = get_sysctl();
+    $EXTERNAL_IP_ADDRESS        = get_external_ip('80');
+    $EXTERNAL_LICENSE_ADDRESS   = get_external_ip('2089');
+    $IS_KERNELCARE              = is_kernelcare();
+    $LIBKEYUTILS_FILES_REF      = build_libkeyutils_file_list();
+    $HOSTNAME                   = hostname();
+    $OS                         = get_os();
     ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES ) = get_os_info();
     if ( $OS_TYPE eq "cloudlinux" ) { $IS_CLOUDLINUX = 1; }
-    ( $OLD_BACKUP_CONF,   $NEW_BACKUP_CONF )      = get_backup_config();
-    ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION ) = get_lsws_version();
+    $MYSQL_CONF      = get_mysql_conf();
+    $MYSQL_DATADIR   = get_mysql_datadir();           # needs $MYSQL_CONF
+    $MYSQL_ERROR_LOG = get_mysql_error_log();         # needs $MYSQL_CONF
+    $IS_CPANEL       = 1 if -d '/usr/local/cpanel';
 
-    if ($HTTPD_PATH) {
-        @APACHE_VERSION_OUTPUT = split /\n/, timed_run( 0, $HTTPD_PATH, '-v' );
-        @APACHE_MODULES_OUTPUT = split /\n/, timed_run( 0, $HTTPD_PATH, '-M' );
+    if ($IS_CPANEL) {
+        $CPANEL_VERSION  = get_cpanel_version();
+        $EA4             = is_ea4();
+        $HTTPD_PATH      = get_httpd_path();           # location of operative httpd
+        @PHPINI          = get_phpini();
+        $TIERS           = get_tiers_file();
+        $PUREFTPDCONF    = get_pureftpd_conf();
+        $PROFTPDCONF     = get_proftpd_conf();
+        $EA4_PHP_FPM     = get_ea4_php_fpm_status();
+        $APACHE_PER_USER = "none";
+        ( $OLD_BACKUP_CONF,   $NEW_BACKUP_CONF )      = get_backup_config();
+        ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION ) = get_lsws_version();
 
-        for (@APACHE_VERSION_OUTPUT) {
-            if (m{ \A Server \s+ version: \s+ Apache/(.*) \s \(.*\)\z }xms) {
-                $APACHE_VERSION = $1;
+        if ($HTTPD_PATH) {
+            @APACHE_VERSION_OUTPUT = split /\n/, timed_run( 0, $HTTPD_PATH, '-v' );
+            @APACHE_MODULES_OUTPUT = split /\n/, timed_run( 0, $HTTPD_PATH, '-M' );
+
+            for (@APACHE_VERSION_OUTPUT) {
+                if (m{ \A Server \s+ version: \s+ Apache/(.*) \s \(.*\)\z }xms) {
+                    $APACHE_VERSION = $1;
+                }
+                if (m{ \A Server \s+ built: \s+ (.*) \z }xms) {
+                    $APACHE_BUILT = $1;
+                    $APACHE_BUILT =~ s/^\s+//g;
+                }
+                if ( !$EA4 ) {
+                    if (m{ \A Cpanel::Easy::Apache \s+ (.*) \z }xms) {
+                        $APACHE_EA_VERSION = $1;
+                    }
+                }
             }
-            if (m{ \A Server \s+ built: \s+ (.*) \z }xms) {
-                $APACHE_BUILT = $1;
-                $APACHE_BUILT =~ s/^\s+//g;
+
+            if ($EA4) {
+                chomp( $APACHE_EA_VERSION = timed_run( 0, 'rpm', '-qf', $HTTPD_PATH ) );
+                $APACHE_EA_VERSION =~ s/\.\w\d{1,3}\D+\d+\n//;
             }
-            if ( !$EA4 ) {
-                if (m{ \A Cpanel::Easy::Apache \s+ (.*) \z }xms) {
-                    $APACHE_EA_VERSION = $1;
+
+            $APACHE_MODSEC = 0;
+            for (@APACHE_MODULES_OUTPUT) {
+                if (/ruid2_module/) {    #
+                    $APACHE_PER_USER = "ruid2";
+                }
+                if (/mpm_itk_module/) {
+                    $APACHE_PER_USER = "itk";
+                }
+                if (/security\d?_module/) {
+                    $APACHE_MODSEC = 1;
                 }
             }
         }
 
-        if ($EA4) {
-            chomp( $APACHE_EA_VERSION = timed_run( 0, 'rpm', '-qf', $HTTPD_PATH ) );
-            $APACHE_EA_VERSION =~ s/\.\w\d{1,3}\D+\d+\n//;
-        }
+        # TODO: use +c 15 so the entire process name is displayed if >9 chars
+        @LSOF_80 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:80' );
 
-        $APACHE_MODSEC = 0;
-        for (@APACHE_MODULES_OUTPUT) {
-            if (/ruid2_module/) {    #
-                $APACHE_PER_USER = "ruid2";
+        {
+            if ( open( my $cpconf_fh, '<', '/var/cpanel/cpanel.config' ) ) {
+                local $/ = undef;
+                %CPCONF = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($cpconf_fh) );
+                close $cpconf_fh;
             }
-            if (/mpm_itk_module/) {
-                $APACHE_PER_USER = "itk";
-            }
-            if (/security\d?_module/) {
-                $APACHE_MODSEC = 1;
+            else {
+                die "/var/cpanel/cpanel.config could not be opened. Unable to proceed.\n";
             }
         }
     }
-
-    # TODO: use +c 15 so the entire process name is displayed if >9 chars
-    @LSOF_80 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:80' );
-
-    {
-        if ( open( my $cpconf_fh, '<', '/var/cpanel/cpanel.config' ) ) {
-            local $/ = undef;
-            %CPCONF = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($cpconf_fh) );
-            close $cpconf_fh;
-        }
-        else {
-            die "/var/cpanel/cpanel.config could not be opened. Unable to proceed.\n";
-        }
-    }
-
     $SIG{'INT'} = sub {
         print "\n\nJust being impatient, or did SSP actually hang? What if it didn't get a chance to check something really important?\n";
         print "\nIf you really want out of here and it didn't work the first time then you interrupted a child and not the parent process. Keep hitting CTRL+C.\n";
@@ -230,6 +228,11 @@ sub run {
 
     if ($OPT_CSI) {
         csi_checks_only();
+        exit;
+    }
+
+    unless ($IS_CPANEL) {
+        non_cpanel_checks_only();
         exit;
     }
 
@@ -435,6 +438,8 @@ sub run {
     check_for_modsec2_stage_files();
     check_for_cron_allow();
     check_for_missing_fstab();
+    check_for_dev_sandbox();
+    check_for_jail_owner();
 
     # [3RDP]
     check_smtp_processes();
@@ -505,6 +510,138 @@ sub run {
     check_for_frontpage_rpms();
     check_for_prelink();
     check_for_broken_rpm();
+
+    print_info2('Done.');
+
+    if ($CRIT_BUFFER) {
+        print_magenta("\n\nThere was critical-level output above, here it is again:");
+        print $CRIT_BUFFER;
+    }
+
+    return 0;
+}
+
+# All checks for non-cPanel systems go here
+sub non_cpanel_checks_only {
+    print "\n";
+    for ( 1 .. 3 ) {
+        print BOLD GREEN ON_RED "\tPlease DO NOT paste output from SSP into tickets unless it is relevant to an issue" . RESET . "\n";
+    }
+    print_critical("\nCPANEL IS NOT INSTALLED ON THIS SERVER! SOME SSP OUTPUT MAY NOT BE RELEVANT!\n");
+
+    print_version();
+
+    ## [CRIT] -- only stuff that we should check as early as possible
+    check_for_hacked_server_touchfile();
+    check_for_multiple_tech_logins();
+    check_for_lve_environment();
+    check_for_os_release_5();
+    check_for_os_release_32bit();
+
+    ## [INFO]
+    print "\n";
+    print_hostname();
+    print_os();
+    print_kernel_and_cpu();
+    print_kernelcare_info();
+    print_uptime();
+    check_for_remote_mysql();
+    print_mysql_version();
+    check_for_license_info();
+
+    ## [WARN]
+    check_selinux_status();
+    check_runlevel();
+    check_interface_lo();
+    check_perl_sanity();
+    check_for_non_default_permissions();
+    check_for_non_default_sysctl();
+    check_limitsconf();
+    check_disk_space();
+    check_disk_inodes();
+    check_for_gdm();
+    check_for_unsupported_nat();
+    check_for_oracle_linux();
+    check_for_proc_mdstat_recovery();
+    check_for_system_mem_below_required();
+    check_yumconf_sanity();
+    check_for_cpsources_conf();
+    check_etc_hosts_sanity();
+    check_mysql_config();
+    check_for_extra_mysql_config_files();
+    check_perl_version_less_than_588();
+    check_for_low_ulimit_for_root();
+    check_for_non_default_umask();
+    check_for_clock_skew();
+    check_for_custom_postgres_repo();
+    check_for_odd_yum_conf();
+    check_for_noxsave_in_grub_conf();
+    check_for_networkmanager();
+    check_for_dhclient();
+    check_for_missing_etc_localtime();
+    check_for_cloudlinux_mysql_gov();
+    check_for_perl_env_var();
+    check_for_uppercase_chars_in_hostname();
+    check_for_mysql_root_pass_with_single_quote();
+    check_for_nocloudlinux_touchfile();
+    check_for_processes_killed_by_lfd();
+    check_for_processes_killed_by_oom();
+    check_for_processes_killed_by_prm();
+    check_for_extra_uid_0_user();
+    check_for_broken_mysqldump();
+    check_for_readonly_filesystems();
+    check_for_missing_cloudlinux_files();
+    check_for_missing_fstab();
+    check_for_dev_sandbox();
+
+    # [3RDP]
+    check_for_apf();
+    check_for_csf();
+    check_for_prm();
+    check_for_les();
+    check_for_els();
+    check_for_usr_local_mis();
+    check_for_opt_gsi_tools();
+
+    # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
+    check_for_bash_secadv_20140924();     # advisory
+    check_for_exim_cve_2016_1531();       # advisory
+    check_for_UMBREON_rootkit();          # malware
+    check_for_libms_rootkit();            # malware
+    check_for_jynx2_rootkit();            # malware
+    check_for_cdorked_A();                # malware
+    check_for_cdorked_B();                # malware
+    check_for_libkeyutils_filenames();    # malware
+    check_sha1_sigs_libkeyutils();        # malware
+    check_sha1_sigs_httpd();              # malware
+    check_sha1_sigs_named();              # malware
+    check_sha1_sigs_ssh();                # malware
+    check_sha1_sigs_ssh_add();            # malware
+    check_sha1_sigs_sshd();               # malware
+    check_for_ebury_ssh_G();              # malware
+    check_for_ebury_ssh_banner();         # malware
+    check_for_ebury_ssh_shmem();          # malware
+    check_for_ebury_root_file();          # malware
+    check_for_ebury_socket();             # malware
+    check_for_bg_botnet();                # malware
+    check_for_dragnet();                  # malware
+    check_for_xor_ddos();                 # malware
+    check_for_ncom_filenames();           # malware
+
+    # These are run closer to the end since it has the potential to take the longest due to RPM usage
+    build_rpm_list();
+    build_openssl_rpm_changelog();
+
+    # These require build_rpm_list() to have been run, so that @rpm_list is populated
+    populate_mysql_rpm_versions_array();
+    check_for_mysql_4();
+    check_for_additional_rpms();
+    check_mysql_rpm_mismatch();
+    check_for_percona_rpms();
+    check_for_duplicate_rpms();
+    check_for_better_linux();
+    check_for_kernel_headers_rpm();
+    check_for_prelink();
 
     print_info2('Done.');
 
@@ -590,6 +727,8 @@ sub check_for_dnsonly {
         check_for_harmful_php_mode_600_cron();
         check_updatelog();
         check_for_readonly_filesystems();
+        check_for_dev_sandbox();
+        check_for_jail_owner();
 
         ## [3RDP]
         check_for_apf();
@@ -779,8 +918,7 @@ sub version_compare {
 }
 
 sub cpanel_version_is {
-
-    # example: return if cpanel_version_is(qw( >= 11.42.1.16 ));
+    return if !defined($CPANEL_VERSION);
     return if $CPANEL_VERSION eq "unknown";
     my ( $mode, $ver ) = @_;
     return version_compare( $CPANEL_VERSION, $mode, $ver );
@@ -879,8 +1017,12 @@ sub timed_run_trap_stderr {    # Borrowed from Cpanel::SafeRun::Timed and modifi
 
 sub get_local_ipaddrs {
     my @local_ipaddrs_list;
-    my @ifconfig = split /\n/, timed_run( 0, 'ifconfig', '-a' );
-    for my $line (@ifconfig) {
+    my @output;
+
+    unless ( @output = split /\n/, timed_run( 0, 'ip', 'addr' ) ) {
+        @output = split /\n/, timed_run( 0, 'ifconfig', '-a' );
+    }
+    for my $line (@output) {
         if ( $line =~ m{ (\d+\.\d+\.\d+\.\d+) }xms ) {
             my $ipaddr = $1;
             unless ( $ipaddr =~ m{ \A 127\. }xms ) {
@@ -1198,9 +1340,9 @@ sub get_environment {
     else {
         $envtype = timed_run( 0, '/usr/local/cpanel/bin/envtype' );
     }
-    chomp $envtype;
+    chomp $envtype if $envtype;
     if ( !$envtype ) {
-        return 'Unknown (could not open/read /var/cpanel/envtype ?)';
+        return 'unknown-envtype';
     }
     return $envtype;
 }
@@ -2240,10 +2382,12 @@ sub print_mysql_version {
         chomp $mysql_output;
         print_info('MySQL Version: ');
         print_normal($mysql_output);
-        my $mysql_distrib = "Distrib " . $CPCONF{'mysql-version'};
-        chomp($mysql_distrib);
-        if ( !( $mysql_output =~ m/$mysql_distrib/ ) ) {
-            print_warning( "\t \\_ mysql-version=" . $CPCONF{'mysql-version'} . ' in cpanel.config does not match installed version!' );
+        if ($IS_CPANEL) {
+            my $mysql_distrib = "Distrib " . $CPCONF{'mysql-version'};
+            chomp($mysql_distrib);
+            if ( !( $mysql_output =~ m/$mysql_distrib/ ) ) {
+                print_warning( "\t \\_ mysql-version=" . $CPCONF{'mysql-version'} . ' in cpanel.config does not match installed version!' );
+            }
         }
     }
 }
@@ -2693,10 +2837,13 @@ sub check_valid_upcp {
 
 sub check_interface_lo {
     my $is_up = 0;
+    my $output;
 
-    my $ifconfig_lo = timed_run( 0, 'ifconfig', 'lo' );
+    unless ( $output = timed_run( 0, 'ip', 'addr', 'show', 'dev', 'lo' ) ) {
+        $output = timed_run( 0, 'ifconfig', 'lo' );
+    }
 
-    if ( $ifconfig_lo =~ /UP.LOOPBACK/ ) {
+    if ( $output =~ /UP.LOOPBACK|LOOPBACK.UP/ ) {    # ip addr and ifconfig swap the LOOPBACK and UP keywords
         $is_up = 1;
     }
 
@@ -2710,6 +2857,7 @@ sub check_interface_lo {
 }
 
 sub check_loopback_connection {
+    return unless $IS_CPANEL;
     my @ports     = qw( 25 80 143 );
     my $connected = 0;
 
@@ -5206,106 +5354,65 @@ sub check_for_broken_mysql_horde {
 }
 
 sub check_for_clock_skew {
-    ## last updated 2/14/14
+    ## last updated 2016-07-28
     ## we do this to avoid having to do the DNS lookup
     my @rdate_servers = qw(
-      64.50.161.11
-      66.23.237.210
-      67.159.2.2
-      67.205.110.4
-      67.222.0.10
-      67.227.128.74
-      69.50.192.73
-      69.72.212.10
-      69.72.212.11
-      70.87.220.252
-      72.233.42.250
-      74.200.212.130
-      74.200.65.162
-      74.50.120.123
-      75.126.236.226
-      75.127.84.226
-      208.109.109.239
-      208.74.123.21
-      208.74.125.42
-      208.78.42.4
-      208.82.118.100
-      209.188.92.54
-      209.85.80.214
-      216.104.43.138
-      216.38.56.98
+      208.74.121.36
+      208.74.121.43
+      208.74.125.89
+      208.74.125.90
     );
-
-    my $num          = int rand scalar @rdate_servers;
-    my $rdate_server = $rdate_servers[$num];
 
     my $localtime = time();
     my $rdate_time;
     my $clock_skew;
-    my $has_dovecot = 0;
 
     my %months = qw(
       Jan 0   Feb 1   Mar 2   Apr 3   May 4   Jun 5
       Jul 6   Aug 7   Sep 8   Oct 9   Nov 10  Dec 11
     );
 
-    $rdate_time = timed_run( 0, 'rdate', '-p', '-t', '1', $rdate_server );
-
-    ## fall back to UDP if necessary
-    ## we don't use UDP first because many of the rdate servers don't reply when using it
-    if ( !$rdate_time ) {
-        $rdate_time = timed_run( 0, 'rdate', '-p', '-t', '1', '-u', $rdate_server );
+    for ( 1 .. 2 ) {
+        my $num = int rand scalar @rdate_servers;
+        $rdate_time = timed_run( 10, 'rdate', '-p', '-t', '3', $rdate_servers[$num] );
+        last if $rdate_time;
     }
 
     return if !$rdate_time;
 
-    $rdate_time =~ s/\A rdate: \s \[rdate\.cpanel\.net\] \s+//gxms;
+    $rdate_time =~ s/\A rdate: \s \[[^\]]+\] \s+//gxms;
 
     if ( $rdate_time =~ m{ \A \S+ \s (\S+) \s (\d+) \s (\d+):(\d+):(\d+) \s (\d+) }xms ) {
         my ( $mon, $mday, $hour, $min, $sec, $year ) = ( $1, $2, $3, $4, $5, $6 );
         $mon = $months{$mon};
         $rdate_time = timelocal( $sec, $min, $hour, $mday, $mon, $year );
     }
-
-    return if ( $rdate_time !~ /\d{10}/ );
+    return if ( $rdate_time !~ /\d{10,}/ );
 
     $clock_skew = ( $rdate_time - $localtime );
     $clock_skew = abs $clock_skew;                # convert negative numbers to positive
 
-    return if ( $clock_skew < 60 );
+    return if ( $clock_skew < 120 );
 
     if ( $clock_skew >= 31536000 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 31536000 );
-        $clock_skew .= ' years';
+        $clock_skew = sprintf '%d', ( $clock_skew / 31536000 );
+        $clock_skew .= ' year(s)';
     }
     elsif ( $clock_skew >= 86400 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 86400 );
-        $clock_skew .= ' days';
+        $clock_skew = sprintf '%d', ( $clock_skew / 86400 );
+        $clock_skew .= ' day(s)';
     }
     elsif ( $clock_skew >= 3600 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 3600 );
-        $clock_skew .= ' hours';
+        $clock_skew = sprintf '%d', ( $clock_skew / 3600 );
+        $clock_skew .= ' hour(s)';
     }
     elsif ( $clock_skew >= 60 ) {
-        $clock_skew = sprintf '%.1f', ( $clock_skew / 60 );
-        $clock_skew .= ' minutes';
+        $clock_skew = sprintf '%d', ( $clock_skew / 60 );
+        $clock_skew .= ' minute(s)';
     }
 
-    for my $process (@PROCESS_LIST) {
-        if ( $process =~ m{ \A root (.*) dovecot }xms ) {
-            $has_dovecot = 1;
-            last;
-        }
-    }
-
-    if ( $has_dovecot == 0 and $clock_skew !~ /minutes/ ) {
-        print_warn('Clock skew: ');
-        print_warning("servers time may be off by $clock_skew");
-    }
-    elsif ( $has_dovecot == 1 ) {
-        print_warn('Clock skew: ');
-        print_warning("server time may be off by ${clock_skew}. This can cause Dovecot to die during upcp");
-    }
+    print_warn('Clock skew: ');
+    print_warning("server time may be off by ${clock_skew}. Large time offsets may cause SSL-related problems or Dovecot to die during upcp.");
 }
 
 sub check_for_zlib_h {
@@ -6126,6 +6233,18 @@ sub check_for_stupid_touchfile {
     return if !-e '/etc/allowstupidstuff';
     print_warn('/etc/allowstupidstuff: ');
     print_warning('exists! Can allow usernames to be created that begin with digits.');
+}
+
+sub check_for_dev_sandbox {
+    return if !-e '/var/cpanel/dev_sandbox';
+    print_warn('/var/cpanel/dev_sandbox: ');
+    print_warning('exists! Should NEVER exist on production servers.');
+}
+
+sub check_for_jail_owner {
+    return if !-e '/jail_owner';
+    print_warn('/jail_owner: ');
+    print_warning('exists! Should NEVER exist outside of jailshell.  Will cause Exim mail delivery issues.');
 }
 
 sub check_for_phphandler_and_opcode_caching_incompatibility {
