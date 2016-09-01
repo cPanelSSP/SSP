@@ -231,6 +231,11 @@ sub run {
         exit;
     }
 
+    if ( -e '/var/cpanel/dnsonly' ) {
+        dnsonly_checks_only();
+        exit;
+    }
+
     unless ($IS_CPANEL) {
         non_cpanel_checks_only();
         exit;
@@ -251,7 +256,6 @@ sub run {
 
     ## [INFO]
     print "\n";
-    check_for_dnsonly();
     print_tip();
     print_version();
     print_hostname();
@@ -464,32 +468,10 @@ sub run {
     check_for_opt_gsi_tools();
 
     # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
-    check_for_unsupported_php();          # Extreme care!
-    check_for_bash_secadv_20140924();     # advisory
-    check_for_exim_cve_2016_1531();       # advisory
-    check_for_UMBREON_rootkit();          # malware
-    check_for_libms_rootkit();            # malware
-    check_for_jynx2_rootkit();            # malware
-    check_for_cdorked_A();                # malware
-    check_for_cdorked_B();                # malware
-    check_for_libkeyutils_filenames();    # malware
-                                          #check_for_unowned_libkeyutils_files($LIBKEYUTILS_FILES_REF);    # malware
-    check_sha1_sigs_libkeyutils();        # malware
-    check_sha1_sigs_httpd();              # malware
-    check_sha1_sigs_named();              # malware
-    check_sha1_sigs_ssh();                # malware
-    check_sha1_sigs_ssh_add();            # malware
-    check_sha1_sigs_sshd();               # malware
-    check_for_ebury_ssh_G();              # malware
-    check_for_ebury_ssh_banner();         # malware
-    check_for_ebury_ssh_shmem();          # malware
-    check_for_ebury_root_file();          # malware
-    check_for_ebury_socket();             # malware
-    check_for_bg_botnet();                # malware
-    check_for_dragnet();                  # malware
-    check_for_xor_ddos();                 # malware
-    check_for_shellbot();                 # malware
-    check_for_ncom_filenames();           # malware
+    check_for_unsupported_php();         # Extreme care!
+    check_for_bash_secadv_20140924();    # advisory
+    check_for_exim_cve_2016_1531();      # advisory
+    all_malware_checks();
 
     # These are run closer to the end since it has the potential to take the longest due to RPM usage
     build_rpm_list();
@@ -605,30 +587,9 @@ sub non_cpanel_checks_only {
     check_for_opt_gsi_tools();
 
     # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
-    check_for_bash_secadv_20140924();     # advisory
-    check_for_exim_cve_2016_1531();       # advisory
-    check_for_UMBREON_rootkit();          # malware
-    check_for_libms_rootkit();            # malware
-    check_for_jynx2_rootkit();            # malware
-    check_for_cdorked_A();                # malware
-    check_for_cdorked_B();                # malware
-    check_for_libkeyutils_filenames();    # malware
-    check_sha1_sigs_libkeyutils();        # malware
-    check_sha1_sigs_httpd();              # malware
-    check_sha1_sigs_named();              # malware
-    check_sha1_sigs_ssh();                # malware
-    check_sha1_sigs_ssh_add();            # malware
-    check_sha1_sigs_sshd();               # malware
-    check_for_ebury_ssh_G();              # malware
-    check_for_ebury_ssh_banner();         # malware
-    check_for_ebury_ssh_shmem();          # malware
-    check_for_ebury_root_file();          # malware
-    check_for_ebury_socket();             # malware
-    check_for_bg_botnet();                # malware
-    check_for_dragnet();                  # malware
-    check_for_xor_ddos();                 # malware
-    check_for_shellbot();                 # malware
-    check_for_ncom_filenames();           # malware
+    check_for_bash_secadv_20140924();    # advisory
+    check_for_exim_cve_2016_1531();      # advisory
+    all_malware_checks();
 
     # These are run closer to the end since it has the potential to take the longest due to RPM usage
     build_rpm_list();
@@ -656,141 +617,136 @@ sub non_cpanel_checks_only {
 }
 
 # All checks for DNSONLY go here
-sub check_for_dnsonly {
-    if ( -e '/var/cpanel/dnsonly' ) {
+sub dnsonly_checks_only {
+    print "\n";
+    for ( 1 .. 3 ) {
+        print BOLD GREEN ON_RED "\tPlease DO NOT paste output from SSP into tickets unless it is relevant to an issue" . RESET . "\n";
+    }
 
-        print_version();
-        print_start("\t\tDNSONLY: ");
-        print_warning("/var/cpanel/dnsonly detected, assuming DNSONLY\n");
+    print_version();
+    print_start("\t\tDNSONLY: ");
+    print_warning("/var/cpanel/dnsonly detected, assuming DNSONLY\n");
 
-        ## [CRIT] -- only stuff that we should check as early as possible
-        check_for_hacked_server_touchfile();
-        check_for_multiple_tech_logins();
-        check_for_lve_environment();
-        check_for_os_release_5();
-        check_for_os_release_7();
-        check_for_os_release_32bit();
+    ## [CRIT] -- only stuff that we should check as early as possible
+    check_for_hacked_server_touchfile();
+    check_for_multiple_tech_logins();
+    check_for_lve_environment();
+    check_for_os_release_5();
+    check_for_os_release_7();
+    check_for_os_release_32bit();
 
-        ## [INFO]
-        print_hostname();
-        print_os();
-        print_kernel_and_cpu();
-        print_kernelcare_info();
-        print_cpanel_info();
-        check_for_cpanel_update();
-        print_uptime();
-        check_for_clustering();
-        check_sysinfo();
+    ## [INFO]
+    print_hostname();
+    print_os();
+    print_kernel_and_cpu();
+    print_kernelcare_info();
+    print_cpanel_info();
+    check_for_cpanel_update();
+    print_uptime();
+    check_for_clustering();
+    check_sysinfo();
 
-        ## [WARN]
-        check_port_hash();
-        check_selinux_status();
-        check_runlevel();
-        check_for_missing_root_cron();
-        check_if_upcp_is_running();
-        check_interface_lo();
-        check_cpanelconfig_filetype();
-        check_cpanelsync_exclude();
-        check_perl_sanity();
-        check_for_non_default_permissions();
-        check_limitsconf();
-        check_disk_space();
-        check_disk_inodes();
-        check_for_gdm();
-        check_for_redhat_firewall();
-        check_for_home_noexec();
-        check_for_unsupported_nat();
-        check_for_oracle_linux();
-        check_for_proc_mdstat_recovery();
-        check_usr_local_cpanel_path_for_symlinks();
-        check_for_system_mem_below_required();
-        check_yumconf_sanity();
-        check_for_cpanel_files();
-        check_bash_history_for_certain_commands();
-        check_roots_cron_for_certain_commands();
-        check_for_perl_env_var();
-        check_cpanel_config();
-        check_cpanel_config_for_bad_root();
+    ## [WARN]
+    check_port_hash();
+    check_selinux_status();
+    check_runlevel();
+    check_for_missing_root_cron();
+    check_if_upcp_is_running();
+    check_interface_lo();
+    check_cpanelconfig_filetype();
+    check_cpanelsync_exclude();
+    check_perl_sanity();
+    check_for_non_default_permissions();
+    check_limitsconf();
+    check_disk_space();
+    check_disk_inodes();
+    check_for_gdm();
+    check_for_redhat_firewall();
+    check_for_home_noexec();
+    check_for_unsupported_nat();
+    check_for_oracle_linux();
+    check_for_proc_mdstat_recovery();
+    check_usr_local_cpanel_path_for_symlinks();
+    check_for_system_mem_below_required();
+    check_yumconf_sanity();
+    check_for_cpanel_files();
+    check_bash_history_for_certain_commands();
+    check_roots_cron_for_certain_commands();
+    check_for_perl_env_var();
+    check_cpanel_config();
+    check_cpanel_config_for_bad_root();
 
-        # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
-        check_etc_hosts_sanity();
-        check_perl_version_less_than_588();
-        check_for_fork_bomb_protection();
-        check_for_cPanel_lower_than_11_30_7_3();
-        check_for_non_default_umask();
-        check_for_clock_skew();
-        check_for_percona_rpms();
-        check_for_duplicate_rpms();
-        check_for_rpm_overrides();
-        check_var_cpanel_immutable_files();
-        check_for_noxsave_in_grub_conf();
-        check_for_networkmanager();
-        check_for_disabled_services();
-        check_for_harmful_php_mode_600_cron();
-        check_updatelog();
-        check_for_readonly_filesystems();
-        check_for_dev_sandbox();
-        check_for_jail_owner();
+    # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
+    check_etc_hosts_sanity();
+    check_perl_version_less_than_588();
+    check_for_fork_bomb_protection();
+    check_for_cPanel_lower_than_11_30_7_3();
+    check_for_non_default_umask();
+    check_for_clock_skew();
+    check_for_percona_rpms();
+    check_for_duplicate_rpms();
+    check_for_rpm_overrides();
+    check_var_cpanel_immutable_files();
+    check_for_noxsave_in_grub_conf();
+    check_for_networkmanager();
+    check_for_disabled_services();
+    check_for_harmful_php_mode_600_cron();
+    check_updatelog();
+    check_for_readonly_filesystems();
+    check_for_dev_sandbox();
+    check_for_jail_owner();
 
-        ## [3RDP]
-        check_for_apf();
-        check_for_csf();
-        check_for_prm();
-        check_for_les();
-        check_for_1h();
-        check_for_webmin();
-        check_for_symantec();
+    ## [3RDP]
+    check_for_apf();
+    check_for_csf();
+    check_for_prm();
+    check_for_les();
+    check_for_1h();
+    check_for_webmin();
+    check_for_symantec();
 
-        ## [CRIT]
-        check_for_bash_secadv_20140924();     # advisory
-        check_for_UMBREON_rootkit();          # malware
-        check_for_libms_rootkit();            # malware
-        check_for_jynx2_rootkit();            # malware
-        check_for_libkeyutils_filenames();    # malware
-        check_sha1_sigs_libkeyutils();        # malware
-        check_sha1_sigs_httpd();              # malware
-        check_sha1_sigs_named();              # malware
-        check_sha1_sigs_ssh();                # malware
-        check_sha1_sigs_ssh_add();            # malware
-        check_sha1_sigs_sshd();               # malware
-        check_for_ebury_ssh_G();              # malware
-        check_for_ebury_ssh_banner();         # malware
-        check_for_ebury_ssh_shmem();          # malware
-        check_for_ebury_root_file();          # malware
-        check_for_ebury_socket();             # malware
-        check_for_bg_botnet();                # malware
-        check_for_dragnet();                  # malware
-        check_for_xor_ddos();                 # malware
-        check_for_shellbot();                 # malware
-        check_for_ncom_filenames();           # malware
+    ## [CRIT]
+    check_for_bash_secadv_20140924();    # advisory
+    all_malware_checks();
 
-        # These are run closer to the end since it has the potential to take the longest due to RPM usage
-        build_rpm_list();
-        build_openssl_rpm_changelog();
+    # These are run closer to the end since it has the potential to take the longest due to RPM usage
+    build_rpm_list();
+    build_openssl_rpm_changelog();
 
-        # These require build_rpm_list() to have been run, so that @rpm_list is populated
-        check_for_openssl_heartbleed_bug();
-        check_for_openssl_secadv_20140605();
+    # These require build_rpm_list() to have been run, so that @rpm_list is populated
+    check_for_openssl_heartbleed_bug();
+    check_for_openssl_secadv_20140605();
 
-        print_info2('Done.');
+    print_info2('Done.');
 
-        if ($CRIT_BUFFER) {
-            print_magenta("\n\nThere was critical-level output above, here it is again:");
-            print $CRIT_BUFFER;
-        }
-
-        exit;
+    if ($CRIT_BUFFER) {
+        print_magenta("\n\nThere was critical-level output above, here it is again:");
+        print $CRIT_BUFFER;
     }
 }
 
 sub csi_checks_only {
     check_port_hash();
-    check_for_bash_secadv_20140924();     # advisory
+    check_for_bash_secadv_20140924();    # advisory
+    all_malware_checks();
+
+    # These are run closer to the end since it has the potential to take the longest due to RPM usage
+    build_openssl_rpm_changelog();
+
+    # These require build_rpm_list() to have been run, so that @rpm_list is populated
+    check_for_openssl_heartbleed_bug();
+    check_for_openssl_secadv_20140605();
+    print_info2('SSP checks done.');
+}
+
+sub all_malware_checks {
     check_for_UMBREON_rootkit();          # malware
+    check_for_libms_rootkit();            # malware
     check_for_jynx2_rootkit();            # malware
     check_for_cdorked_A();                # malware
     check_for_cdorked_B();                # malware
     check_for_libkeyutils_filenames();    # malware
+                                          #check_for_unowned_libkeyutils_files($LIBKEYUTILS_FILES_REF);    # malware
     check_sha1_sigs_libkeyutils();        # malware
     check_sha1_sigs_httpd();              # malware
     check_sha1_sigs_named();              # malware
@@ -806,15 +762,7 @@ sub csi_checks_only {
     check_for_dragnet();                  # malware
     check_for_xor_ddos();                 # malware
     check_for_shellbot();                 # malware
-
-    # These are run closer to the end since it has the potential to take the longest due to RPM usage
-    build_rpm_list();
-    build_openssl_rpm_changelog();
-
-    # These require build_rpm_list() to have been run, so that @rpm_list is populated
-    check_for_openssl_heartbleed_bug();
-    check_for_openssl_secadv_20140605();
-    print_info2('SSP checks done.');
+    check_for_ncom_filenames();           # malware
 }
 
 sub get_phpini {
