@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.141';
+our $VERSION = '4.99.142';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -372,7 +372,6 @@ sub run {
     check_distcache_and_libapr();
     check_for_custom_postgres_repo();
     check_for_rpm_overrides();
-    check_for_odd_yum_conf();
     check_var_cpanel_immutable_files();
     check_for_noxsave_in_grub_conf();
     check_for_rpm_dist_ver_unknown();
@@ -558,7 +557,6 @@ sub non_cpanel_checks_only {
     check_for_non_default_umask();
     check_for_clock_skew();
     check_for_custom_postgres_repo();
-    check_for_odd_yum_conf();
     check_for_noxsave_in_grub_conf();
     check_for_networkmanager();
     check_for_dhclient();
