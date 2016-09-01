@@ -4379,13 +4379,13 @@ sub check_roots_cron_for_certain_commands {
     }
     );
 
-    # The default tmpwatch cron CAN remove the /tmp/mysql.sock symlink, so it should not be ignored.
     my %cron_ignore = (    # These contain 'interesting' commands that should be ignored if they aren't going to cause problems
         '7440999604d3517ca235c7949f803ece' => '/etc/cron.daily/maldet',                  # Default
         'aede9174c0a1b0cf225165e204aa6fd8' => '/etc/cron.hourly/modsecparse.pl',         # Default
         '195ddc2ac97502c2a96cc758cb7c9097' => '/etc/cron.daily/freshclam',               # Default
         'de7d9c2df94e20af5aa401e708c3119d' => '/etc/cron.daily/prelink',                 # Default
-        '3ffb5926bb7533bb077e2ec37f767851' => '/etc/cron.daily/tmpwatch',                # modified to not remove symlinks, so wouldn't delete mysql.sock
+        'c7a32553c9f6d3d16c07281cae8572e9' => '/etc/cron.daily/tmpwatch',                # Default
+        '3ffb5926bb7533bb077e2ec37f767851' => '/etc/cron.daily/tmpwatch',                # modified to not remove symlinks
         'ff511360a325783a06f494a05b514689' => '/etc/cron.d/kill_orphaned_php-cron',      # standard CloudLinux script
         'f392372e36f56fb3e70e850a6bd1a550' => '/etc/cron.d/lvedbgovernor-utils-cron',    # standard CloudLinux script
     );
@@ -4423,12 +4423,8 @@ sub check_roots_cron_for_certain_commands {
 
     if (%found) {
         for my $cron ( keys(%found) ) {
-            my $additional_info = "";
-            if ( $found{$cron}{'tmpwatch'} ) {
-                $additional_info = ' (tmpwatch may be deleting /tmp/mysql.sock)';
-            }
             print_warn("cron: ");
-            print_warning( $cron . " contains [ " . join( ' ', sort( keys( %{ $found{$cron} } ) ) ) . " ]" . $additional_info );
+            print_warning( $cron . " contains [ " . join( ' ', sort( keys( %{ $found{$cron} } ) ) ) . " ]" );
         }
     }
 }
