@@ -333,7 +333,7 @@ sub run {
     check_for_proc_mdstat_recovery();
     check_usr_local_cpanel_path_for_symlinks();
     check_for_system_mem_below_required();
-    check_yumconf_sanity();
+    check_yum_conf();
     check_for_cpanel_files();
     check_bash_history_for_certain_commands();
     check_wwwacctconf_for_incorrect_minuid();
@@ -548,7 +548,7 @@ sub non_cpanel_checks_only {
     check_for_oracle_linux();
     check_for_proc_mdstat_recovery();
     check_for_system_mem_below_required();
-    check_yumconf_sanity();
+    check_yum_conf();
     check_for_cpsources_conf();
     check_etc_hosts_sanity();
     check_mysql_config();
@@ -669,7 +669,7 @@ sub dnsonly_checks_only {
     check_for_proc_mdstat_recovery();
     check_usr_local_cpanel_path_for_symlinks();
     check_for_system_mem_below_required();
-    check_yumconf_sanity();
+    check_yum_conf();
     check_for_cpanel_files();
     check_bash_history_for_certain_commands();
     check_roots_cron_for_certain_commands();
@@ -4269,25 +4269,58 @@ sub check_for_system_mem_below_required {
     }
 }
 
-sub check_yumconf_sanity {
-    my $yumconf = '/etc/yum.conf';
+sub check_yum_conf {
+    my $yum_conf                = '/etc/yum.conf';
+    my $exclude_line_count      = 0;
+    my $exclude_kernel          = 0;
+    my $exclude_wget            = 0;
+    my $distroverpkg_cloudlinux = 0;
 
-    if ( !-e $yumconf ) {
+    if ( !-e $yum_conf ) {
         print_warn('YUM: ');
-        print_warning("$yumconf is missing!");
+        print_warning( $yum_conf . ' is missing!' );
     }
-    elsif ( -z $yumconf ) {
+    elsif ( -z $yum_conf ) {
         print_warn('YUM: ');
-        print_warning("$yumconf is empty!");
+        print_warning( $yum_conf . ' is empty!' );
     }
 
-    if ( open( my $yum_conf_fh, '<', '/etc/yum.conf' ) ) {
-        local $/ = undef;
-        my $yum_conf_text = readline($yum_conf_fh);
-        if ( $yum_conf_text =~ m/exclude=.*?wget/ ) {
-            print_warn('YUM: ');
-            print_warning("$yumconf has wget excluded!");
+    if ( open my $file_fh, '<', $yum_conf ) {
+        while (<$file_fh>) {
+            if (/^\s*exclude/i) {
+                $exclude_line_count += 1;
+            }
+            if (/^\s*exclude.*kernel/) {
+                $exclude_kernel = 1;
+            }
+            if (/^\s*exclude.*wget/) {
+                $exclude_wget = 1;
+            }
+            if (/^\s*distroverpkg=cloudlinux-release/) {
+                $distroverpkg_cloudlinux = 1;
+            }
         }
+        close $file_fh;
+    }
+
+    if ( $exclude_line_count > 1 ) {
+        print_warn('YUM: ');
+        print_warning('yum.conf contains multiple "exclude" lines!');
+    }
+
+    if ($exclude_kernel) {
+        print_warn('YUM: ');
+        print_warning('yum.conf may be excluding kernel updates!');
+    }
+
+    if ($exclude_wget) {
+        print_warn('YUM: ');
+        print_warning('yum.conf may be excluding wget updates!');
+    }
+
+    if ($distroverpkg_cloudlinux) {
+        print_warn('YUM: ');
+        print_warning('yum.conf has distroverpkg=cloudlinux-release set! This is known to cause issues with installing EA4, see ticket 7615739.');
     }
 }
 
@@ -5666,37 +5699,6 @@ sub check_for_rpm_overrides {
                 }
             }
         }
-    }
-}
-
-sub check_for_odd_yum_conf {
-    my $yum_conf = '/etc/yum.conf';
-
-    return if !-f $yum_conf;
-
-    my $exclude_line_count = 0;
-    my $exclude_kernel     = 0;
-
-    if ( open my $file_fh, '<', $yum_conf ) {
-        while (<$file_fh>) {
-            if (/^exclude/i) {
-                $exclude_line_count += 1;
-            }
-            if (/exclude(.*)kernel/) {
-                $exclude_kernel = 1;
-            }
-        }
-        close $file_fh;
-    }
-
-    if ( $exclude_line_count > 1 ) {
-        print_warn('yum.conf: ');
-        print_warning('contains multiple "exclude" lines! See FB-63311');
-    }
-
-    if ( $exclude_kernel == 1 ) {
-        print_warn('yum.conf: ');
-        print_warning('may be excluding kernel updates! See FB-63311');
     }
 }
 
