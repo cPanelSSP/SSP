@@ -488,6 +488,7 @@ sub run {
     check_for_bg_botnet();                # malware
     check_for_dragnet();                  # malware
     check_for_xor_ddos();                 # malware
+    check_for_shellbot();                 # malware
     check_for_ncom_filenames();           # malware
 
     # These are run closer to the end since it has the potential to take the longest due to RPM usage
@@ -626,6 +627,7 @@ sub non_cpanel_checks_only {
     check_for_bg_botnet();                # malware
     check_for_dragnet();                  # malware
     check_for_xor_ddos();                 # malware
+    check_for_shellbot();                 # malware
     check_for_ncom_filenames();           # malware
 
     # These are run closer to the end since it has the potential to take the longest due to RPM usage
@@ -759,6 +761,7 @@ sub check_for_dnsonly {
         check_for_bg_botnet();                # malware
         check_for_dragnet();                  # malware
         check_for_xor_ddos();                 # malware
+        check_for_shellbot();                 # malware
         check_for_ncom_filenames();           # malware
 
         # These are run closer to the end since it has the potential to take the longest due to RPM usage
@@ -802,6 +805,7 @@ sub csi_checks_only {
     check_for_bg_botnet();                # malware
     check_for_dragnet();                  # malware
     check_for_xor_ddos();                 # malware
+    check_for_shellbot();                 # malware
 
     # These are run closer to the end since it has the potential to take the longest due to RPM usage
     build_rpm_list();
@@ -7535,6 +7539,25 @@ sub check_for_xor_ddos {
 
     if (@matched) {
         print_generic_hack_predef('Linux/XOR.DDoS');
+        print_critical('The following file(s) were found:');
+        print_critical( "\t" . join( "\n\t", @matched ) );
+        print_critical();
+    }
+}
+
+sub check_for_shellbot {
+    my @libs = qw(
+      /lib/libgrubd.so
+    );
+
+    my @matched;
+    for my $lib (@libs) {
+        next if -l $lib;
+        push @matched, $lib if -f $lib;
+    }
+
+    if (@matched) {
+        print_generic_hack_predef('Shellbot');
         print_critical('The following file(s) were found:');
         print_critical( "\t" . join( "\n\t", @matched ) );
         print_critical();
