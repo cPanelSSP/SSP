@@ -271,10 +271,10 @@ sub run {
     check_for_lsws_update();
     print_ea3_php_configuration();
     print_ea4_php_configuration();
+    print_if_using_modruid2_or_itk();
     check_sysinfo();
     check_for_remote_mysql();
     print_if_using_mydns_or_nsd();
-    print_if_using_modruid2_or_itk();
     print_mysql_version();
     print_backups_info();
     print_mailserver_info();
@@ -2146,8 +2146,10 @@ sub print_ea4_php_configuration {
     return if !$EA4;
     my $php = _get_installed_ea4_php();
     my $info;
+    my $cgi_handler = 0;
     print_info("PHP Default: ");
     if ( defined($php) && defined( $php->{default} ) && defined( $php->{ $php->{default} }->{release_version} ) && defined( $php->{ $php->{default} }->{handler} ) ) {
+        $cgi_handler = 1 if $php->{ $php->{default} }->{handler} eq "cgi";
         $info .= "[ EA4 ]";
         $info .= " [ " . $php->{ $php->{default} }->{release_version} . " ( " . $php->{default} . " ) ]";
         $info .= " [ $php->{$php->{default}}->{handler} ]";
@@ -2155,8 +2157,10 @@ sub print_ea4_php_configuration {
     else {
         $info .= "UNKNOWN";
     }
-    $info .= "\n";
     print_normal($info);
+    if ( $cgi_handler && $APACHE_PER_USER eq "none" ) {
+        print_warning("         \\_ mod_userdir will not execute PHP scripts via cgi handler.  See SEC-142.");
+    }
 }
 
 sub _get_installed_ea4_php {
