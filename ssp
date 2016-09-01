@@ -3188,6 +3188,7 @@ sub check_for_non_default_permissions {
         '/home4'                                => { mode => [ '0755', '0711' ] },
         '/home5'                                => { mode => [ '0755', '0711' ] },
         '/opt'                                  => { mode => ['0755'] },
+        '/proc'                                 => { mode => ['0555'] , perms_help => 'If users cannot read /proc/mounts it can break cPanel quota reporting.' },
         '/root/cpanel3-skel'                    => { mode => ['0755'] },
         '/sbin/ifconfig'                        => { mode => [ '0755', '0555' ] },
         '/tmp'                                  => { mode => ['1777'] },
