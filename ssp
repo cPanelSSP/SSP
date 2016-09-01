@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.140';
+our $VERSION = '4.99.141';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -231,6 +231,11 @@ sub run {
         exit;
     }
 
+    if ( -e '/var/cpanel/dnsonly' ) {
+        dnsonly_checks_only();
+        exit;
+    }
+
     unless ($IS_CPANEL) {
         non_cpanel_checks_only();
         exit;
@@ -251,7 +256,6 @@ sub run {
 
     ## [INFO]
     print "\n";
-    check_for_dnsonly();
     print_tip();
     print_version();
     print_hostname();
@@ -267,10 +271,10 @@ sub run {
     check_for_lsws_update();
     print_ea3_php_configuration();
     print_ea4_php_configuration();
+    print_if_using_modruid2_or_itk();
     check_sysinfo();
     check_for_remote_mysql();
     print_if_using_mydns_or_nsd();
-    print_if_using_modruid2_or_itk();
     print_mysql_version();
     print_backups_info();
     print_mailserver_info();
@@ -329,7 +333,7 @@ sub run {
     check_for_proc_mdstat_recovery();
     check_usr_local_cpanel_path_for_symlinks();
     check_for_system_mem_below_required();
-    check_yumconf_sanity();
+    check_yum_conf();
     check_for_cpanel_files();
     check_bash_history_for_certain_commands();
     check_wwwacctconf_for_incorrect_minuid();
@@ -464,31 +468,10 @@ sub run {
     check_for_opt_gsi_tools();
 
     # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
-    check_for_unsupported_php();          # Extreme care!
-    check_for_bash_secadv_20140924();     # advisory
-    check_for_exim_cve_2016_1531();       # advisory
-    check_for_UMBREON_rootkit();          # malware
-    check_for_libms_rootkit();            # malware
-    check_for_jynx2_rootkit();            # malware
-    check_for_cdorked_A();                # malware
-    check_for_cdorked_B();                # malware
-    check_for_libkeyutils_filenames();    # malware
-                                          #check_for_unowned_libkeyutils_files($LIBKEYUTILS_FILES_REF);    # malware
-    check_sha1_sigs_libkeyutils();        # malware
-    check_sha1_sigs_httpd();              # malware
-    check_sha1_sigs_named();              # malware
-    check_sha1_sigs_ssh();                # malware
-    check_sha1_sigs_ssh_add();            # malware
-    check_sha1_sigs_sshd();               # malware
-    check_for_ebury_ssh_G();              # malware
-    check_for_ebury_ssh_banner();         # malware
-    check_for_ebury_ssh_shmem();          # malware
-    check_for_ebury_root_file();          # malware
-    check_for_ebury_socket();             # malware
-    check_for_bg_botnet();                # malware
-    check_for_dragnet();                  # malware
-    check_for_xor_ddos();                 # malware
-    check_for_ncom_filenames();           # malware
+    check_for_unsupported_php();         # Extreme care!
+    check_for_bash_secadv_20140924();    # advisory
+    check_for_exim_cve_2016_1531();      # advisory
+    all_malware_checks();
 
     # These are run closer to the end since it has the potential to take the longest due to RPM usage
     build_rpm_list();
@@ -510,6 +493,7 @@ sub run {
     check_for_frontpage_rpms();
     check_for_prelink();
     check_for_broken_rpm();
+    check_for_ea4_mismatch();
 
     print_info2('Done.');
 
@@ -564,7 +548,7 @@ sub non_cpanel_checks_only {
     check_for_oracle_linux();
     check_for_proc_mdstat_recovery();
     check_for_system_mem_below_required();
-    check_yumconf_sanity();
+    check_yum_conf();
     check_for_cpsources_conf();
     check_etc_hosts_sanity();
     check_mysql_config();
@@ -604,29 +588,9 @@ sub non_cpanel_checks_only {
     check_for_opt_gsi_tools();
 
     # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
-    check_for_bash_secadv_20140924();     # advisory
-    check_for_exim_cve_2016_1531();       # advisory
-    check_for_UMBREON_rootkit();          # malware
-    check_for_libms_rootkit();            # malware
-    check_for_jynx2_rootkit();            # malware
-    check_for_cdorked_A();                # malware
-    check_for_cdorked_B();                # malware
-    check_for_libkeyutils_filenames();    # malware
-    check_sha1_sigs_libkeyutils();        # malware
-    check_sha1_sigs_httpd();              # malware
-    check_sha1_sigs_named();              # malware
-    check_sha1_sigs_ssh();                # malware
-    check_sha1_sigs_ssh_add();            # malware
-    check_sha1_sigs_sshd();               # malware
-    check_for_ebury_ssh_G();              # malware
-    check_for_ebury_ssh_banner();         # malware
-    check_for_ebury_ssh_shmem();          # malware
-    check_for_ebury_root_file();          # malware
-    check_for_ebury_socket();             # malware
-    check_for_bg_botnet();                # malware
-    check_for_dragnet();                  # malware
-    check_for_xor_ddos();                 # malware
-    check_for_ncom_filenames();           # malware
+    check_for_bash_secadv_20140924();    # advisory
+    check_for_exim_cve_2016_1531();      # advisory
+    all_malware_checks();
 
     # These are run closer to the end since it has the potential to take the longest due to RPM usage
     build_rpm_list();
@@ -654,140 +618,136 @@ sub non_cpanel_checks_only {
 }
 
 # All checks for DNSONLY go here
-sub check_for_dnsonly {
-    if ( -e '/var/cpanel/dnsonly' ) {
+sub dnsonly_checks_only {
+    print "\n";
+    for ( 1 .. 3 ) {
+        print BOLD GREEN ON_RED "\tPlease DO NOT paste output from SSP into tickets unless it is relevant to an issue" . RESET . "\n";
+    }
 
-        print_version();
-        print_start("\t\tDNSONLY: ");
-        print_warning("/var/cpanel/dnsonly detected, assuming DNSONLY\n");
+    print_version();
+    print_start("\t\tDNSONLY: ");
+    print_warning("/var/cpanel/dnsonly detected, assuming DNSONLY\n");
 
-        ## [CRIT] -- only stuff that we should check as early as possible
-        check_for_hacked_server_touchfile();
-        check_for_multiple_tech_logins();
-        check_for_lve_environment();
-        check_for_os_release_5();
-        check_for_os_release_7();
-        check_for_os_release_32bit();
+    ## [CRIT] -- only stuff that we should check as early as possible
+    check_for_hacked_server_touchfile();
+    check_for_multiple_tech_logins();
+    check_for_lve_environment();
+    check_for_os_release_5();
+    check_for_os_release_7();
+    check_for_os_release_32bit();
 
-        ## [INFO]
-        print_hostname();
-        print_os();
-        print_kernel_and_cpu();
-        print_kernelcare_info();
-        print_cpanel_info();
-        check_for_cpanel_update();
-        print_uptime();
-        check_for_clustering();
-        check_sysinfo();
+    ## [INFO]
+    print_hostname();
+    print_os();
+    print_kernel_and_cpu();
+    print_kernelcare_info();
+    print_cpanel_info();
+    check_for_cpanel_update();
+    print_uptime();
+    check_for_clustering();
+    check_sysinfo();
 
-        ## [WARN]
-        check_port_hash();
-        check_selinux_status();
-        check_runlevel();
-        check_for_missing_root_cron();
-        check_if_upcp_is_running();
-        check_interface_lo();
-        check_cpanelconfig_filetype();
-        check_cpanelsync_exclude();
-        check_perl_sanity();
-        check_for_non_default_permissions();
-        check_limitsconf();
-        check_disk_space();
-        check_disk_inodes();
-        check_for_gdm();
-        check_for_redhat_firewall();
-        check_for_home_noexec();
-        check_for_unsupported_nat();
-        check_for_oracle_linux();
-        check_for_proc_mdstat_recovery();
-        check_usr_local_cpanel_path_for_symlinks();
-        check_for_system_mem_below_required();
-        check_yumconf_sanity();
-        check_for_cpanel_files();
-        check_bash_history_for_certain_commands();
-        check_roots_cron_for_certain_commands();
-        check_for_perl_env_var();
-        check_cpanel_config();
-        check_cpanel_config_for_bad_root();
+    ## [WARN]
+    check_port_hash();
+    check_selinux_status();
+    check_runlevel();
+    check_for_missing_root_cron();
+    check_if_upcp_is_running();
+    check_interface_lo();
+    check_cpanelconfig_filetype();
+    check_cpanelsync_exclude();
+    check_perl_sanity();
+    check_for_non_default_permissions();
+    check_limitsconf();
+    check_disk_space();
+    check_disk_inodes();
+    check_for_gdm();
+    check_for_redhat_firewall();
+    check_for_home_noexec();
+    check_for_unsupported_nat();
+    check_for_oracle_linux();
+    check_for_proc_mdstat_recovery();
+    check_usr_local_cpanel_path_for_symlinks();
+    check_for_system_mem_below_required();
+    check_yum_conf();
+    check_for_cpanel_files();
+    check_bash_history_for_certain_commands();
+    check_roots_cron_for_certain_commands();
+    check_for_perl_env_var();
+    check_cpanel_config();
+    check_cpanel_config_for_bad_root();
 
-        # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
-        check_etc_hosts_sanity();
-        check_perl_version_less_than_588();
-        check_for_fork_bomb_protection();
-        check_for_cPanel_lower_than_11_30_7_3();
-        check_for_non_default_umask();
-        check_for_clock_skew();
-        check_for_percona_rpms();
-        check_for_duplicate_rpms();
-        check_for_rpm_overrides();
-        check_var_cpanel_immutable_files();
-        check_for_noxsave_in_grub_conf();
-        check_for_networkmanager();
-        check_for_disabled_services();
-        check_for_harmful_php_mode_600_cron();
-        check_updatelog();
-        check_for_readonly_filesystems();
-        check_for_dev_sandbox();
-        check_for_jail_owner();
+    # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
+    check_etc_hosts_sanity();
+    check_perl_version_less_than_588();
+    check_for_fork_bomb_protection();
+    check_for_cPanel_lower_than_11_30_7_3();
+    check_for_non_default_umask();
+    check_for_clock_skew();
+    check_for_percona_rpms();
+    check_for_duplicate_rpms();
+    check_for_rpm_overrides();
+    check_var_cpanel_immutable_files();
+    check_for_noxsave_in_grub_conf();
+    check_for_networkmanager();
+    check_for_disabled_services();
+    check_for_harmful_php_mode_600_cron();
+    check_updatelog();
+    check_for_readonly_filesystems();
+    check_for_dev_sandbox();
+    check_for_jail_owner();
 
-        ## [3RDP]
-        check_for_apf();
-        check_for_csf();
-        check_for_prm();
-        check_for_les();
-        check_for_1h();
-        check_for_webmin();
-        check_for_symantec();
+    ## [3RDP]
+    check_for_apf();
+    check_for_csf();
+    check_for_prm();
+    check_for_les();
+    check_for_1h();
+    check_for_webmin();
+    check_for_symantec();
 
-        ## [CRIT]
-        check_for_bash_secadv_20140924();     # advisory
-        check_for_UMBREON_rootkit();          # malware
-        check_for_libms_rootkit();            # malware
-        check_for_jynx2_rootkit();            # malware
-        check_for_libkeyutils_filenames();    # malware
-        check_sha1_sigs_libkeyutils();        # malware
-        check_sha1_sigs_httpd();              # malware
-        check_sha1_sigs_named();              # malware
-        check_sha1_sigs_ssh();                # malware
-        check_sha1_sigs_ssh_add();            # malware
-        check_sha1_sigs_sshd();               # malware
-        check_for_ebury_ssh_G();              # malware
-        check_for_ebury_ssh_banner();         # malware
-        check_for_ebury_ssh_shmem();          # malware
-        check_for_ebury_root_file();          # malware
-        check_for_ebury_socket();             # malware
-        check_for_bg_botnet();                # malware
-        check_for_dragnet();                  # malware
-        check_for_xor_ddos();                 # malware
-        check_for_ncom_filenames();           # malware
+    ## [CRIT]
+    check_for_bash_secadv_20140924();    # advisory
+    all_malware_checks();
 
-        # These are run closer to the end since it has the potential to take the longest due to RPM usage
-        build_rpm_list();
-        build_openssl_rpm_changelog();
+    # These are run closer to the end since it has the potential to take the longest due to RPM usage
+    build_rpm_list();
+    build_openssl_rpm_changelog();
 
-        # These require build_rpm_list() to have been run, so that @rpm_list is populated
-        check_for_openssl_heartbleed_bug();
-        check_for_openssl_secadv_20140605();
+    # These require build_rpm_list() to have been run, so that @rpm_list is populated
+    check_for_openssl_heartbleed_bug();
+    check_for_openssl_secadv_20140605();
 
-        print_info2('Done.');
+    print_info2('Done.');
 
-        if ($CRIT_BUFFER) {
-            print_magenta("\n\nThere was critical-level output above, here it is again:");
-            print $CRIT_BUFFER;
-        }
-
-        exit;
+    if ($CRIT_BUFFER) {
+        print_magenta("\n\nThere was critical-level output above, here it is again:");
+        print $CRIT_BUFFER;
     }
 }
 
 sub csi_checks_only {
     check_port_hash();
-    check_for_bash_secadv_20140924();     # advisory
+    check_for_bash_secadv_20140924();    # advisory
+    all_malware_checks();
+
+    # These are run closer to the end since it has the potential to take the longest due to RPM usage
+    build_openssl_rpm_changelog();
+
+    # These require build_rpm_list() to have been run, so that @rpm_list is populated
+    check_for_openssl_heartbleed_bug();
+    check_for_openssl_secadv_20140605();
+    print_info2('SSP checks done.');
+}
+
+sub all_malware_checks {
     check_for_UMBREON_rootkit();          # malware
+    check_for_libms_rootkit();            # malware
     check_for_jynx2_rootkit();            # malware
     check_for_cdorked_A();                # malware
     check_for_cdorked_B();                # malware
     check_for_libkeyutils_filenames();    # malware
+                                          #check_for_unowned_libkeyutils_files($LIBKEYUTILS_FILES_REF);    # malware
     check_sha1_sigs_libkeyutils();        # malware
     check_sha1_sigs_httpd();              # malware
     check_sha1_sigs_named();              # malware
@@ -802,15 +762,8 @@ sub csi_checks_only {
     check_for_bg_botnet();                # malware
     check_for_dragnet();                  # malware
     check_for_xor_ddos();                 # malware
-
-    # These are run closer to the end since it has the potential to take the longest due to RPM usage
-    build_rpm_list();
-    build_openssl_rpm_changelog();
-
-    # These require build_rpm_list() to have been run, so that @rpm_list is populated
-    check_for_openssl_heartbleed_bug();
-    check_for_openssl_secadv_20140605();
-    print_info2('SSP checks done.');
+    check_for_shellbot();                 # malware
+    check_for_ncom_filenames();           # malware
 }
 
 sub get_phpini {
@@ -1713,6 +1666,9 @@ sub print_os {
 sub print_kernel_and_cpu {
     print_info('Kernel/CPU: ');
     print_normal("$HOSTINFO->{'kernel'} $HOSTINFO->{'hardware'} $HOSTINFO->{'environment'} $CPUINFO->{'model'} w/ $CPUINFO->{'numcores'} core(s)");
+    if ( $HOSTINFO->{'environment'} eq 'virtuozzo' && $HOSTINFO->{'kernel'} eq '2.6.32-042stab113.11' ) {
+        print_warning('         \\_ This kernel has broken quota support [ https://bugs.openvz.org/browse/OVZ-6661 ]');
+    }
 }
 
 sub print_kernelcare_info {
@@ -2193,8 +2149,10 @@ sub print_ea4_php_configuration {
     return if !$EA4;
     my $php = _get_installed_ea4_php();
     my $info;
+    my $cgi_handler = 0;
     print_info("PHP Default: ");
     if ( defined($php) && defined( $php->{default} ) && defined( $php->{ $php->{default} }->{release_version} ) && defined( $php->{ $php->{default} }->{handler} ) ) {
+        $cgi_handler = 1 if $php->{ $php->{default} }->{handler} eq "cgi";
         $info .= "[ EA4 ]";
         $info .= " [ " . $php->{ $php->{default} }->{release_version} . " ( " . $php->{default} . " ) ]";
         $info .= " [ $php->{$php->{default}}->{handler} ]";
@@ -2202,8 +2160,10 @@ sub print_ea4_php_configuration {
     else {
         $info .= "UNKNOWN";
     }
-    $info .= "\n";
     print_normal($info);
+    if ( $cgi_handler && $APACHE_PER_USER eq "none" ) {
+        print_warning("         \\_ mod_userdir will not execute PHP scripts via cgi handler.  See SEC-142.");
+    }
 }
 
 sub _get_installed_ea4_php {
@@ -3228,6 +3188,7 @@ sub check_for_non_default_permissions {
         '/home4'                                => { mode => [ '0755', '0711' ] },
         '/home5'                                => { mode => [ '0755', '0711' ] },
         '/opt'                                  => { mode => ['0755'] },
+        '/proc'                                 => { mode => ['0555'] , perms_help => 'If users cannot read /proc/mounts it can break cPanel quota reporting.' },
         '/root/cpanel3-skel'                    => { mode => ['0755'] },
         '/sbin/ifconfig'                        => { mode => [ '0755', '0555' ] },
         '/tmp'                                  => { mode => ['1777'] },
@@ -3351,7 +3312,7 @@ sub check_for_non_default_permissions {
         $check{'/sbin'}    = { symlink => '/usr/sbin' };
         $check{'/var/run'} = { symlink => '/run', check_missing => 1 };
     }
-    if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {    # CPANEL-6180 results in these log files having the APPEND-ONLY attribute
+    if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {    # CPANEL-6180 results in these log files having the APPEND-ONLY attribute, so only check other attributes.
         $check{'/usr/local/cpanel/logs/cpdavd_error_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/cphulkd.log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/cphulkd_errors.log'} = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
@@ -3359,6 +3320,7 @@ sub check_for_non_default_permissions {
         $check{'/usr/local/cpanel/logs/dnsadmin_log'}       = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/error_log'}          = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/queueprocd.log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+        $check{'/usr/local/cpanel/logs/spamd_error_log'}    = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/stats_log'}          = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/tailwatchd_log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
     }
@@ -4307,25 +4269,58 @@ sub check_for_system_mem_below_required {
     }
 }
 
-sub check_yumconf_sanity {
-    my $yumconf = '/etc/yum.conf';
+sub check_yum_conf {
+    my $yum_conf                = '/etc/yum.conf';
+    my $exclude_line_count      = 0;
+    my $exclude_kernel          = 0;
+    my $exclude_wget            = 0;
+    my $distroverpkg_cloudlinux = 0;
 
-    if ( !-e $yumconf ) {
+    if ( !-e $yum_conf ) {
         print_warn('YUM: ');
-        print_warning("$yumconf is missing!");
+        print_warning( $yum_conf . ' is missing!' );
     }
-    elsif ( -z $yumconf ) {
+    elsif ( -z $yum_conf ) {
         print_warn('YUM: ');
-        print_warning("$yumconf is empty!");
+        print_warning( $yum_conf . ' is empty!' );
     }
 
-    if ( open( my $yum_conf_fh, '<', '/etc/yum.conf' ) ) {
-        local $/ = undef;
-        my $yum_conf_text = readline($yum_conf_fh);
-        if ( $yum_conf_text =~ m/exclude=.*?wget/ ) {
-            print_warn('YUM: ');
-            print_warning("$yumconf has wget excluded!");
+    if ( open my $file_fh, '<', $yum_conf ) {
+        while (<$file_fh>) {
+            if (/^\s*exclude/i) {
+                $exclude_line_count += 1;
+            }
+            if (/^\s*exclude.*kernel/) {
+                $exclude_kernel = 1;
+            }
+            if (/^\s*exclude.*wget/) {
+                $exclude_wget = 1;
+            }
+            if (/^\s*distroverpkg=cloudlinux-release/) {
+                $distroverpkg_cloudlinux = 1;
+            }
         }
+        close $file_fh;
+    }
+
+    if ( $exclude_line_count > 1 ) {
+        print_warn('YUM: ');
+        print_warning('yum.conf contains multiple "exclude" lines!');
+    }
+
+    if ($exclude_kernel) {
+        print_warn('YUM: ');
+        print_warning('yum.conf may be excluding kernel updates!');
+    }
+
+    if ($exclude_wget) {
+        print_warn('YUM: ');
+        print_warning('yum.conf may be excluding wget updates!');
+    }
+
+    if ($distroverpkg_cloudlinux) {
+        print_warn('YUM: ');
+        print_warning('yum.conf has distroverpkg=cloudlinux-release set! This is known to cause issues with installing EA4, see ticket 7615739.');
     }
 }
 
@@ -4421,13 +4416,13 @@ sub check_roots_cron_for_certain_commands {
     }
     );
 
-    # The default tmpwatch cron CAN remove the /tmp/mysql.sock symlink, so it should not be ignored.
     my %cron_ignore = (    # These contain 'interesting' commands that should be ignored if they aren't going to cause problems
         '7440999604d3517ca235c7949f803ece' => '/etc/cron.daily/maldet',                  # Default
         'aede9174c0a1b0cf225165e204aa6fd8' => '/etc/cron.hourly/modsecparse.pl',         # Default
         '195ddc2ac97502c2a96cc758cb7c9097' => '/etc/cron.daily/freshclam',               # Default
         'de7d9c2df94e20af5aa401e708c3119d' => '/etc/cron.daily/prelink',                 # Default
-        '3ffb5926bb7533bb077e2ec37f767851' => '/etc/cron.daily/tmpwatch',                # modified to not remove symlinks, so wouldn't delete mysql.sock
+        'c7a32553c9f6d3d16c07281cae8572e9' => '/etc/cron.daily/tmpwatch',                # Default
+        '3ffb5926bb7533bb077e2ec37f767851' => '/etc/cron.daily/tmpwatch',                # modified to not remove symlinks
         'ff511360a325783a06f494a05b514689' => '/etc/cron.d/kill_orphaned_php-cron',      # standard CloudLinux script
         'f392372e36f56fb3e70e850a6bd1a550' => '/etc/cron.d/lvedbgovernor-utils-cron',    # standard CloudLinux script
     );
@@ -4465,12 +4460,8 @@ sub check_roots_cron_for_certain_commands {
 
     if (%found) {
         for my $cron ( keys(%found) ) {
-            my $additional_info = "";
-            if ( $found{$cron}{'tmpwatch'} ) {
-                $additional_info = ' (tmpwatch may be deleting /tmp/mysql.sock)';
-            }
             print_warn("cron: ");
-            print_warning( $cron . " contains [ " . join( ' ', sort( keys( %{ $found{$cron} } ) ) ) . " ]" . $additional_info );
+            print_warning( $cron . " contains [ " . join( ' ', sort( keys( %{ $found{$cron} } ) ) ) . " ]" );
         }
     }
 }
@@ -5196,6 +5187,26 @@ sub check_for_broken_rpm {
     }
 }
 
+sub check_for_ea4_mismatch {
+    return unless $EA4;
+    my $cp_count = 0;
+    my $cl_count = 0;
+    foreach (@RPM_LIST) {
+        $cp_count++ if /^ea-.*\.cpanel/;
+        $cl_count++ if /^ea-.*\.cloudlinux/;
+    }
+    if ($IS_CLOUDLINUX) {
+        return unless $cp_count;
+        print_warn('EA4 RPMs: ');
+        print_warning( 'Found ' . $cp_count . ' "ea-*.cpanel" RPMs on a CloudLinux system!  Using wrong EA4 repo?' );
+    }
+    else {
+        return unless $cl_count;
+        print_warn('EA4 RPMs: ');
+        print_warning( 'Found ' . $cl_count . ' "ea-*.cloudlinux" RPMs on a non-CloudLinux system!  Using wrong EA4 repo?' );
+    }
+}
+
 sub check_for_custom_locales {
     return if cpanel_version_is(qw( >= 11.46.0.0 ));
 
@@ -5688,37 +5699,6 @@ sub check_for_rpm_overrides {
                 }
             }
         }
-    }
-}
-
-sub check_for_odd_yum_conf {
-    my $yum_conf = '/etc/yum.conf';
-
-    return if !-f $yum_conf;
-
-    my $exclude_line_count = 0;
-    my $exclude_kernel     = 0;
-
-    if ( open my $file_fh, '<', $yum_conf ) {
-        while (<$file_fh>) {
-            if (/^exclude/i) {
-                $exclude_line_count += 1;
-            }
-            if (/exclude(.*)kernel/) {
-                $exclude_kernel = 1;
-            }
-        }
-        close $file_fh;
-    }
-
-    if ( $exclude_line_count > 1 ) {
-        print_warn('yum.conf: ');
-        print_warning('contains multiple "exclude" lines! See FB-63311');
-    }
-
-    if ( $exclude_kernel == 1 ) {
-        print_warn('yum.conf: ');
-        print_warning('may be excluding kernel updates! See FB-63311');
     }
 }
 
@@ -7535,6 +7515,25 @@ sub check_for_xor_ddos {
 
     if (@matched) {
         print_generic_hack_predef('Linux/XOR.DDoS');
+        print_critical('The following file(s) were found:');
+        print_critical( "\t" . join( "\n\t", @matched ) );
+        print_critical();
+    }
+}
+
+sub check_for_shellbot {
+    my @libs = qw(
+      /lib/libgrubd.so
+    );
+
+    my @matched;
+    for my $lib (@libs) {
+        next if -l $lib;
+        push @matched, $lib if -f $lib;
+    }
+
+    if (@matched) {
+        print_generic_hack_predef('Shellbot');
         print_critical('The following file(s) were found:');
         print_critical( "\t" . join( "\n\t", @matched ) );
         print_critical();
