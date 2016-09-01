@@ -493,6 +493,7 @@ sub run {
     check_for_frontpage_rpms();
     check_for_prelink();
     check_for_broken_rpm();
+    check_for_ea4_mismatch();
 
     print_info2('Done.');
 
@@ -5146,6 +5147,26 @@ sub check_for_broken_rpm {
                 last;
             }
         }
+    }
+}
+
+sub check_for_ea4_mismatch {
+    return unless $EA4;
+    my $cp_count = 0;
+    my $cl_count = 0;
+    foreach (@RPM_LIST) {
+        $cp_count++ if /^ea-.*\.cpanel/;
+        $cl_count++ if /^ea-.*\.cloudlinux/;
+    }
+    if ($IS_CLOUDLINUX) {
+        return unless $cp_count;
+        print_warn('EA4 RPMs: ');
+        print_warning( 'Found ' . $cp_count . ' "ea-*.cpanel" RPMs on a CloudLinux system!  Using wrong EA4 repo?' );
+    }
+    else {
+        return unless $cl_count;
+        print_warn('EA4 RPMs: ');
+        print_warning( 'Found ' . $cl_count . ' "ea-*.cloudlinux" RPMs on a non-CloudLinux system!  Using wrong EA4 repo?' );
     }
 }
 
