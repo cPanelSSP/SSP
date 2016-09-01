@@ -1666,6 +1666,9 @@ sub print_os {
 sub print_kernel_and_cpu {
     print_info('Kernel/CPU: ');
     print_normal("$HOSTINFO->{'kernel'} $HOSTINFO->{'hardware'} $HOSTINFO->{'environment'} $CPUINFO->{'model'} w/ $CPUINFO->{'numcores'} core(s)");
+    if ( $HOSTINFO->{'environment'} eq 'virtuozzo' && $HOSTINFO->{'kernel'} eq '2.6.32-042stab113.11' ) {
+        print_warning('         \\_ This kernel has broken quota support [ https://bugs.openvz.org/browse/OVZ-6661 ]');
+    }
 }
 
 sub print_kernelcare_info {
