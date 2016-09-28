@@ -1727,15 +1727,16 @@ sub print_cpanel_info {
     $last_update = $last_update / 86400;
     $last_update = sprintf '%.1f', $last_update;
 
-    if ($birthday) {
-        $output = "${CPANEL_VERSION} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago" . " [ Installed $birthday ]";
-    }
-    else {
-        $output = "${CPANEL_VERSION} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago";
-    }
+    $output = "${CPANEL_VERSION} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago";
+    $output .= " [ Installed $birthday ]" if $birthday;
 
     print_info('cPanel Info: ');
     print_normal($output);
+
+    if ( cpanel_version_is(qw ( >= 11.59.0.0 )) && ( $cpanel_tier =~ /current|edge/i || -e '/var/cpanel/feature_toggles/ea4migration' ) ) {
+        print_info('cPanel Info: ');
+        print_warning("EA4 Migration UI is enabled/available");
+    }
 }
 
 sub check_for_cpanel_update {
