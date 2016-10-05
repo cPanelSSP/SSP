@@ -2638,6 +2638,10 @@ sub print_lsws_info {
     else {
         print_info('LiteSpeed Web Server: ');
         print_warning('non-Enterprise editions of LiteSpeed are NOT directly supported');
+        if ( cpanel_version_is(qw( < 11.59.9999.111 )) ) {
+            print_info('LiteSpeed Web Server: ');
+            print_warning('Only WHM 60 and later support SNI with OpenLiteSpeed - see CPANEL-8151');
+        }
     }
     print_info('LiteSpeed Web Server: ');
     print_warning('whm-server-status is incompatible with LiteSpeed');
