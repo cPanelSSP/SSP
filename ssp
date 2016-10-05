@@ -2155,7 +2155,7 @@ sub print_ea4_php_configuration {
         $cgi_handler = 1 if $EA4_PHP->{ $EA4_PHP->{default} }->{handler} eq "cgi";
         $info .= "[ EA4 ]";
         $info .= " [ " . $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} . " ( " . $EA4_PHP->{default} . " ) ]";
-        $info .= " [ " . $EA4_PHP->{$EA4_PHP->{default}}->{handler} . " ]";
+        $info .= " [ " . $EA4_PHP->{ $EA4_PHP->{default} }->{handler} . " ]";
     }
     else {
         $info .= "UNKNOWN";
@@ -2322,7 +2322,7 @@ sub print_if_using_mydns_or_nsd {
 }
 
 sub print_if_mod_userdir {
-    if ( $EA4 && cpanel_version_is( qw( >= 11.59.0.0 ) ) ) {
+    if ( $EA4 && cpanel_version_is(qw( >= 11.59.0.0 )) ) {
         print_info('Mod Userdir: ');
         print_warning("will not execute PHP scripts via PHP-FPM");
     }
