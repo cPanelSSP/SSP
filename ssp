@@ -1585,7 +1585,7 @@ sub get_lsws_version {
     $lsws_full_version    = "unknown" if !$lsws_full_version;
     $lsws_numeric_version = "unknown" if !$lsws_numeric_version;
 
-    return ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION );
+    return ( $lsws_full_version, $lsws_numeric_version );
 }
 
 sub check_for_os_release_5 {
@@ -2631,14 +2631,23 @@ sub print_lsws_info {
         print_info('LiteSpeed Web Server: ');
         print_normal( 'is listening on ports [ ' . join( " ", sort( keys(%lshttpd_ports) ) ) . ' ]' );
     }
+    if ( $LSWS_FULL_VERSION =~ /Enterprise/ ) {
+        print_info('LiteSpeed Web Server: ');
+        print_normal('is supported, see http://cpanel.wiki/display/LS/LiteSpeed');
+    }
+    else {
+        print_info('LiteSpeed Web Server: ');
+        print_warning('non-Enterprise editions of LiteSpeed are NOT directly supported');
+    }
     print_info('LiteSpeed Web Server: ');
-    print_normal('is now supported, see http://cpanel.wiki/display/LS/LiteSpeed');
-    print_normal('Note: whm-server-status is incompatible with LiteSpeed');
+    print_warning('whm-server-status is incompatible with LiteSpeed');
 }
 
 sub check_for_lsws_update {
-    return if !$LSWS_NUMERIC_VERSION;
+    return unless defined($LSWS_NUMERIC_VERSION);
     return if $LSWS_NUMERIC_VERSION eq "unknown";
+    return unless $LSWS_FULL_VERSION =~ /Enterprise/;
+
     my ( $LSWS_DATA, @lsws_data ) = ();
     my $available_lsws_version;
 
@@ -2671,8 +2680,7 @@ sub check_for_lsws_update {
             last;
         }
     }
-
-    return if !$available_lsws_version;
+    return unless $available_lsws_version;
 
     if ( version_compare( $LSWS_NUMERIC_VERSION, '<', $available_lsws_version ) ) {
         print_info('LiteSpeed Web Server: ');
