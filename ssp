@@ -42,6 +42,7 @@ our $CRIT_BUFFER;      # Critical output to be printed at the end
 our $LIBKEYUTILS_FILES_REF;
 our @PHPINI;
 our $EA4;              # Boolean to determine if system is running EasyApache 4
+our $EA4_PHP;          # EA4 PHP info
 our $HTTPD_PATH;
 our $CPANEL_VERSION;    # Current cpanel version of system
 our $HOSTNAME;
@@ -127,6 +128,7 @@ sub init {
     if ($IS_CPANEL) {
         $CPANEL_VERSION  = get_cpanel_version();
         $EA4             = is_ea4();
+        $EA4_PHP         = _get_installed_ea4_php();
         $HTTPD_PATH      = get_httpd_path();           # location of operative httpd
         @PHPINI          = get_phpini();
         $TIERS           = get_tiers_file();
@@ -271,7 +273,7 @@ sub run {
     check_for_lsws_update();
     print_ea3_php_configuration();
     print_ea4_php_configuration();
-    print_if_using_modruid2_or_itk();
+    print_if_mod_userdir();
     check_sysinfo();
     check_for_remote_mysql();
     print_if_using_mydns_or_nsd();
@@ -2146,26 +2148,23 @@ sub print_ea3_php_configuration {
 
 sub print_ea4_php_configuration {
     return if !$EA4;
-    my $php = _get_installed_ea4_php();
     my $info;
     my $cgi_handler = 0;
     print_info("PHP Default: ");
-    if ( defined($php) && defined( $php->{default} ) && defined( $php->{ $php->{default} }->{release_version} ) && defined( $php->{ $php->{default} }->{handler} ) ) {
-        $cgi_handler = 1 if $php->{ $php->{default} }->{handler} eq "cgi";
+    if ( defined($EA4_PHP) && defined( $EA4_PHP->{default} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{handler} ) ) {
+        $cgi_handler = 1 if $EA4_PHP->{ $EA4_PHP->{default} }->{handler} eq "cgi";
         $info .= "[ EA4 ]";
-        $info .= " [ " . $php->{ $php->{default} }->{release_version} . " ( " . $php->{default} . " ) ]";
-        $info .= " [ $php->{$php->{default}}->{handler} ]";
+        $info .= " [ " . $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} . " ( " . $EA4_PHP->{default} . " ) ]";
+        $info .= " [ " . $EA4_PHP->{$EA4_PHP->{default}}->{handler} . " ]";
     }
     else {
         $info .= "UNKNOWN";
     }
     print_normal($info);
-    if ( $cgi_handler && $APACHE_PER_USER eq "none" ) {
-        print_warning("         \\_ mod_userdir will not execute PHP scripts via cgi handler.  See SEC-142.");
-    }
 }
 
 sub _get_installed_ea4_php {
+    return if !$EA4;
     my $php = {};
     my @available_php;
     my @current_php;
@@ -2322,15 +2321,23 @@ sub print_if_using_mydns_or_nsd {
     }
 }
 
-sub print_if_using_modruid2_or_itk {
+sub print_if_mod_userdir {
+    if ( $EA4 && cpanel_version_is( qw( >= 11.59.0.0 ) ) ) {
+        print_info('Mod Userdir: ');
+        print_warning("will not execute PHP scripts via PHP-FPM");
+    }
+    if ( defined($EA4_PHP) && defined( $EA4_PHP->{default} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{handler} ) && $EA4_PHP->{ $EA4_PHP->{default} }->{handler} eq "cgi" ) {
+        print_info('Mod Userdir: ');
+        print_warning("will not execute PHP scripts via cgi handler");
+    }
     if ( $APACHE_PER_USER eq "ruid2" ) {
-        print_info('Mod Ruid2: ');
-        print_warning('is enabled (mod_userdir style URLs don\'t work with Mod Ruid2)');
+        print_info('Mod Userdir: ');
+        print_warning('doesn\'t work with Mod Ruid2');
         return;
     }
     if ( $APACHE_PER_USER eq "itk" ) {
-        print_info('MPM ITK: ');
-        print_warning('is enabled (mod_userdir style URLs don\'t work with MPM ITK)');
+        print_info('Mod userdir: ');
+        print_warning('doesn\'t work with MPM ITK');
         return;
     }
 }
