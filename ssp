@@ -3305,13 +3305,16 @@ sub check_for_non_default_permissions {
         $check{'/usr/bin/passwd'}  = { mode => [ '6755', '4755', '4555', '4511' ] };
         $check{'/var/run'} = { mode => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
     }
-    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {
-        $check{'/bin'}     = { symlink => '/usr/bin' };
-        $check{'/run'}     = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
-        $check{'/sbin'}    = { symlink => '/usr/sbin' };
-        $check{'/var/run'} = { symlink => '/run', check_missing => 1 };
+    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {    # https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Migration_Planning_Guide/sect-Red_Hat_Enterprise_Linux-Migration_Planning_Guide-File_System_Layout.html
+        $check{'/bin'}   = { symlink => '/usr/bin',   check_missing => 1 };
+        $check{'/lib'}   = { symlink => '/usr/lib',   check_missing => 1 };
+        $check{'/lib64'} = { symlink => '/usr/lib64', check_missing => 1 };
+        $check{'/run'} = { mode => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
+        $check{'/sbin'}     = { symlink => '/usr/sbin', check_missing => 1 };
+        $check{'/var/lock'} = { symlink => '/run/lock', check_missing => 1 };
+        $check{'/var/run'}  = { symlink => '/run',      check_missing => 1 };
     }
-    if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {    # CPANEL-6180 results in these log files having the APPEND-ONLY attribute, so only check other attributes.
+    if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {         # CPANEL-6180 results in these log files having the APPEND-ONLY attribute, so only check other attributes.
         $check{'/usr/local/cpanel/logs/cpdavd_error_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/cphulkd.log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/cphulkd_errors.log'} = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
