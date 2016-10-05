@@ -299,7 +299,7 @@ sub run {
     check_for_rawopts();
     check_for_rawenv();
     check_for_custom_opt_mods();
-    check_for_local_apache_templates();
+    check_for_local_templates();
     check_for_missing_account_suspensions_conf();
     check_for_local_makecpphp_template();
     check_for_custom_apache_includes();
@@ -2968,7 +2968,7 @@ sub find_custom_opt_mods {
     }
 }
 
-sub check_for_local_apache_templates {
+sub check_for_local_templates {
     my @templatedirs = qw(
       /var/cpanel/templates/apache2_4
       /var/cpanel/templates/apache2_2
@@ -2976,6 +2976,8 @@ sub check_for_local_apache_templates {
       /var/cpanel/templates/apache2
       /var/cpanel/templates/apache1_3
       /var/cpanel/templates/apache1
+      /var/cpanel/templates/dovecot2.2
+      /var/cpanel/templates/dovecotSNI
       );    # Order is somewhat important above for cosmetic reasons, due to symlinks
     my %templatedirs = ();
 
