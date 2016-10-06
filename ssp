@@ -3526,7 +3526,7 @@ sub check_for_non_default_sysctl {
         'kernel.user_ptrace'      => [ ['1'], ' - Disabling this is known to break remote logins from WHM Transfer Tool - see FB-167393' ],
         'net.ipv4.tcp_tw_recycle' => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
         'net.ipv4.tcp_tw_reuse'   => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
-        'vm.overcommit_memory' => [ [ '0', '1' ], ' - Seeing "Out of memory" but there\s free memory and no limits?  This might be why.' ],
+        'vm.overcommit_memory' => [ [ '0', '1' ], ' - Seeing "Out of memory" but there is free memory and no limits?  This might be why.' ],
     );
 
     for my $key ( sort keys %check ) {
