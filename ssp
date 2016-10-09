@@ -28,7 +28,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.142';
+our $VERSION = '4.99.143';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -42,6 +42,7 @@ our $CRIT_BUFFER;      # Critical output to be printed at the end
 our $LIBKEYUTILS_FILES_REF;
 our @PHPINI;
 our $EA4;              # Boolean to determine if system is running EasyApache 4
+our $EA4_PHP;          # EA4 PHP info
 our $HTTPD_PATH;
 our $CPANEL_VERSION;    # Current cpanel version of system
 our $HOSTNAME;
@@ -127,6 +128,7 @@ sub init {
     if ($IS_CPANEL) {
         $CPANEL_VERSION  = get_cpanel_version();
         $EA4             = is_ea4();
+        $EA4_PHP         = _get_installed_ea4_php();
         $HTTPD_PATH      = get_httpd_path();           # location of operative httpd
         @PHPINI          = get_phpini();
         $TIERS           = get_tiers_file();
@@ -271,7 +273,7 @@ sub run {
     check_for_lsws_update();
     print_ea3_php_configuration();
     print_ea4_php_configuration();
-    print_if_using_modruid2_or_itk();
+    print_if_mod_userdir();
     check_sysinfo();
     check_for_remote_mysql();
     print_if_using_mydns_or_nsd();
@@ -297,7 +299,7 @@ sub run {
     check_for_rawopts();
     check_for_rawenv();
     check_for_custom_opt_mods();
-    check_for_local_apache_templates();
+    check_for_local_templates();
     check_for_missing_account_suspensions_conf();
     check_for_local_makecpphp_template();
     check_for_custom_apache_includes();
@@ -1583,7 +1585,7 @@ sub get_lsws_version {
     $lsws_full_version    = "unknown" if !$lsws_full_version;
     $lsws_numeric_version = "unknown" if !$lsws_numeric_version;
 
-    return ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION );
+    return ( $lsws_full_version, $lsws_numeric_version );
 }
 
 sub check_for_os_release_5 {
@@ -1727,15 +1729,16 @@ sub print_cpanel_info {
     $last_update = $last_update / 86400;
     $last_update = sprintf '%.1f', $last_update;
 
-    if ($birthday) {
-        $output = "${CPANEL_VERSION} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago" . " [ Installed $birthday ]";
-    }
-    else {
-        $output = "${CPANEL_VERSION} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago";
-    }
+    $output = "${CPANEL_VERSION} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago";
+    $output .= " [ Installed $birthday ]" if $birthday;
 
     print_info('cPanel Info: ');
     print_normal($output);
+
+    if ( cpanel_version_is(qw ( >= 11.59.0.0 )) && ( $cpanel_tier =~ /current|edge/i || -e '/var/cpanel/feature_toggles/ea4migration' ) ) {
+        print_info('cPanel Info: ');
+        print_warning("EA4 Migration UI is enabled/available");
+    }
 }
 
 sub check_for_cpanel_update {
@@ -2145,26 +2148,23 @@ sub print_ea3_php_configuration {
 
 sub print_ea4_php_configuration {
     return if !$EA4;
-    my $php = _get_installed_ea4_php();
     my $info;
     my $cgi_handler = 0;
     print_info("PHP Default: ");
-    if ( defined($php) && defined( $php->{default} ) && defined( $php->{ $php->{default} }->{release_version} ) && defined( $php->{ $php->{default} }->{handler} ) ) {
-        $cgi_handler = 1 if $php->{ $php->{default} }->{handler} eq "cgi";
+    if ( defined($EA4_PHP) && defined( $EA4_PHP->{default} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{handler} ) ) {
+        $cgi_handler = 1 if $EA4_PHP->{ $EA4_PHP->{default} }->{handler} eq "cgi";
         $info .= "[ EA4 ]";
-        $info .= " [ " . $php->{ $php->{default} }->{release_version} . " ( " . $php->{default} . " ) ]";
-        $info .= " [ $php->{$php->{default}}->{handler} ]";
+        $info .= " [ " . $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} . " ( " . $EA4_PHP->{default} . " ) ]";
+        $info .= " [ " . $EA4_PHP->{ $EA4_PHP->{default} }->{handler} . " ]";
     }
     else {
         $info .= "UNKNOWN";
     }
     print_normal($info);
-    if ( $cgi_handler && $APACHE_PER_USER eq "none" ) {
-        print_warning("         \\_ mod_userdir will not execute PHP scripts via cgi handler.  See SEC-142.");
-    }
 }
 
 sub _get_installed_ea4_php {
+    return if !$EA4;
     my $php = {};
     my @available_php;
     my @current_php;
@@ -2321,15 +2321,23 @@ sub print_if_using_mydns_or_nsd {
     }
 }
 
-sub print_if_using_modruid2_or_itk {
+sub print_if_mod_userdir {
+    if ( $EA4 && cpanel_version_is(qw( >= 11.59.0.0 )) ) {
+        print_info('Mod Userdir: ');
+        print_warning("will not execute PHP scripts via PHP-FPM");
+    }
+    if ( defined($EA4_PHP) && defined( $EA4_PHP->{default} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{handler} ) && $EA4_PHP->{ $EA4_PHP->{default} }->{handler} eq "cgi" ) {
+        print_info('Mod Userdir: ');
+        print_warning("will not execute PHP scripts via cgi handler");
+    }
     if ( $APACHE_PER_USER eq "ruid2" ) {
-        print_info('Mod Ruid2: ');
-        print_warning('is enabled (mod_userdir style URLs don\'t work with Mod Ruid2)');
+        print_info('Mod Userdir: ');
+        print_warning('doesn\'t work with Mod Ruid2');
         return;
     }
     if ( $APACHE_PER_USER eq "itk" ) {
-        print_info('MPM ITK: ');
-        print_warning('is enabled (mod_userdir style URLs don\'t work with MPM ITK)');
+        print_info('Mod userdir: ');
+        print_warning('doesn\'t work with MPM ITK');
         return;
     }
 }
@@ -2623,14 +2631,27 @@ sub print_lsws_info {
         print_info('LiteSpeed Web Server: ');
         print_normal( 'is listening on ports [ ' . join( " ", sort( keys(%lshttpd_ports) ) ) . ' ]' );
     }
+    if ( $LSWS_FULL_VERSION =~ /Enterprise/ ) {
+        print_info('LiteSpeed Web Server: ');
+        print_normal('is supported, see http://cpanel.wiki/display/LS/LiteSpeed');
+    }
+    else {
+        print_info('LiteSpeed Web Server: ');
+        print_warning('non-Enterprise editions of LiteSpeed are NOT directly supported');
+        if ( cpanel_version_is(qw( < 11.59.9999.111 )) ) {
+            print_info('LiteSpeed Web Server: ');
+            print_warning('Only WHM 60 and later support SNI with OpenLiteSpeed - see CPANEL-8151');
+        }
+    }
     print_info('LiteSpeed Web Server: ');
-    print_normal('is now supported, see http://cpanel.wiki/display/LS/LiteSpeed');
-    print_normal('Note: whm-server-status is incompatible with LiteSpeed');
+    print_warning('whm-server-status is incompatible with LiteSpeed');
 }
 
 sub check_for_lsws_update {
-    return if !$LSWS_NUMERIC_VERSION;
+    return unless defined($LSWS_NUMERIC_VERSION);
     return if $LSWS_NUMERIC_VERSION eq "unknown";
+    return unless $LSWS_FULL_VERSION =~ /Enterprise/;
+
     my ( $LSWS_DATA, @lsws_data ) = ();
     my $available_lsws_version;
 
@@ -2663,8 +2684,7 @@ sub check_for_lsws_update {
             last;
         }
     }
-
-    return if !$available_lsws_version;
+    return unless $available_lsws_version;
 
     if ( version_compare( $LSWS_NUMERIC_VERSION, '<', $available_lsws_version ) ) {
         print_info('LiteSpeed Web Server: ');
@@ -2948,7 +2968,7 @@ sub find_custom_opt_mods {
     }
 }
 
-sub check_for_local_apache_templates {
+sub check_for_local_templates {
     my @templatedirs = qw(
       /var/cpanel/templates/apache2_4
       /var/cpanel/templates/apache2_2
@@ -2956,6 +2976,8 @@ sub check_for_local_apache_templates {
       /var/cpanel/templates/apache2
       /var/cpanel/templates/apache1_3
       /var/cpanel/templates/apache1
+      /var/cpanel/templates/dovecot2.2
+      /var/cpanel/templates/dovecotSNI
       );    # Order is somewhat important above for cosmetic reasons, due to symlinks
     my %templatedirs = ();
 
@@ -3304,13 +3326,16 @@ sub check_for_non_default_permissions {
         $check{'/usr/bin/passwd'}  = { mode => [ '6755', '4755', '4555', '4511' ] };
         $check{'/var/run'} = { mode => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
     }
-    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {
-        $check{'/bin'}     = { symlink => '/usr/bin' };
-        $check{'/run'}     = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
-        $check{'/sbin'}    = { symlink => '/usr/sbin' };
-        $check{'/var/run'} = { symlink => '/run', check_missing => 1 };
+    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {    # https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Migration_Planning_Guide/sect-Red_Hat_Enterprise_Linux-Migration_Planning_Guide-File_System_Layout.html
+        $check{'/bin'}   = { symlink => '/usr/bin',   check_missing => 1 };
+        $check{'/lib'}   = { symlink => '/usr/lib',   check_missing => 1 };
+        $check{'/lib64'} = { symlink => '/usr/lib64', check_missing => 1 };
+        $check{'/run'} = { mode => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
+        $check{'/sbin'}     = { symlink => '/usr/sbin', check_missing => 1 };
+        $check{'/var/lock'} = { symlink => '/run/lock', check_missing => 1 };
+        $check{'/var/run'}  = { symlink => '/run',      check_missing => 1 };
     }
-    if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {    # CPANEL-6180 results in these log files having the APPEND-ONLY attribute, so only check other attributes.
+    if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {         # CPANEL-6180 results in these log files having the APPEND-ONLY attribute, so only check other attributes.
         $check{'/usr/local/cpanel/logs/cpdavd_error_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/cphulkd.log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/cphulkd_errors.log'} = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
@@ -4870,6 +4895,7 @@ sub check_mysql_config {
         'datadir'             => { default => '/var/lib/mysql' },
         'innodbforcerecovery' => { default => '0', help => 'Makes all InnoDB databases read-only, will break MySQL upgrades.' },
         'logerror'            => { default => '/var/lib/mysql/' . $HOSTNAME . '.err' },
+        'lowercasetablenames' => { default => '0', help => 'Will break space usage reporting of databases with mixed-case names. See CPANEL-8453.' },
         'skipnameresolve'     => { help    => 'Seeing "Can\'t find any matching row"? That may be why.' },
         'skipnetworking'      => { help    => 'Webmail or other MySQL related items not functioning properly? That may be why.' },
         'sqlmode'             => { help    => 'Seeing "Field \'ssl_cipher\' doesn\'t have a default value"? That may be why.' }
@@ -5833,50 +5859,52 @@ sub check_for_disabled_services {
     my $disabled;
 
     my %touchfiles = (
-        '/etc/antirelayddisable'                 => 'antirelayd',
-        '/etc/rrdtooldisable'                    => 'rrdtool',
-        '/var/run/chkservd.suspend'              => 'chksrvd',
-        '/etc/clamddisable'                      => 'clamd',
-        '/etc/cppopdisable'                      => 'courier',
-        '/etc/popdisable'                        => 'courier',
-        '/etc/cpanellogddisable'                 => 'cpanellogd',
-        '/etc/cpdavddisable'                     => 'cpdavd',
-        '/etc/cpsrvdddisable'                    => 'cpsrvd',
-        '/etc/eximdisable'                       => 'exim',
-        '/etc/exiscandisable'                    => 'exiscan',
-        '/etc/disablehackcheck'                  => 'hackcheck',
-        '/etc/ftpddisable'                       => 'ftpd',
-        '/etc/ftpserverdisable'                  => 'ftpd',
-        '/etc/apachedisable'                     => 'httpd',
-        '/etc/httpddisable'                      => 'httpd',
-        '/etc/httpdisable'                       => 'httpd',
-        '/etc/httpdisevil'                       => 'httpd',
-        '/etc/cpimapdisable'                     => 'imapd',
-        '/etc/imapddisable'                      => 'imapd',
-        '/etc/imapdisable'                       => 'imapd',
-        '/etc/ipaliasesdisable'                  => 'ipaliases',
-        '/etc/mailmandisable'                    => 'mailman',
-        '/etc/mydnsdisable'                      => 'mydns',
-        '/etc/mysqldisable'                      => 'mysql',
-        '/etc/binddisable'                       => 'named',
-        '/etc/dnsdisable'                        => 'named',
-        '/etc/nameddisable'                      => 'named',
-        '/etc/nsddisable'                        => 'nsd',
-        '/etc/postgresdisable'                   => 'postgresql',
-        '/etc/postgresqldisable'                 => 'postgresql',
-        '/etc/postmasterdisable'                 => 'postgresql',
-        '/etc/proftpddisable'                    => 'proftpd',
-        '/etc/pureftpddisable'                   => 'pureftpd',
-        '/etc/pure-ftpddisable'                  => 'pureftpd',
-        '/etc/queueprocddisable'                 => 'queueprocd',
-        '/etc/rsyslogdisable'                    => 'rsyslogd',
-        '/var/cpanel/version/securetmp_disabled' => 'securetmp',
-        '/etc/spamddisable'                      => 'spamd',
-        '/etc/spamdisable'                       => 'spamd',
-        '/etc/sshddisable'                       => 'sshd',
-        '/etc/syslogdisable'                     => 'syslogd',
-        '/etc/tailwatchddisable'                 => 'tailwatchd',
-        '/etc/tomcatdisable'                     => 'tomcat',
+        '/etc/antirelayddisable'                                 => 'antirelayd',
+        '/var/cpanel/ssl/disable_auto_hostname_certificate'      => 'auto_hostname_certificate',
+        '/etc/rrdtooldisable'                                    => 'rrdtool',
+        '/var/run/chkservd.suspend'                              => 'chksrvd',
+        '/etc/clamddisable'                                      => 'clamd',
+        '/etc/cppopdisable'                                      => 'courier',
+        '/etc/popdisable'                                        => 'courier',
+        '/etc/cpanellogddisable'                                 => 'cpanellogd',
+        '/etc/cpdavddisable'                                     => 'cpdavd',
+        '/etc/cpsrvdddisable'                                    => 'cpsrvd',
+        '/etc/eximdisable'                                       => 'exim',
+        '/etc/exiscandisable'                                    => 'exiscan',
+        '/etc/disablehackcheck'                                  => 'hackcheck',
+        '/etc/ftpddisable'                                       => 'ftpd',
+        '/etc/ftpserverdisable'                                  => 'ftpd',
+        '/etc/apachedisable'                                     => 'httpd',
+        '/etc/httpddisable'                                      => 'httpd',
+        '/etc/httpdisable'                                       => 'httpd',
+        '/etc/httpdisevil'                                       => 'httpd',
+        '/etc/cpimapdisable'                                     => 'imapd',
+        '/etc/imapddisable'                                      => 'imapd',
+        '/etc/imapdisable'                                       => 'imapd',
+        '/etc/ipaliasesdisable'                                  => 'ipaliases',
+        '/etc/mailmandisable'                                    => 'mailman',
+        '/etc/mydnsdisable'                                      => 'mydns',
+        '/etc/mysqldisable'                                      => 'mysql',
+        '/etc/binddisable'                                       => 'named',
+        '/etc/dnsdisable'                                        => 'named',
+        '/etc/nameddisable'                                      => 'named',
+        '/etc/nsddisable'                                        => 'nsd',
+        '/etc/postgresdisable'                                   => 'postgresql',
+        '/etc/postgresqldisable'                                 => 'postgresql',
+        '/etc/postmasterdisable'                                 => 'postgresql',
+        '/etc/proftpddisable'                                    => 'proftpd',
+        '/etc/pureftpddisable'                                   => 'pureftpd',
+        '/etc/pure-ftpddisable'                                  => 'pureftpd',
+        '/etc/queueprocddisable'                                 => 'queueprocd',
+        '/etc/rsyslogdisable'                                    => 'rsyslogd',
+        '/var/cpanel/version/securetmp_disabled'                 => 'securetmp',
+        '/var/cpanel/ssl/disable_service_certificate_management' => 'checkallsslcerts',
+        '/etc/spamddisable'                                      => 'spamd',
+        '/etc/spamdisable'                                       => 'spamd',
+        '/etc/sshddisable'                                       => 'sshd',
+        '/etc/syslogdisable'                                     => 'syslogd',
+        '/etc/tailwatchddisable'                                 => 'tailwatchd',
+        '/etc/tomcatdisable'                                     => 'tomcat',
     );
 
     my %cpconfcheck = (
