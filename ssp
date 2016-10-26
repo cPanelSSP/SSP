@@ -307,6 +307,7 @@ sub run {
     check_for_sneaky_htaccess();
     check_perl_sanity();
     check_for_non_default_permissions();
+    check_for_non_default_file_capabilities();
     check_for_non_default_sysctl();
     check_for_stale_lockfiles();
     check_var_cpanel_users_files_ownership();
@@ -3497,6 +3498,35 @@ sub check_for_non_default_permissions {
     }
 }
 
+sub check_for_non_default_file_capabilities {
+
+    # Check for at least these capabilities, more is OK
+    # Example: '/path' => { cap => ['cap_setgid','cap_setuid+ep'], help => 'Some help text' },
+    # tidyoff
+    my %check = (
+    );
+    # tidyon
+
+    if ($EA4) {
+        $check{'/usr/sbin/suexec'} = { cap => [ 'cap_setgid', 'cap_setuid', '+ep' ], help => 'Will break cpanel/webmail redirects and other suexec usage, \'yum reinstall ea-apache24\' to fix' };
+    }
+
+    for my $path ( sort keys %check ) {
+        next unless -e $path;
+        my @result = get_fcap($path);
+        next unless scalar @result;
+        my @missing;
+        foreach my $cap ( @{ $check{$path}->{cap} } ) {
+            push @missing, $cap unless grep( /^\Q${cap}\E$/, @result );
+        }
+        if ( scalar @missing ) {
+            my $help = exists $check{$path}->{help} ? ' - ' . $check{$path}->{help} : '';
+            print_warn('Non-default capabilities: ');
+            print_warning( $path . ' is missing ' . join( ',', @missing ) . $help );
+        }
+    }
+}
+
 sub get_attributes {
 
     # @want is optional, not specifying anything returns all checked attributes
@@ -3520,6 +3550,21 @@ sub get_attributes {
         $result{$attr} = 1 if $flags & $attributes{$attr};
     }
     return %result;
+}
+
+sub get_fcap {
+    my ($path) = @_;
+    my $getcap = '/usr/sbin/getcap';
+    return unless -x $getcap;
+    return unless -e $path;
+    my $output = timed_run( 0, $getcap, $path );
+    my @result;
+    if ( $output =~ m/^$path = ([^+]*)(\+.*)?$/ ) {
+        @result = split( /,/, $1 );
+        push @result, $2 if defined $2;
+    }
+    @result = ('none') unless scalar @result;
+    return @result;
 }
 
 sub check_for_non_default_sysctl {
