@@ -4967,12 +4967,12 @@ sub check_cpanel_config {
     # If check_missing exists, a warning is generated if the item is NOT in cpanel.config and does not match the default (if given) or is empty
 
     my %cpanel_checks = (
-        'enablecompileroptimizations' => { default => '0', help => 'Tweak setting "Enable optimizations for the C compiler" enabled. If Sandy Bridge CPU, problems MAY occur (see ticket 3355885)' },
-        'ftpserver'     => { check_missing => 1 },
-        'mailserver'    => { check_missing => 1 },
-        'mysql-version' => { check_missing => 1 },
-        'nativessl'     => { default       => '1', help => 'Native SSL support for WHM/cPanel services is disabled' },
-        'skiphttpauth'  => { default       => '1', help => 'HTTP auth enabled' },
+        'enablecompileroptimizations' => { default       => '0', help => 'Tweak setting "Enable optimizations for the C compiler" enabled. If Sandy Bridge CPU, problems MAY occur (see ticket 3355885)' },
+        'ftpserver'                   => { check_missing => 1 },
+        'mailserver'                  => { check_missing => 1 },
+        'mysql-version'               => { check_missing => 1 },
+        'nativessl'                   => { default       => '1', help => 'Native SSL support for WHM/cPanel services is disabled' },
+        'skiphttpauth'                => { default       => '1', help => 'HTTP auth enabled' },
     );
 
     if ( cpanel_version_is(qw( < 11.48.0.0 )) ) {
