@@ -764,6 +764,7 @@ sub all_malware_checks {
     check_for_xor_ddos();                 # malware
     check_for_shellbot();                 # malware
     check_for_ncom_filenames();           # malware
+    check_for_cpro();
 }
 
 sub get_phpini {
@@ -8446,6 +8447,29 @@ sub check_for_ncom_filenames {
         print_critical( "\t" . join( " ", @bad_libs ) );
         print_critical("\tL3: use \"L3 - Ncom Rootkit Predef [L3 Only]\"");
         print_critical("\tL3: check /etc/ld.so.preload");
+        print_critical();
+    }
+}
+
+sub check_for_cpro {
+    my @bad_paths;
+    my @paths = qw(
+      /usr/bin/clnupdate
+      /usr/bin/yasin
+      /usr/local/cpanel/license/update_cpanelv2
+      /usr/local/cpanel/whostmgr/cgi/check.php
+    );
+    for my $path (@paths) {
+
+        if ( -e $path ) {
+            push @bad_paths, $path;
+        }
+    }
+    if (@bad_paths) {
+        print_generic_hack_predef('C.PRO');
+        print_critical('The following files were found:');
+        print_critical( "\t" . join( " ", @bad_paths ) );
+        print_critical("\tL3: See ticket 7790559 for reference.");
         print_critical();
     }
 }
