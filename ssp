@@ -17,6 +17,7 @@ use strict;
 use warnings;
 use Fcntl qw(:mode);
 use File::Find;
+use Socket;
 use IO::Socket::INET;
 use Sys::Hostname;
 use Term::ANSIColor qw(:constants);
@@ -347,6 +348,7 @@ sub run {
     check_for_usr_local_lib_libz_so();
     check_for_non_default_modsec_rules();
     check_etc_hosts_sanity();
+    check_localhost_resolution();
     check_for_empty_or_missing_files();
     check_for_apache_listen_host_is_localhost();
     check_roundcube_mysql_pass_mismatch();
@@ -553,6 +555,7 @@ sub non_cpanel_checks_only {
     check_yum_conf();
     check_for_cpsources_conf();
     check_etc_hosts_sanity();
+    check_localhost_resolution();
     check_mysql_config();
     check_for_extra_mysql_config_files();
     check_perl_version_less_than_588();
@@ -680,6 +683,7 @@ sub dnsonly_checks_only {
 
     # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
     check_etc_hosts_sanity();
+    check_localhost_resolution();
     check_perl_version_less_than_588();
     check_for_fork_bomb_protection();
     check_for_cPanel_lower_than_11_30_7_3();
@@ -1861,6 +1865,10 @@ sub check_perl_version_less_than_588 {
     if ( version_compare( $perl_version, qw( < 5.8.8 ) ) ) {
         print_warn('Perl Version: ');
         print_warning( 'less than 5.8.8: [ ' . $perl_version . ' ]' );
+    }
+    if ( version_compare( $perl_version, qw( < 5.14.0 ) ) ) {
+        print_warn('Perl Version: ');
+        print_warning('better resolver results can be obtained when running SSP with Perl 5.14 or later');
     }
 }
 
@@ -4808,6 +4816,128 @@ sub check_etc_hosts_sanity {
         print_warn('/etc/hosts: ');
         print_warning("no entry found for the server's hostname! [$HOSTNAME] (Can break EA or Apache when mod_unique_id is enabled)");
     }
+}
+
+sub check_localhost_resolution {
+
+    # At this time we only require localhost to resolve to "127.0.0.1", but "::1" is accounted for
+    my $print_check;
+    my $found_127_forward;
+    my @localhost = _resolve( 'localhost', 1 );
+    foreach my $addr (@localhost) {
+        unless ( $addr eq '127.0.0.1' or $addr eq '::1' ) {
+            print_warn('Resolver: ');
+            print_warning( 'returned unexpected address [ ' . $addr . ' ] (out of ' . scalar @localhost . ' total addresses) for "localhost"!' );
+            $print_check = 1;
+        }
+        $found_127_forward = 1 if $addr eq '127.0.0.1';
+    }
+    unless ($found_127_forward) {
+        print_warn('Resolver: ');
+        print_warning('did not return expected "127.0.0.1" when resolving "localhost"!');
+        $print_check = 1;
+    }
+
+    # Check 127.0.0.1 -> name (may be "localhost.domain") -> 127.0.0.1 match
+    my $found_127_reverse;
+    my @reverse = _resolve( '127.0.0.1', 1 );
+    foreach my $host (@reverse) {
+        unless ( $host =~ '^localhost' ) {
+            print_warn('Resolver: ');
+            print_warning( 'returned unexpected name [ ' . $host . ' ] (out of ' . scalar @reverse . ' total names) when resolving "127.0.0.1"!' );
+            $print_check = 1;
+        }
+        my @forward = _resolve( $host, 1 );
+        foreach my $addr (@forward) {
+            unless ( $addr eq '127.0.0.1' or $addr eq '::1' ) {
+                print_warn('Resolver: ');
+                print_warning( '"127.0.0.1" resolved to [ ' . $host . ' ] (out of ' . scalar @forward . ' total addresses) which resolved to unexpected localhost address [ ' . $addr . ' ]!' );
+                $print_check = 1;
+            }
+            $found_127_reverse = 1 if $addr eq '127.0.0.1';
+        }
+    }
+    unless ($found_127_reverse) {
+        print_warn('Resolver: ');
+        print_warning('No full reverse path for "127.0.0.1" found! ( 127.0.0.1 -> localhost -> 127.0.0.1 )');
+        $print_check = 1;
+    }
+    if ($print_check) {
+        print_warn('Resolver: ');
+        print_warning('Check /etc/{hosts,host.conf,nsswitch.conf,resolv.conf} for sanity.  Localhost resolution problems could cause errant behavior.');
+    }
+}
+
+sub _resolve {
+    my ( $addr, $report_errors, $timeout ) = @_;
+    $report_errors = ( defined $report_errors && $report_errors ne "0" ) ? 1 : 0;
+    $timeout = defined $timeout ? $timeout : 3;
+    my @results;
+    my $addrinfo = eval {    # Perl 5.14+
+        Socket->import(qw(getaddrinfo getnameinfo NI_NAMEREQD NI_NUMERICHOST NIx_NOSERV SOCK_RAW));
+        1;
+    };
+
+    local $SIG{'ALRM'} = sub {
+        if ($report_errors) {
+            print_warn('Resolver: ');
+            print_warning( 'Timed out (' . $timeout . ' seconds) resolving "' . $addr . '"' );
+        }
+        return;
+    };
+    alarm $timeout;
+
+    if ($addrinfo) {
+        my $getnameinfo_flags = ( $addr =~ /^\d+\.\d+\.\d+\.\d+$/ ) ? Socket::NI_NAMEREQD : Socket::NI_NUMERICHOST;    # If looking up IP address we require name resolution, otherwise we want the IP address returned.
+        my ( $err, @socks ) = getaddrinfo( $addr, "", { socktype => SOCK_RAW } );
+        if ( $report_errors && $err ) {
+            print_warn('Resolver: ');
+            print_warning( 'getaddrinfo() failed to resolve "' . $addr . '": ' . $err );
+        }
+        foreach my $sock (@socks) {
+            my ( $err, $result ) = getnameinfo( $sock->{addr}, $getnameinfo_flags, Socket::NIx_NOSERV );
+            if ( $report_errors && $err ) {
+                print_warn('Resolver: ');
+                print_warning( 'getnameinfo() failed to resolve "' . $addr . '": ' . $err );
+                next;
+            }
+            push @results, $result;
+        }
+    }
+    else {    # Fall back to older (deprecated) Socket functions
+        my %h_errno = (
+            '1' => 'HOST_NOT_FOUND',
+            '2' => 'TRY_AGAIN',
+            '3' => 'NO_RECOVERY',
+            '4' => 'NO_DATA'
+        );
+        if ( $addr =~ /^\d+\.\d+\.\d+\.\d+$/ ) {
+            my $packed = inet_aton($addr);
+            return unless defined $packed;
+            my $result = gethostbyaddr( $packed, AF_INET );
+            my $error = $? ? "h_errno " . ( exists $h_errno{$?} ? $h_errno{$?} : $? ) : 0;
+            if ( $report_errors && $error ) {
+                print_warn('Resolver: ');
+                print_warning( 'gethostbyaddr() failed to resolve "' . $addr . '": ' . $error );
+                return;
+            }
+            push @results, $result;
+        }
+        else {
+            my $packed_result = gethostbyname($addr);
+            my $error = $? ? "h_errno " . ( exists $h_errno{$?} ? $h_errno{$?} : $? ) : 0;
+            if ( $report_errors && $error ) {
+                print_warn('Resolver: ');
+                print_warning( 'gethostbyname() failed to resolve "' . $addr . '": ' . $error );
+            }
+            if ( defined $packed_result ) {
+                my $result = inet_ntoa($packed_result);
+                push @results, $result;
+            }
+        }
+    }
+    alarm 0;
+    return @results;
 }
 
 sub check_for_empty_or_missing_files {
