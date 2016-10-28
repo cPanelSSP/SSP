@@ -17,6 +17,7 @@ use strict;
 use warnings;
 use Fcntl qw(:mode);
 use File::Find;
+use Socket;
 use IO::Socket::INET;
 use Sys::Hostname;
 use Term::ANSIColor qw(:constants);
@@ -28,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.143';
+our $VERSION = '4.99.144';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -307,6 +308,7 @@ sub run {
     check_for_sneaky_htaccess();
     check_perl_sanity();
     check_for_non_default_permissions();
+    check_for_non_default_file_capabilities();
     check_for_non_default_sysctl();
     check_for_stale_lockfiles();
     check_var_cpanel_users_files_ownership();
@@ -346,6 +348,7 @@ sub run {
     check_for_usr_local_lib_libz_so();
     check_for_non_default_modsec_rules();
     check_etc_hosts_sanity();
+    check_localhost_resolution();
     check_for_empty_or_missing_files();
     check_for_apache_listen_host_is_localhost();
     check_roundcube_mysql_pass_mismatch();
@@ -552,6 +555,7 @@ sub non_cpanel_checks_only {
     check_yum_conf();
     check_for_cpsources_conf();
     check_etc_hosts_sanity();
+    check_localhost_resolution();
     check_mysql_config();
     check_for_extra_mysql_config_files();
     check_perl_version_less_than_588();
@@ -679,6 +683,7 @@ sub dnsonly_checks_only {
 
     # check_for_cpsources_conf();       // does this exist on DNSONLY by default?
     check_etc_hosts_sanity();
+    check_localhost_resolution();
     check_perl_version_less_than_588();
     check_for_fork_bomb_protection();
     check_for_cPanel_lower_than_11_30_7_3();
@@ -764,6 +769,7 @@ sub all_malware_checks {
     check_for_xor_ddos();                 # malware
     check_for_shellbot();                 # malware
     check_for_ncom_filenames();           # malware
+    check_for_cpro();
 }
 
 sub get_phpini {
@@ -1859,6 +1865,10 @@ sub check_perl_version_less_than_588 {
     if ( version_compare( $perl_version, qw( < 5.8.8 ) ) ) {
         print_warn('Perl Version: ');
         print_warning( 'less than 5.8.8: [ ' . $perl_version . ' ]' );
+    }
+    if ( version_compare( $perl_version, qw( < 5.14.0 ) ) ) {
+        print_warn('Perl Version: ');
+        print_warning('better resolver results can be obtained when running SSP with Perl 5.14 or later');
     }
 }
 
@@ -3496,6 +3506,35 @@ sub check_for_non_default_permissions {
     }
 }
 
+sub check_for_non_default_file_capabilities {
+
+    # Check for at least these capabilities, more is OK
+    # Example: '/path' => { cap => ['cap_setgid','cap_setuid+ep'], help => 'Some help text' },
+    # tidyoff
+    my %check = (
+    );
+    # tidyon
+
+    if ($EA4) {
+        $check{'/usr/sbin/suexec'} = { cap => [ 'cap_setgid', 'cap_setuid', '+ep' ], help => 'Will break cpanel/webmail redirects and other suexec usage, \'yum reinstall ea-apache24\' to fix' };
+    }
+
+    for my $path ( sort keys %check ) {
+        next unless -e $path;
+        my @result = get_fcap($path);
+        next unless scalar @result;
+        my @missing;
+        foreach my $cap ( @{ $check{$path}->{cap} } ) {
+            push @missing, $cap unless grep( /^\Q${cap}\E$/, @result );
+        }
+        if ( scalar @missing ) {
+            my $help = exists $check{$path}->{help} ? ' - ' . $check{$path}->{help} : '';
+            print_warn('Non-default capabilities: ');
+            print_warning( $path . ' is missing ' . join( ',', @missing ) . $help );
+        }
+    }
+}
+
 sub get_attributes {
 
     # @want is optional, not specifying anything returns all checked attributes
@@ -3521,12 +3560,27 @@ sub get_attributes {
     return %result;
 }
 
+sub get_fcap {
+    my ($path) = @_;
+    my $getcap = '/usr/sbin/getcap';
+    return unless -x $getcap;
+    return unless -e $path;
+    my $output = timed_run( 0, $getcap, $path );
+    my @result;
+    if ( $output =~ m/^$path = ([^+]*)(\+.*)?$/ ) {
+        @result = split( /,/, $1 );
+        push @result, $2 if defined $2;
+    }
+    @result = ('none') unless scalar @result;
+    return @result;
+}
+
 sub check_for_non_default_sysctl {
     my %check = (    # 'sysctl_key' => [ ['default1', 'default2', ...], 'Additional info' ]
         'kernel.user_ptrace'      => [ ['1'], ' - Disabling this is known to break remote logins from WHM Transfer Tool - see FB-167393' ],
         'net.ipv4.tcp_tw_recycle' => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
         'net.ipv4.tcp_tw_reuse'   => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
-        'vm.overcommit_memory' => [ [ '0', '1' ], ' - Seeing "Out of memory" but there\s free memory and no limits?  This might be why.' ],
+        'vm.overcommit_memory' => [ [ '0', '1' ], ' - Seeing "Out of memory" but there is free memory and no limits?  This might be why.' ],
     );
 
     for my $key ( sort keys %check ) {
@@ -4764,6 +4818,128 @@ sub check_etc_hosts_sanity {
     }
 }
 
+sub check_localhost_resolution {
+
+    # At this time we only require localhost to resolve to "127.0.0.1", but "::1" is accounted for
+    my $print_check;
+    my $found_127_forward;
+    my @localhost = _resolve( 'localhost', 1 );
+    foreach my $addr (@localhost) {
+        unless ( $addr eq '127.0.0.1' or $addr eq '::1' ) {
+            print_warn('Resolver: ');
+            print_warning( 'returned unexpected address [ ' . $addr . ' ] (out of ' . scalar @localhost . ' total addresses) for "localhost"!' );
+            $print_check = 1;
+        }
+        $found_127_forward = 1 if $addr eq '127.0.0.1';
+    }
+    unless ($found_127_forward) {
+        print_warn('Resolver: ');
+        print_warning('did not return expected "127.0.0.1" when resolving "localhost"!');
+        $print_check = 1;
+    }
+
+    # Check 127.0.0.1 -> name (may be "localhost.domain") -> 127.0.0.1 match
+    my $found_127_reverse;
+    my @reverse = _resolve( '127.0.0.1', 1 );
+    foreach my $host (@reverse) {
+        unless ( $host =~ '^localhost' ) {
+            print_warn('Resolver: ');
+            print_warning( 'returned unexpected name [ ' . $host . ' ] (out of ' . scalar @reverse . ' total names) when resolving "127.0.0.1"!' );
+            $print_check = 1;
+        }
+        my @forward = _resolve( $host, 1 );
+        foreach my $addr (@forward) {
+            unless ( $addr eq '127.0.0.1' or $addr eq '::1' ) {
+                print_warn('Resolver: ');
+                print_warning( '"127.0.0.1" resolved to [ ' . $host . ' ] (out of ' . scalar @forward . ' total addresses) which resolved to unexpected localhost address [ ' . $addr . ' ]!' );
+                $print_check = 1;
+            }
+            $found_127_reverse = 1 if $addr eq '127.0.0.1';
+        }
+    }
+    unless ($found_127_reverse) {
+        print_warn('Resolver: ');
+        print_warning('No full reverse path for "127.0.0.1" found! ( 127.0.0.1 -> localhost -> 127.0.0.1 )');
+        $print_check = 1;
+    }
+    if ($print_check) {
+        print_warn('Resolver: ');
+        print_warning('Check /etc/{hosts,host.conf,nsswitch.conf,resolv.conf} for sanity.  Localhost resolution problems could cause errant behavior.');
+    }
+}
+
+sub _resolve {
+    my ( $addr, $report_errors, $timeout ) = @_;
+    $report_errors = ( defined $report_errors && $report_errors ne "0" ) ? 1 : 0;
+    $timeout = defined $timeout ? $timeout : 3;
+    my @results;
+    my $addrinfo = eval {    # Perl 5.14+
+        Socket->import(qw(getaddrinfo getnameinfo NI_NAMEREQD NI_NUMERICHOST NIx_NOSERV SOCK_RAW));
+        1;
+    };
+
+    local $SIG{'ALRM'} = sub {
+        if ($report_errors) {
+            print_warn('Resolver: ');
+            print_warning( 'Timed out (' . $timeout . ' seconds) resolving "' . $addr . '"' );
+        }
+        return;
+    };
+    alarm $timeout;
+
+    if ($addrinfo) {
+        my $getnameinfo_flags = ( $addr =~ /^\d+\.\d+\.\d+\.\d+$/ ) ? Socket::NI_NAMEREQD : Socket::NI_NUMERICHOST;    # If looking up IP address we require name resolution, otherwise we want the IP address returned.
+        my ( $err, @socks ) = getaddrinfo( $addr, "", { socktype => SOCK_RAW } );
+        if ( $report_errors && $err ) {
+            print_warn('Resolver: ');
+            print_warning( 'getaddrinfo() failed to resolve "' . $addr . '": ' . $err );
+        }
+        foreach my $sock (@socks) {
+            my ( $err, $result ) = getnameinfo( $sock->{addr}, $getnameinfo_flags, Socket::NIx_NOSERV );
+            if ( $report_errors && $err ) {
+                print_warn('Resolver: ');
+                print_warning( 'getnameinfo() failed to resolve "' . $addr . '": ' . $err );
+                next;
+            }
+            push @results, $result;
+        }
+    }
+    else {    # Fall back to older (deprecated) Socket functions
+        my %h_errno = (
+            '1' => 'HOST_NOT_FOUND',
+            '2' => 'TRY_AGAIN',
+            '3' => 'NO_RECOVERY',
+            '4' => 'NO_DATA'
+        );
+        if ( $addr =~ /^\d+\.\d+\.\d+\.\d+$/ ) {
+            my $packed = inet_aton($addr);
+            return unless defined $packed;
+            my $result = gethostbyaddr( $packed, AF_INET );
+            my $error = $? ? "h_errno " . ( exists $h_errno{$?} ? $h_errno{$?} : $? ) : 0;
+            if ( $report_errors && $error ) {
+                print_warn('Resolver: ');
+                print_warning( 'gethostbyaddr() failed to resolve "' . $addr . '": ' . $error );
+                return;
+            }
+            push @results, $result;
+        }
+        else {
+            my $packed_result = gethostbyname($addr);
+            my $error = $? ? "h_errno " . ( exists $h_errno{$?} ? $h_errno{$?} : $? ) : 0;
+            if ( $report_errors && $error ) {
+                print_warn('Resolver: ');
+                print_warning( 'gethostbyname() failed to resolve "' . $addr . '": ' . $error );
+            }
+            if ( defined $packed_result ) {
+                my $result = inet_ntoa($packed_result);
+                push @results, $result;
+            }
+        }
+    }
+    alarm 0;
+    return @results;
+}
+
 sub check_for_empty_or_missing_files {
     my $var_cpanel_users = '/var/cpanel/users';
     return if !-d $var_cpanel_users;
@@ -4967,12 +5143,12 @@ sub check_cpanel_config {
     # If check_missing exists, a warning is generated if the item is NOT in cpanel.config and does not match the default (if given) or is empty
 
     my %cpanel_checks = (
-        'enablecompileroptimizations' => { default => '0', help => 'Tweak setting "Enable optimizations for the C compiler" enabled. If Sandy Bridge CPU, problems MAY occur (see ticket 3355885)' },
-        'ftpserver'     => { check_missing => 1 },
-        'mailserver'    => { check_missing => 1 },
-        'mysql-version' => { check_missing => 1 },
-        'nativessl'     => { default       => '1', help => 'Native SSL support for WHM/cPanel services is disabled' },
-        'skiphttpauth'  => { default       => '1', help => 'HTTP auth enabled' },
+        'enablecompileroptimizations' => { default       => '0', help => 'Tweak setting "Enable optimizations for the C compiler" enabled. If Sandy Bridge CPU, problems MAY occur (see ticket 3355885)' },
+        'ftpserver'                   => { check_missing => 1 },
+        'mailserver'                  => { check_missing => 1 },
+        'mysql-version'               => { check_missing => 1 },
+        'nativessl'                   => { default       => '1', help => 'Native SSL support for WHM/cPanel services is disabled' },
+        'skiphttpauth'                => { default       => '1', help => 'HTTP auth enabled' },
     );
 
     if ( cpanel_version_is(qw( < 11.48.0.0 )) ) {
@@ -8446,6 +8622,29 @@ sub check_for_ncom_filenames {
         print_critical( "\t" . join( " ", @bad_libs ) );
         print_critical("\tL3: use \"L3 - Ncom Rootkit Predef [L3 Only]\"");
         print_critical("\tL3: check /etc/ld.so.preload");
+        print_critical();
+    }
+}
+
+sub check_for_cpro {
+    my @bad_paths;
+    my @paths = qw(
+      /usr/bin/clnupdate
+      /usr/bin/yasin
+      /usr/local/cpanel/license/update_cpanelv2
+      /usr/local/cpanel/whostmgr/cgi/check.php
+    );
+    for my $path (@paths) {
+
+        if ( -e $path ) {
+            push @bad_paths, $path;
+        }
+    }
+    if (@bad_paths) {
+        print_generic_hack_predef('C.PRO');
+        print_critical('The following files were found:');
+        print_critical( "\t" . join( " ", @bad_paths ) );
+        print_critical("\tL3: See ticket 7790559 for reference.");
         print_critical();
     }
 }
