@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.144';
+our $VERSION = '4.99.145';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -3515,7 +3515,7 @@ sub check_for_non_default_file_capabilities {
     );
     # tidyon
 
-    if ($EA4) {
+    if ( $EA4 && !$IS_CLOUDLINUX ) {
         $check{'/usr/sbin/suexec'} = { cap => [ 'cap_setgid', 'cap_setuid', '+ep' ], help => 'Will break cpanel/webmail redirects and other suexec usage, \'yum reinstall ea-apache24\' to fix' };
     }
 
