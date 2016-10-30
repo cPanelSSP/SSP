@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.145';
+our $VERSION = '4.99.146';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -206,12 +206,18 @@ sub init {
 }
 
 sub run {
-    Getopt::Long::GetOptionsFromArray(
-        \@ARGV,
-        'bugreport' => \$OPT_BUGREPORT,
-        'csi'       => \$OPT_CSI,
-        'timeout=i' => \$OPT_TIMEOUT,
-    );
+    if ( defined &Getopt::Long::GetOptionsFromArray ) {
+        Getopt::Long::GetOptionsFromArray(
+            \@ARGV,
+            'bugreport' => \$OPT_BUGREPORT,
+            'csi'       => \$OPT_CSI,
+            'timeout=i' => \$OPT_TIMEOUT,
+        );
+    }
+    elsif ( scalar @ARGV ) {
+        print_crit('Perl: ');
+        print_critical('there are one or more command-line options passed in but Getopt::Long::GetOptionsFromArray is not found so SSP is unable to parse them.  Try running SSP with a newer version of Perl or Getopt::Long.');
+    }
 
     if ($OPT_TIMEOUT) {
         $OPT_TIMEOUT = int $OPT_TIMEOUT;
@@ -4888,6 +4894,7 @@ sub _resolve {
     alarm $timeout;
 
     if ($addrinfo) {
+        no strict 'subs';    # Prevent compile-time warnings on older versions of Perl for the NI_* constants which are loaded at run-time.
         my $getnameinfo_flags = ( $addr =~ /^\d+\.\d+\.\d+\.\d+$/ ) ? Socket::NI_NAMEREQD : Socket::NI_NUMERICHOST;    # If looking up IP address we require name resolution, otherwise we want the IP address returned.
         my ( $err, @socks ) = getaddrinfo( $addr, "", { socktype => SOCK_RAW } );
         if ( $report_errors && $err ) {
