@@ -5579,13 +5579,13 @@ sub check_for_broken_mysql_horde {
 }
 
 sub check_for_clock_skew {
-    ## last updated 2016-07-28
+    ## last updated 2016-12-08
     ## we do this to avoid having to do the DNS lookup
     my @rdate_servers = qw(
       208.74.121.36
       208.74.121.43
-      208.74.125.89
-      208.74.125.90
+      208.74.123.15
+      208.74.123.23
     );
 
     my $localtime = time();
@@ -5600,6 +5600,7 @@ sub check_for_clock_skew {
     for ( 1 .. 2 ) {
         my $num = int rand scalar @rdate_servers;
         $rdate_time = timed_run( 10, 'rdate', '-p', '-t', '3', $rdate_servers[$num] );
+        next if $rdate_time =~ /timeout/;
         last if $rdate_time;
     }
 
@@ -5607,9 +5608,10 @@ sub check_for_clock_skew {
 
     $rdate_time =~ s/\A rdate: \s \[[^\]]+\] \s+//gxms;
 
-    if ( $rdate_time =~ m{ \A \S+ \s (\S+) \s (\d+) \s (\d+):(\d+):(\d+) \s (\d+) }xms ) {
+    if ( $rdate_time =~ m{ \A \S+ \s+ (\S+) \s+ (\d+) \s+ (\d+):(\d+):(\d+) \s+ (\d+) }xms ) {
         my ( $mon, $mday, $hour, $min, $sec, $year ) = ( $1, $2, $3, $4, $5, $6 );
         $mon = $months{$mon};
+
         $rdate_time = timelocal( $sec, $min, $hour, $mday, $mon, $year );
     }
     return if ( $rdate_time !~ /\d{10,}/ );
@@ -5617,7 +5619,12 @@ sub check_for_clock_skew {
     $clock_skew = ( $rdate_time - $localtime );
     $clock_skew = abs $clock_skew;                # convert negative numbers to positive
 
-    return if ( $clock_skew < 120 );
+    my $max_skew = 120;
+    if ( defined $CPCONF{'SecurityPolicy::TwoFactorAuth'} && $CPCONF{'SecurityPolicy::TwoFactorAuth'} == 1 ) {
+        $max_skew = 25;
+    }
+
+    return if ( $clock_skew < $max_skew );
 
     if ( $clock_skew >= 31536000 ) {
         $clock_skew = sprintf '%d', ( $clock_skew / 31536000 );
@@ -5635,9 +5642,13 @@ sub check_for_clock_skew {
         $clock_skew = sprintf '%d', ( $clock_skew / 60 );
         $clock_skew .= ' minute(s)';
     }
+    else {
+        $clock_skew = sprintf '%d', ($clock_skew);
+        $clock_skew .= ' seconds';
+    }
 
     print_warn('Clock skew: ');
-    print_warning("server time may be off by ${clock_skew}. Large time offsets may cause SSL-related problems or Dovecot to die during upcp.");
+    print_warning("server time may be off by ${clock_skew}. A very large difference may cause SSL/TLS connection errors, and more than about 30 seconds can cause 2FA failure.");
 }
 
 sub check_for_zlib_h {
