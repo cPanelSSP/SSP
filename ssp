@@ -3195,10 +3195,13 @@ sub check_for_non_default_permissions {
         '/'                                     => { mode => [ '0755', '0555' ], perms_help => '.ftpquota issues? see ticket 4429843', attr_help => 'This can break EA. See ticket 4929961' },
         '/bin/bash'                             => { mode => ['0755'] },
         '/bin/crontab'                          => { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' },
+        '/bin/gtar'                             => { symlink => 'tar', symlink_no_absolute => 1, perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
+        '/bin/gzip'                             => { mode => ['755'], perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/ln'                               => { mode => [ '0755', '0555' ] },
         '/bin/passwd'                           => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
         '/bin/rpm'                              => { mode => [ '755',  '555' ],  perms_help => 'If users cannot execute /bin/rpm it will break Cron Jobs in x3 UI (CPANEL-1487)' },
         '/bin/rm'                               => { mode => [ '0755', '0555' ], perms_help => 'File Manager unable to delete files?  This may be why.' },
+        '/bin/tar'                              => { mode => ['755'], perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/dev'                                  => { mode => ['0755'], perms_help => 'Breaks many things if non-root users can\'t access this.' },
         '/dev/log'                              => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog, including user cron jobs to /var/log/cron.' },
         '/dev/null'                             => { mode => ['0666'], perms_help => 'Breaks many things if non-root users can\'t write to this.' },
@@ -3435,8 +3438,9 @@ sub check_for_non_default_permissions {
                 }
             }
             if ( !exists $check{$path}{'symlink'} || $linktarget ne $check{$path}{'symlink'} ) {
+                my $perms_help = exists $check{$path}->{perms_help} ? ' - ' . $check{$path}->{perms_help} : '';
                 print_warn('Non-default symlink: ');
-                print_warning( '[ ' . $path . ' -> ' . $linktarget . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' );
+                print_warning( '[ ' . $path . ' -> ' . $linktarget . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' . $perms_help );
             }
         }
         elsif ( -e _ ) {
