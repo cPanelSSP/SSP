@@ -8608,6 +8608,7 @@ sub check_for_ncom_filenames {
     my @bad_libs;
     my @dirs  = qw( /lib /lib64 );
     my @files = qw(
+      libnano.so.4
       libncom.so.4.0.1
       libselinux.so.4
     );
