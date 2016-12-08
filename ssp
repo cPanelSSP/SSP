@@ -5776,7 +5776,7 @@ sub check_distcache_and_libapr {
 
     if ( $httpd_not_linked_to_system_apr == 1 ) {
         print_warn('Apache: ');
-        print_warning('httpd linked to system APR, not APR in /usr/local/apache/lib/ (see 62676)');
+        print_warning('httpd linked to system APR, not APR in /usr/local/apache/lib/ (see EAL-2551)');
     }
 }
 
