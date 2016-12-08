@@ -7742,9 +7742,10 @@ sub check_for_shellbot {
     }
 
     if (@matched) {
-        print_generic_hack_predef('Shellbot');
+        print_generic_hack_predef('ShellBot');
         print_critical('The following file(s) were found:');
         print_critical( "\t" . join( "\n\t", @matched ) );
+        print_critical("\tL3: use \"L3 - ShellBot Predef [L3 Only]\"");
         print_critical();
     }
 }
