@@ -432,6 +432,7 @@ sub run {
     check_for_mod_rpaf();
     check_for_mod_spdy();
     check_for_mod_http2();
+    check_for_mod_fcgid();
     check_for_roundcube_overlay();
     check_for_hostname_park_zoneexists();
     check_for_pgpass_colon_in_password_field();
@@ -7050,6 +7051,14 @@ sub check_for_mod_http2 {
     if ( version_compare( $APACHE_VERSION, qw ( == 2.4.25 ) ) && grep { /http2_module/ } @APACHE_MODULES_OUTPUT ) {
         print_warn('mod_http2: ');
         print_warning('is loaded and causes segfaults in Apache 2.4.25, see EAL-3153.');
+    }
+}
+
+sub check_for_mod_fcgid {
+    return unless $EA4;
+    if ( grep { /fcgid_module/ } @APACHE_MODULES_OUTPUT ) {
+        print_warn('mod_fcgid: ');
+        print_warning('loaded, and has many caveats.  See https://documentation.cpanel.net/display/EA4/Apache+Module%3A+FCGId');
     }
 }
 
