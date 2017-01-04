@@ -90,6 +90,7 @@ our ( $EA3_PHPVERSION, $EA3_PHP5VERSION, $EA3_PHP4VERSION, $EA3_PHP4HANDLER, $EA
 our @LSOF_80;
 our $OPENSSL_RPM_CHANGELOG;
 our $EA4_PHP_FPM;               # Boolean flag indicating if easyapache4's php fpm is running
+our $ORIGINAL_PATH;
 
 # Initialize application by setting loading all global variables
 # (except the RPM variables).  That's done within run()
@@ -101,6 +102,7 @@ sub init {
     if ( $< != 0 ) {
         die "SSP must be run as root\n";
     }
+    $ORIGINAL_PATH              = $ENV{'PATH'};
     $ENV{'PATH'}                = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
     $|                          = 1;
     $Term::ANSIColor::AUTORESET = 1;
@@ -6049,15 +6051,23 @@ sub check_for_missing_etc_localtime {
 sub check_for_perl_env_var {
     if ( exists( $ENV{'PERL5LIB'} ) ) {
         print_warn('PERL5LIB env var: ');
-        print_warning('exists! This can break cPanel\'s perl or EasyApache. See FB-64265');
+        print_warning('exists! This can break cPanel\'s perl or EA3. See FB-64265');
+    }
+    if ( exists( $ENV{'PERL_LOCAL_LIB_ROOT'} ) ) {
+        print_warn('PERL_LOCAL_LIB_ROOT env var: ');
+        print_warning('exists! This can break cPanel\'s perl or EA3.');
     }
     if ( exists( $ENV{'PERL_MB_OPT'} ) ) {
         print_warn('PERL_MB_OPT env var: ');
-        print_warning('exists! This can break cPanel\'s perl or EasyApache.');
+        print_warning('exists! This can break cPanel\'s perl or EA3.');
     }
     if ( exists( $ENV{'PERL_MM_OPT'} ) ) {
         print_warn('PERL_MM_OPT env var: ');
-        print_warning('exists! This can break cPanel\'s perl or EasyApache.');
+        print_warning('exists! This can break cPanel\'s perl or EA3.');
+    }
+    if ( grep { /\/perl5?\// } $ORIGINAL_PATH ) {
+        print_warn('Custom perl in PATH env var: ');
+        print_warning('exists! This can break EA3 or cause other unexpected system-perl behavior.');
     }
 }
 
