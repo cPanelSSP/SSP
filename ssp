@@ -5850,6 +5850,7 @@ sub check_for_rpm_overrides {
            $md5_local
         && $md5_local =~ m{ \A (
                                  1d9f5d246ef2c9ab29f33cf00a3af9a5
+                               | 2c8e757e0e38a87f68e8eeb7bd306bf6
                                | 352969216e1673edfa8d4ecf189043dc
                                | 41894ce9a0721ed61db14d5e96e630d0
                                | 57baebe121bcd5ab9752dd63f60ecd81
