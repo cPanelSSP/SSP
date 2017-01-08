@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.146';
+our $VERSION = '4.99.147';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -90,6 +90,7 @@ our ( $EA3_PHPVERSION, $EA3_PHP5VERSION, $EA3_PHP4VERSION, $EA3_PHP4HANDLER, $EA
 our @LSOF_80;
 our $OPENSSL_RPM_CHANGELOG;
 our $EA4_PHP_FPM;               # Boolean flag indicating if easyapache4's php fpm is running
+our $ORIGINAL_PATH;
 
 # Initialize application by setting loading all global variables
 # (except the RPM variables).  That's done within run()
@@ -101,6 +102,7 @@ sub init {
     if ( $< != 0 ) {
         die "SSP must be run as root\n";
     }
+    $ORIGINAL_PATH              = $ENV{'PATH'};
     $ENV{'PATH'}                = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
     $|                          = 1;
     $Term::ANSIColor::AUTORESET = 1;
@@ -431,6 +433,8 @@ sub run {
     check_for_noquotafs();
     check_for_mod_rpaf();
     check_for_mod_spdy();
+    check_for_mod_http2();
+    check_for_mod_fcgid();
     check_for_roundcube_overlay();
     check_for_hostname_park_zoneexists();
     check_for_pgpass_colon_in_password_field();
@@ -3195,10 +3199,13 @@ sub check_for_non_default_permissions {
         '/'                                     => { mode => [ '0755', '0555' ], perms_help => '.ftpquota issues? see ticket 4429843', attr_help => 'This can break EA. See ticket 4929961' },
         '/bin/bash'                             => { mode => ['0755'] },
         '/bin/crontab'                          => { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' },
+        '/bin/gtar'                             => { symlink => 'tar', symlink_no_absolute => 1, perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
+        '/bin/gzip'                             => { mode => ['755'], perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/ln'                               => { mode => [ '0755', '0555' ] },
         '/bin/passwd'                           => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
         '/bin/rpm'                              => { mode => [ '755',  '555' ],  perms_help => 'If users cannot execute /bin/rpm it will break Cron Jobs in x3 UI (CPANEL-1487)' },
         '/bin/rm'                               => { mode => [ '0755', '0555' ], perms_help => 'File Manager unable to delete files?  This may be why.' },
+        '/bin/tar'                              => { mode => ['755'], perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/dev'                                  => { mode => ['0755'], perms_help => 'Breaks many things if non-root users can\'t access this.' },
         '/dev/log'                              => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog, including user cron jobs to /var/log/cron.' },
         '/dev/null'                             => { mode => ['0666'], perms_help => 'Breaks many things if non-root users can\'t write to this.' },
@@ -3435,8 +3442,9 @@ sub check_for_non_default_permissions {
                 }
             }
             if ( !exists $check{$path}{'symlink'} || $linktarget ne $check{$path}{'symlink'} ) {
+                my $perms_help = exists $check{$path}->{perms_help} ? ' - ' . $check{$path}->{perms_help} : '';
                 print_warn('Non-default symlink: ');
-                print_warning( '[ ' . $path . ' -> ' . $linktarget . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' );
+                print_warning( '[ ' . $path . ' -> ' . $linktarget . ' ] ( default -> ' . ( exists $check{$path}{'symlink'} ? $check{$path}{'symlink'} : 'no symlink' ) . ' )' . $perms_help );
             }
         }
         elsif ( -e _ ) {
@@ -3706,30 +3714,32 @@ sub check_for_hooks_in_scripts_directory {
 
     # default CloudLinux, cPGs hooks that can be ignored
     my %hooks_ignore = qw(
-      e5e13640299ec439fb4c7f79a054e42b    /scripts/posteasyapache
-      16d94b5426681a977e2beedd0ad871e9    /scripts/posteasyapache
-      42a624c843f34085f1532b0b4e17fe8c    /scripts/postmodifyacct
-      67cefa439c7ea3b1b7643ec739c60006    /scripts/postmodifyacct
-      05b7f8b4f2c83f033d124479a1c3eca0    /scripts/postupcp
-      22cf7db1c069fd9672cd9dad3a3d371d    /scripts/postupcp
-      57f8ea2d494e299827cc365c86a357ac    /scripts/postupcp
-      e464adf0531fea2af4fe57361d9a43fb    /scripts/postupcp
-      941772daaa48999f1d5ae5fe2f881e36    /scripts/postupcp
-      843f9a04ceed5d03dc34616b371abf06    /scripts/postupcp
-      50bfcdbca45dc5813b5b354ceb24d977    /scripts/postupcp
-      4988be925a6f50ec505618a7cec702e2    /scripts/postkillacct
-      a4df04a6440073fe40363cfd241b1fe7    /scripts/postwwwacct
-      03a0dc919c892bde254c52cefe4d0673    /scripts/postwwwacct
-      2401d6260dac6215596be1652b394200    /scripts/postwwwacct
-      677da3bdd8fbd16d4b8917a9fe0f6f89    /scripts/postwwwacct
-      9de3100a4f39d98ae49449350af8928a    /scripts/postwwwacct
-      d296b6bc92e8a60424c6e017219ddaf6    /scripts/postwwwacct
-      44caf075fc0f9847ede43de5dd563edc    /scripts/prekillacct
-      86f9b53c81a8f2fd77a8626ddd3b2c71    /scripts/prekillacct
-      46fee9faf2d5f83cbcda17ce0178a465    /scripts/prekillacct
-      677da3bdd8fbd16d4b8917a9fe0f6f89    /scripts/prekillacct
-      88f73e4fd1384479e4069a68ae4e1489    /scripts/prekillacct
-      423370856f0be1b80f39d28043d7d4f8    /scripts/postrestoreacct
+      16d94b5426681a977e2beedd0ad871e9  /scripts/posteasyapache
+      e5e13640299ec439fb4c7f79a054e42b  /scripts/posteasyapache
+      4988be925a6f50ec505618a7cec702e2  /scripts/postkillacct
+      28620050548a2e4b500ab7426aaa0df5  /scripts/postmodifyacct
+      42a624c843f34085f1532b0b4e17fe8c  /scripts/postmodifyacct
+      67cefa439c7ea3b1b7643ec739c60006  /scripts/postmodifyacct
+      423370856f0be1b80f39d28043d7d4f8  /scripts/postrestoreacct
+      05b7f8b4f2c83f033d124479a1c3eca0  /scripts/postupcp
+      22cf7db1c069fd9672cd9dad3a3d371d  /scripts/postupcp
+      50bfcdbca45dc5813b5b354ceb24d977  /scripts/postupcp
+      57f8ea2d494e299827cc365c86a357ac  /scripts/postupcp
+      6db9b6bfb975adbe908300cc802774a8  /scripts/postupcp
+      843f9a04ceed5d03dc34616b371abf06  /scripts/postupcp
+      941772daaa48999f1d5ae5fe2f881e36  /scripts/postupcp
+      e464adf0531fea2af4fe57361d9a43fb  /scripts/postupcp
+      03a0dc919c892bde254c52cefe4d0673  /scripts/postwwwacct
+      2401d6260dac6215596be1652b394200  /scripts/postwwwacct
+      677da3bdd8fbd16d4b8917a9fe0f6f89  /scripts/postwwwacct
+      9de3100a4f39d98ae49449350af8928a  /scripts/postwwwacct
+      a4df04a6440073fe40363cfd241b1fe7  /scripts/postwwwacct
+      d296b6bc92e8a60424c6e017219ddaf6  /scripts/postwwwacct
+      44caf075fc0f9847ede43de5dd563edc  /scripts/prekillacct
+      46fee9faf2d5f83cbcda17ce0178a465  /scripts/prekillacct
+      677da3bdd8fbd16d4b8917a9fe0f6f89  /scripts/prekillacct
+      86f9b53c81a8f2fd77a8626ddd3b2c71  /scripts/prekillacct
+      88f73e4fd1384479e4069a68ae4e1489  /scripts/prekillacct
     );
 
     my @hooks;
@@ -3877,9 +3887,10 @@ sub check_for_easyapache_hooks {
 
     # default CloudLinux hooks that can be ignored
     my %hooks_ignore = qw(
-      41ec2d3f35d8cd7cb01b60485fb3bdbb    /scripts/before_apache_make
-      407df66f28c8822cd4f51fe56160f74e    /scripts/before_apache_make
-      24214790021e1df53a0a6e3741ca74c3    /scripts/before_apache_make
+      24214790021e1df53a0a6e3741ca74c3  /scripts/before_apache_make
+      2af1cea5d3eea8d837b719131ec6d67e  /scripts/before_apache_make
+      407df66f28c8822cd4f51fe56160f74e  /scripts/before_apache_make
+      41ec2d3f35d8cd7cb01b60485fb3bdbb  /scripts/before_apache_make
     );
 
     for my $hook (@hooks) {
@@ -5572,13 +5583,13 @@ sub check_for_broken_mysql_horde {
 }
 
 sub check_for_clock_skew {
-    ## last updated 2016-07-28
+    ## last updated 2016-12-08
     ## we do this to avoid having to do the DNS lookup
     my @rdate_servers = qw(
       208.74.121.36
       208.74.121.43
-      208.74.125.89
-      208.74.125.90
+      208.74.123.15
+      208.74.123.23
     );
 
     my $localtime = time();
@@ -5593,6 +5604,7 @@ sub check_for_clock_skew {
     for ( 1 .. 2 ) {
         my $num = int rand scalar @rdate_servers;
         $rdate_time = timed_run( 10, 'rdate', '-p', '-t', '3', $rdate_servers[$num] );
+        next if $rdate_time =~ /timeout/;
         last if $rdate_time;
     }
 
@@ -5600,9 +5612,10 @@ sub check_for_clock_skew {
 
     $rdate_time =~ s/\A rdate: \s \[[^\]]+\] \s+//gxms;
 
-    if ( $rdate_time =~ m{ \A \S+ \s (\S+) \s (\d+) \s (\d+):(\d+):(\d+) \s (\d+) }xms ) {
+    if ( $rdate_time =~ m{ \A \S+ \s+ (\S+) \s+ (\d+) \s+ (\d+):(\d+):(\d+) \s+ (\d+) }xms ) {
         my ( $mon, $mday, $hour, $min, $sec, $year ) = ( $1, $2, $3, $4, $5, $6 );
         $mon = $months{$mon};
+
         $rdate_time = timelocal( $sec, $min, $hour, $mday, $mon, $year );
     }
     return if ( $rdate_time !~ /\d{10,}/ );
@@ -5610,7 +5623,12 @@ sub check_for_clock_skew {
     $clock_skew = ( $rdate_time - $localtime );
     $clock_skew = abs $clock_skew;                # convert negative numbers to positive
 
-    return if ( $clock_skew < 120 );
+    my $max_skew = 120;
+    if ( defined $CPCONF{'SecurityPolicy::TwoFactorAuth'} && $CPCONF{'SecurityPolicy::TwoFactorAuth'} == 1 ) {
+        $max_skew = 25;
+    }
+
+    return if ( $clock_skew < $max_skew );
 
     if ( $clock_skew >= 31536000 ) {
         $clock_skew = sprintf '%d', ( $clock_skew / 31536000 );
@@ -5628,9 +5646,13 @@ sub check_for_clock_skew {
         $clock_skew = sprintf '%d', ( $clock_skew / 60 );
         $clock_skew .= ' minute(s)';
     }
+    else {
+        $clock_skew = sprintf '%d', ($clock_skew);
+        $clock_skew .= ' seconds';
+    }
 
     print_warn('Clock skew: ');
-    print_warning("server time may be off by ${clock_skew}. Large time offsets may cause SSL-related problems or Dovecot to die during upcp.");
+    print_warning("server time may be off by ${clock_skew}. A very large difference may cause SSL/TLS connection errors, and more than about 30 seconds can cause 2FA failure.");
 }
 
 sub check_for_zlib_h {
@@ -5769,7 +5791,7 @@ sub check_distcache_and_libapr {
 
     if ( $httpd_not_linked_to_system_apr == 1 ) {
         print_warn('Apache: ');
-        print_warning('httpd linked to system APR, not APR in /usr/local/apache/lib/ (see 62676)');
+        print_warning('httpd linked to system APR, not APR in /usr/local/apache/lib/ (see EAL-2551)');
     }
 }
 
@@ -5827,16 +5849,19 @@ sub check_for_rpm_overrides {
     if (
            $md5_local
         && $md5_local =~ m{ \A (
-                                 fab8a718f7e3a1ff9c9d04fb4e8c94c4
-                               | fd3f270edda79575343e910369b75ab7
-                               | 57baebe121bcd5ab9752dd63f60ecd81
-                               | 1d9f5d246ef2c9ab29f33cf00a3af9a5
-                               | a89257469792a846e8db72edd6d29919
-                               | c79a35d2f9633bce58f66b0f1549f4d3
+                                 1d9f5d246ef2c9ab29f33cf00a3af9a5
+                               | 2c8e757e0e38a87f68e8eeb7bd306bf6
                                | 352969216e1673edfa8d4ecf189043dc
-                               | 94f54ec9f5fecf733f0d27b87e5a6c29
-                               | a8eca141eda7464bc7c12f3607f5511c
                                | 41894ce9a0721ed61db14d5e96e630d0
+                               | 57baebe121bcd5ab9752dd63f60ecd81
+                               | 94f54ec9f5fecf733f0d27b87e5a6c29
+                               | a89257469792a846e8db72edd6d29919
+                               | a8eca141eda7464bc7c12f3607f5511c
+                               | c79a35d2f9633bce58f66b0f1549f4d3
+                               | c9da54d8761c2a35f6b93cad4e5f6eac
+                               | dd86be82414adad88ada72e791c2fee5
+                               | fab8a718f7e3a1ff9c9d04fb4e8c94c4
+                               | fd3f270edda79575343e910369b75ab7
                                 ) \s }xms
       ) {
         $local_is_default = 1;
@@ -5845,12 +5870,13 @@ sub check_for_rpm_overrides {
     if (
            $md5_easy
         && $md5_easy =~ m{ \A (
-                                  d56abe76c47853eceb706f0855e642a7
-                                | 89d631ef7c1d43475c20d7be7b7290ff
+                                  350e47b97efd4b75563837b6b3502d71
+                                | 5818611cb4c0bf4086806aced5669f25
                                 | 600ff436e5939656a5645c6139cc0228
                                 | 657d59cc9627d30a95d0b84ef4245185
-                                | 350e47b97efd4b75563837b6b3502d71
-                                | 5818611cb4c0bf4086806aced5669f25
+                                | 89d631ef7c1d43475c20d7be7b7290ff
+                                | d56abe76c47853eceb706f0855e642a7
+                                | eed54b4202d0b2655f37a5c1edfa0853
                                 ) \s }xms
       ) {
         $easy_is_default = 1;
@@ -5859,7 +5885,8 @@ sub check_for_rpm_overrides {
     if (
            $md5_cloud
         && $md5_cloud =~ m{ \A (
-                                  cf40c6ac1543464a937b8c39c4ad1da6
+                                  956e6d177a790389572c7fcc8b33f8c5
+                                | cf40c6ac1543464a937b8c39c4ad1da6
                                 ) \s }xms
       ) {
         $cloud_is_default = 1;
@@ -6025,15 +6052,23 @@ sub check_for_missing_etc_localtime {
 sub check_for_perl_env_var {
     if ( exists( $ENV{'PERL5LIB'} ) ) {
         print_warn('PERL5LIB env var: ');
-        print_warning('exists! This can break cPanel\'s perl or EasyApache. See FB-64265');
+        print_warning('exists! This can break cPanel\'s perl or EA3. See FB-64265');
+    }
+    if ( exists( $ENV{'PERL_LOCAL_LIB_ROOT'} ) ) {
+        print_warn('PERL_LOCAL_LIB_ROOT env var: ');
+        print_warning('exists! This can break cPanel\'s perl or EA3.');
     }
     if ( exists( $ENV{'PERL_MB_OPT'} ) ) {
         print_warn('PERL_MB_OPT env var: ');
-        print_warning('exists! This can break cPanel\'s perl or EasyApache.');
+        print_warning('exists! This can break cPanel\'s perl or EA3.');
     }
     if ( exists( $ENV{'PERL_MM_OPT'} ) ) {
         print_warn('PERL_MM_OPT env var: ');
-        print_warning('exists! This can break cPanel\'s perl or EasyApache.');
+        print_warning('exists! This can break cPanel\'s perl or EA3.');
+    }
+    if ( grep { /\/perl5?\// } $ORIGINAL_PATH ) {
+        print_warn('Custom perl in PATH env var: ');
+        print_warning('exists! This can break EA3 or cause other unexpected system-perl behavior.');
     }
 }
 
@@ -7023,6 +7058,21 @@ sub check_for_mod_spdy {
     }
 }
 
+sub check_for_mod_http2 {
+    if ( version_compare( $APACHE_VERSION, qw ( == 2.4.25 ) ) && grep { /http2_module/ } @APACHE_MODULES_OUTPUT ) {
+        print_warn('mod_http2: ');
+        print_warning('is loaded and causes segfaults in Apache 2.4.25, see EAL-3153.');
+    }
+}
+
+sub check_for_mod_fcgid {
+    return unless $EA4;
+    if ( grep { /fcgid_module/ } @APACHE_MODULES_OUTPUT ) {
+        print_warn('mod_fcgid: ');
+        print_warning('loaded, and has many caveats.  See https://documentation.cpanel.net/display/EA4/Apache+Module%3A+FCGId');
+    }
+}
+
 sub check_for_roundcube_overlay {
     my $rcdir = '/var/cpanel/roundcube';
     return if !-d $rcdir;
@@ -7742,9 +7792,10 @@ sub check_for_shellbot {
     }
 
     if (@matched) {
-        print_generic_hack_predef('Shellbot');
+        print_generic_hack_predef('ShellBot');
         print_critical('The following file(s) were found:');
         print_critical( "\t" . join( "\n\t", @matched ) );
+        print_critical("\tL3: use \"L3 - ShellBot Predef [L3 Only]\"");
         print_critical();
     }
 }
@@ -8608,6 +8659,7 @@ sub check_for_ncom_filenames {
     my @bad_libs;
     my @dirs  = qw( /lib /lib64 );
     my @files = qw(
+      libnano.so.4
       libncom.so.4.0.1
       libselinux.so.4
     );
