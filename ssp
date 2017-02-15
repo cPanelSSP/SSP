@@ -3186,7 +3186,9 @@ sub check_ea4_paths_conf {
         'file_conf_srm_conf'   => '/etc/apache2/conf.d/srm.conf',
         'file_error_log'       => '/etc/apache2/logs/error_log',
     );
-
+    if ( version_compare( $OS_VERSION, qw( < 7.0 ) ) ) {
+        $default_conf{'dir_run'} = '/var/run/apache2';
+    }
     if ( open my $conf_fh, '<', $paths_conf ) {
         while (<$conf_fh>) {
             next if /^(#|$)/;
