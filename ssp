@@ -314,6 +314,7 @@ sub run {
     check_for_custom_apache_includes();
     check_for_tomcatoptions();
     check_for_sneaky_htaccess();
+    check_ea4_paths_conf();
     check_perl_sanity();
     check_for_non_default_permissions();
     check_for_non_default_file_capabilities();
@@ -3137,6 +3138,90 @@ sub check_for_sneaky_htaccess {
     }
 }
 
+sub check_ea4_paths_conf {
+    return unless $EA4;
+    my $paths_conf = '/etc/cpanel/ea4/paths.conf';
+    lstat($paths_conf);    # Can now use _ for file tests.
+
+    if ( !-e _ ) {
+        print_warn('EA4: ');
+        print_warning('/etc/cpanel/ea4/paths.conf is missing!');
+        return;
+    }
+    if ( !-f _ ) {
+        print_warn('EA4: ');
+        print_warning('/etc/cpanel/ea4/paths.conf is not a normal file!');
+        return;
+    }
+    if ( -z _ ) {
+        print_warn('EA4: ');
+        print_warning('/etc/cpanel/ea4/paths.conf is empty!');
+        return;
+    }
+    if ( !-T _ ) {
+        print_warn('EA4: ');
+        print_warning('/etc/cpanel/ea4/paths.conf does not appear to be an ASCII text file!');
+        return;
+    }
+
+    my $unknown_count;
+    my %conf;
+    my %default_conf = (    # From ea-apache24-config-runtime-1.0-81.81.4.cpanel.noarch
+        'bin_apachectl'        => '/usr/sbin/apachectl',
+        'bin_httpd'            => '/usr/sbin/httpd',
+        'bin_suexec'           => '/usr/sbin/suexec',
+        'dir_base'             => '/etc/apache2',
+        'dir_conf'             => '/etc/apache2/conf.d',
+        'dir_conf_includes'    => '/etc/apache2/conf.d/includes',
+        'dir_conf_userdata'    => '/etc/apache2/conf.d/userdata',
+        'dir_docroot'          => '/var/www/html',
+        'dir_domlogs'          => '/etc/apache2/logs/domlogs',
+        'dir_logs'             => '/etc/apache2/logs',
+        'dir_modules'          => '/etc/apache2/modules',
+        'dir_run'              => '/run/apache2',
+        'file_access_log'      => '/etc/apache2/logs/access_log',
+        'file_conf'            => '/etc/apache2/conf/httpd.conf',
+        'file_conf_mime_types' => '/etc/mime.types',
+        'file_conf_php_conf'   => '/etc/apache2/conf.d/php.conf',
+        'file_conf_srm_conf'   => '/etc/apache2/conf.d/srm.conf',
+        'file_error_log'       => '/etc/apache2/logs/error_log',
+    );
+
+    if ( open my $conf_fh, '<', $paths_conf ) {
+        while (<$conf_fh>) {
+            next if /^(#|$)/;
+            if (m{ \A \s* ([^=]+?) \s* = \s* ([^\$]*?) \Z }x) {    # Cpanel::Config::LoadConfig::loadConfig( $path, $conf, '\s*=\s*', undef, '^\s*' );
+                $conf{$1} = $2;
+            }
+        }
+        close $conf_fh;
+        if ( !scalar keys %conf ) {
+            print_warn('EA4: ');
+            print_warning('/etc/cpanel/ea4/paths.conf does not appear to contain any valid configuration!');
+            return;
+        }
+        foreach my $key ( sort keys %conf ) {
+            if ( !exists $default_conf{$key} ) {                   # EA4 appears to ignore any unknown options, but count them.
+                $unknown_count++;
+                next;
+            }
+            if ( $default_conf{$key} ne $conf{$key} ) {
+                print_warn('EA4: ');
+                print_warning( '/etc/cpanel/ea4/paths.conf non-default setting: [ ' . $key . '=' . $conf{$key} . ' ]' );
+            }
+        }
+        foreach my $key ( sort keys %default_conf ) {
+            next if exists $conf{$key};
+            print_warn('EA4: ');
+            print_warning( '/etc/cpanel/ea4/paths.conf missing default setting: [ ' . $key . ' ]' );
+        }
+        if ($unknown_count) {
+            print_warn('EA4: ');
+            print_warning( '/etc/cpanel/ea4/paths.conf contains ' . $unknown_count . ' unknown configuration setting(s)!' );
+        }
+    }
+}
+
 sub check_perl_sanity {
     my $usr_bin_perl       = '/usr/bin/perl';
     my $usr_local_bin_perl = '/usr/local/bin/perl';
@@ -3286,6 +3371,7 @@ sub check_for_non_default_permissions {
     ## If EA4 is running we need to redefine some of the paths from %check as these paths have turned into symlinks.
     ## We also conditionally need to add the new paths that EA4 introduces.
     if ($EA4) {
+        $check{'/etc'}                              = { mode    => ['0755'], perms_help => 'Users need execute permission for this directory to use cPanel MultiPHP. See CPANEL-905.' };
         $check{'/etc/apache2'}                      = { mode    => ['0755'] };
         $check{'/etc/apache2/conf'}                 = { mode    => ['0755'] };
         $check{'/etc/apache2/conf.d'}               = { mode    => ['0755'] };
@@ -3294,8 +3380,8 @@ sub check_for_non_default_permissions {
         $check{'/etc/apache2/logs/error_log'}       = { mode    => ['0644'], user => '*', perms_help => 'If users can\'t read error_log, cPanel Errors (Last 300) won\'t work.' };
         $check{'/etc/apache2/logs/domlogs'}         = { mode    => [ '0711', '0755' ], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
         $check{'/etc/apache2/run'}                  = { symlink => '../../var/run/apache2', symlink_no_absolute => 1, check_missing => 1 };
-        $check{'/etc/cpanel'}                       = { mode    => [ '0755', '0751', '0711' ], perms_help => 'cPanel MultiPHP needs execute access to this directory.  See CPANEL-905.' };
-        $check{'/etc/cpanel/ea4'}                   = { mode    => ['0755'], perms_help => 'cPanel MultiPHP needs read access to this directory.  See CPANEL-905.' };
+        $check{'/etc/cpanel'}                       = { mode    => [ '0755', '0751', '0711' ], perms_help => 'Users need execute permission for this directory to use cPanel MultiPHP.  See CPANEL-905.' };
+        $check{'/etc/cpanel/ea4'}                   = { mode    => ['0755'], perms_help => 'Users need read/execute permission for this directory to use cPanel MultiPHP.  See CPANEL-905.' };
         $check{'/usr/local/apache/bin/apachectl'}   = { symlink => '/usr/sbin/apachectl', check_missing => 1 };
         $check{'/usr/local/apache/bin/httpd'}       = { symlink => '/usr/sbin/httpd', check_missing => 1 };
         $check{'/usr/local/apache/bin/suexec'}      = { symlink => '/usr/sbin/suexec', check_missing => 1 };
