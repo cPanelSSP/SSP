@@ -332,7 +332,7 @@ sub run {
     check_for_gdm();
     check_for_redhat_firewall();
     check_easyapache();
-    check_for_easyapache_hooks();
+    check_for_ea3_hooks();
     check_for_home_noexec();
     check_for_unsupported_nat();
     check_for_oracle_linux();
@@ -3787,8 +3787,6 @@ sub check_for_hooks_in_scripts_directory {
 
     # default CloudLinux, cPGs hooks that can be ignored
     my %hooks_ignore = qw(
-      16d94b5426681a977e2beedd0ad871e9  /scripts/posteasyapache
-      e5e13640299ec439fb4c7f79a054e42b  /scripts/posteasyapache
       4988be925a6f50ec505618a7cec702e2  /scripts/postkillacct
       28620050548a2e4b500ab7426aaa0df5  /scripts/postmodifyacct
       42a624c843f34085f1532b0b4e17fe8c  /scripts/postmodifyacct
@@ -3826,7 +3824,10 @@ sub check_for_hooks_in_scripts_directory {
     @hooks = grep { !/postsuexecinstall/ && !/post_sync_cleanup/ } @hooks;
 
     # CloudLinux stuff
-    @hooks = grep { !/postwwwacct\.l\.v\.e-manager\.bak/ } @hooks;
+    @hooks = grep { !/\.l\.v\.e-manager\.bak/ } @hooks;
+
+    # EA3 stuff checked elsewhere
+    @hooks = grep { !/easyapache/ } @hooks;
 
     my $hooks_output;
     if (@hooks) {
@@ -3949,13 +3950,17 @@ sub check_easyapache {
     }
 }
 
-sub check_for_easyapache_hooks {
+sub check_for_ea3_hooks {
+    # We're not ignoring these when running EA4 until it is impossible to revert to EA3.
     my $hooks;
 
-    my @hooks = qw( /scripts/before_apache_make
+    my @hooks = qw(
       /scripts/after_apache_make_install
-      /scripts/before_httpd_restart_tests
       /scripts/after_httpd_restart_tests
+      /scripts/before_apache_make
+      /scripts/before_httpd_restart_tests
+      /scripts/posteasyapache
+      /scripts/preeasyapache
     );
 
     # default CloudLinux hooks that can be ignored
@@ -3964,6 +3969,8 @@ sub check_for_easyapache_hooks {
       2af1cea5d3eea8d837b719131ec6d67e  /scripts/before_apache_make
       407df66f28c8822cd4f51fe56160f74e  /scripts/before_apache_make
       41ec2d3f35d8cd7cb01b60485fb3bdbb  /scripts/before_apache_make
+      16d94b5426681a977e2beedd0ad871e9  /scripts/posteasyapache
+      e5e13640299ec439fb4c7f79a054e42b  /scripts/posteasyapache
     );
 
     for my $hook (@hooks) {
@@ -3976,7 +3983,7 @@ sub check_for_easyapache_hooks {
     }
 
     if ($hooks) {
-        print_warn('EA hooks: ');
+        print_warn('EA3 hooks: ');
         print_warning($hooks);
     }
 }
