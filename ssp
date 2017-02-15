@@ -1901,7 +1901,6 @@ sub check_for_clustering {
     my $cluster_dir = '/var/cpanel/cluster/root/config';
     my @dir_contents;
     my @cluster_members;
-    my ( $cluster_member, $cluster_member_hostname, $cluster_member_role );
 
     if ( -d $cluster_dir ) {
         opendir( my $dir_fh, $cluster_dir );
@@ -1912,28 +1911,20 @@ sub check_for_clustering {
     chdir $cluster_dir or return;
 
     for my $dirent (@dir_contents) {
+        my ( $cluster_member, $cluster_member_hostname, $cluster_member_role );
+        my %cluster_conf;
 
         # only active cluster members have -dnsrole files
         if ( $dirent =~ m{ \A (.+)-dnsrole \z }xms ) {
             $cluster_member = $1;
 
-            if ( open my $file_fh, '<', "${cluster_member}.cache" ) {
-                my $cache_ref;
-                eval 'local $SIG{__DIE__}; local $SIG{__WARN__}; $cache_ref = Storable::fd_retrieve($file_fh);';    # from upcp.static
-                close $file_fh;
-                if ($cache_ref) {
-                    $cluster_member_hostname = $cache_ref->{'host'};
-                }
+            if ( open my $file_fh, '<', $cluster_member ) {
+                local $/;
+                %cluster_conf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($file_fh) );
                 close $file_fh;
             }
-            else {
-                $cluster_member_hostname = '?';
-            }
-
-            if ( !$cluster_member_hostname ) {
-                $cluster_member_hostname = '?';
-            }
-            if ( ${cluster_member} =~ m{ \A (vps\.net|softlayer) \z}xmsi ) {
+            $cluster_member_hostname = defined $cluster_conf{host} ? $cluster_conf{host} : '?';
+            if ( $cluster_member =~ m{ \A (vps\.net|softlayer) \z}xmsi ) {
                 $cluster_member_hostname = '';
             }
 
@@ -1943,22 +1934,17 @@ sub check_for_clustering {
                 }
                 close $file_fh;
             }
-            else {
-                $cluster_member_role = '?';
-            }
+            $cluster_member_role = defined $cluster_member_role ? $cluster_member_role : '?';
 
-            push @cluster_members, $cluster_member_hostname . '_SSP_' . $cluster_member . '_SSP_' . "[${cluster_member_role}]";
+            push @cluster_members, $cluster_member_hostname . ' ' . $cluster_member . ' ' . "[" . $cluster_member_role . "]";
         }
     }
 
-    ## print sorted output for cluster members, by hostname
-    if (@cluster_members) {
-        @cluster_members = sort @cluster_members;
+    return unless @cluster_members;
+    @cluster_members = sort @cluster_members;
 
-        for my $member (@cluster_members) {
-            $member =~ s/_SSP_/ /g;
-            print_magenta("\t \\_ $member");
-        }
+    for my $member (@cluster_members) {
+        print_magenta( "\t \\_ " . $member );
     }
 }
 
