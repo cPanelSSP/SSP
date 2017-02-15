@@ -456,7 +456,6 @@ sub run {
     check_for_missing_cloudlinux_files();
     check_for_modsec2_stage_files();
     check_for_cron_allow();
-    check_for_missing_fstab();
     check_for_dev_sandbox();
     check_for_jail_owner();
 
@@ -590,7 +589,6 @@ sub non_cpanel_checks_only {
     check_for_broken_mysqldump();
     check_for_readonly_filesystems();
     check_for_missing_cloudlinux_files();
-    check_for_missing_fstab();
     check_for_dev_sandbox();
 
     # [3RDP]
@@ -3304,6 +3302,7 @@ sub check_for_non_default_permissions {
         '/etc'                                  => { mode => ['0755'] },
         '/etc/cpbackup.conf'                    => { mode => ['0644'] },
         '/etc/exim.conf'                        => { mode => ['0644'] },
+        '/etc/fstab'                            => { mode => ['0644'], check_missing => 1, perms_help => 'Missing fstab can break /scripts/fixquotas (CPANEL-6082), and bad perms can break cPanel UI (CPANEL-11021).' },
         '/etc/group'                            => { mode => ['0644'] },
         '/etc/hosts'                            => { mode => ['0644'] },
         '/etc/localdomains'                     => { mode => ['0640'], group => 'mail', perms_help => 'Failing to properly create an email forwarder? See ticket 5234627.' },
@@ -8956,12 +8955,6 @@ sub check_ea4_php_fpm {
     }
 
     return 1;
-}
-
-sub check_for_missing_fstab {
-    return if -e "/etc/fstab";
-    print_warn('Filesystem: ');
-    print_warning("/etc/fstab may be missing. Can cause /scripts/fixquotas to fail. See case CPANEL-6082.");
 }
 
 sub get_external_ip {
