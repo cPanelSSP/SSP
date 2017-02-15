@@ -5915,19 +5915,24 @@ sub check_for_rpm_overrides {
 
     if (@dir_contents) {
         print_warn('RPM override: ');
-        print_warning("$rpm_override_dir contains entries, manually review. More info: http://go.cpanel.net/rpmversions");
+        print_warning("$rpm_override_dir contains custom entries, manually review. More info: http://go.cpanel.net/rpmversions");
 
+        my %ignore_package = (
+            'easy-tomcat7' => 'uninstalled'    # easy-tomcat7 is often shown uninstalled, which is OK
+        );
+        if ( cpanel_version_is(qw( >= 11.61.0.0 )) ) {
+            $ignore_package{'perl522'} = 'uninstalled';    # Normal for WHM 62 upgrade process
+        }
         if ( -r $local_versions ) {
             eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require YAML::Syck; };
             if ( !$@ ) {
                 my $ref = YAML::Syck::LoadFile($local_versions);
-                if ( $ref && $ref->{'target_settings'} ) {
+                if ( $ref && exists $ref->{'target_settings'} ) {
                     foreach my $package ( keys %{ $ref->{'target_settings'} } ) {
-                        if ( $ref->{'target_settings'}{$package} =~ m{uninstalled} ) {
-                            unless ( $package eq 'easy-tomcat7' ) {    # cPanel lists easy-tomcat7 as uninstalled by default
-                                print_warn("$package is listed as uninstalled in $local_versions");
-                                print_warning('');
-                            }
+                        next if exists $ignore_package{$package} && $ref->{'target_settings'}{$package} =~ m{$ignore_package{$package}};
+                        if ( $ref->{'target_settings'}{$package} =~ m{(uninstalled|unmanaged)} ) {
+                            print_warn($package);
+                            print_warning( " is listed as " . $1 . " in " . $local_versions );
                         }
                     }
                 }
