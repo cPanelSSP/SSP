@@ -446,8 +446,8 @@ sub run {
     check_for_easyparams_attributes();
     check_for_stale_backup_pidfile();
     check_for_allow_update_in_named_conf();
-    check_for_mpm_itk_and_suexec();
-    check_for_modruid2_warnings();
+    check_for_mpm_itk();
+    check_for_mod_ruid2();
     check_for_broken_mysqldump();
     check_exim_log_sanity();
     check_updatelog();
@@ -7338,29 +7338,35 @@ sub check_for_allow_update_in_named_conf {
     }
 }
 
-sub check_for_mpm_itk_and_suexec {
-    return if $EA4;
+sub check_for_mpm_itk {
     return unless $APACHE_PER_USER eq "itk";
-    return unless $EA3_SUEXEC;
-
-    print_warn('MPM ITK: ');
-    print_warning('enabled with suEXEC. This can break redirects like /cpanel. See FB-83405.');
+    if ( defined $EA3_SUEXEC && $EA3_SUEXEC ) {
+        print_warn('MPM ITK: ');
+        print_warning('enabled with suEXEC. This can break redirects like /cpanel. See FB-83405.');
+    }
+    if ($APACHE_MODSEC) {
+        print_warn('MPM ITK: ');
+        print_warning('is incompatible with ModSecurity SecDataDir (collections) until EA-4093 is resolved.');
+    }
 }
 
-sub check_for_modruid2_warnings {
-    if ( $APACHE_PER_USER eq "ruid2" ) {
-        if ( defined $CPCONF{'jailapache'} && $CPCONF{'jailapache'} == 1 ) {
+sub check_for_mod_ruid2 {
+    return unless $APACHE_PER_USER eq "ruid2";
+    if ( defined $CPCONF{'jailapache'} && $CPCONF{'jailapache'} == 1 ) {
+        print_warn('Mod Ruid2: ');
+        print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see FB-84393, FB-104017, and tickets 5015613, 5227891');
+        if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq 'suphp' ) {
             print_warn('Mod Ruid2: ');
-            print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see FB-84393, FB-104017, and tickets 5015613, 5227891');
-            if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq 'suphp' ) {
-                print_warn('Mod Ruid2: ');
-                print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see FB-70561, FB-105901');
-            }
+            print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see FB-70561, FB-105901');
         }
-        if ($LSWS_FULL_VERSION) {
-            print_warn('Mod Ruid2: ');
-            print_warning('could cause file permission problems when using LiteSpeed Web Server (see ticket 5154193)');
-        }
+    }
+    if ($LSWS_FULL_VERSION) {
+        print_warn('Mod Ruid2: ');
+        print_warning('could cause file permission problems when using LiteSpeed Web Server (see ticket 5154193)');
+    }
+    if ($APACHE_MODSEC) {
+        print_warn('Mod Ruid2: ');
+        print_warning('is incompatible with ModSecurity SecDataDir (collections) until EA-4093 is resolved.');
     }
 }
 
