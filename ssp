@@ -76,6 +76,7 @@ our @RPM_LIST;                  # rpm -qa
 our %CPCONF;                    # cpanel.config
 our $PUREFTPDCONF;              # /etc/pure-ftpd.conf
 our $PROFTPDCONF;               # /etc/proftpd.conf
+our $EXIMLOCALOPTS;             # /etc/exim.conf.localopts
 our $OLD_BACKUP_CONF;           # /etc/cpbackup.conf
 our $NEW_BACKUP_CONF;           # /var/cpanel/backups/config
 our @APACHE_VERSION_OUTPUT;     # httpd -v
@@ -137,6 +138,7 @@ sub init {
         $TIERS           = get_tiers_file();
         $PUREFTPDCONF    = get_pureftpd_conf();
         $PROFTPDCONF     = get_proftpd_conf();
+        $EXIMLOCALOPTS   = get_exim_localopts();
         $EA4_PHP_FPM     = get_ea4_php_fpm_status();
         $APACHE_PER_USER = "none";
         ( $OLD_BACKUP_CONF,   $NEW_BACKUP_CONF )      = get_backup_config();
@@ -182,7 +184,6 @@ sub init {
 
         # TODO: use +c 15 so the entire process name is displayed if >9 chars
         @LSOF_80 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:80' );
-
         {
             if ( open( my $cpconf_fh, '<', '/var/cpanel/cpanel.config' ) ) {
                 local $/ = undef;
@@ -290,9 +291,10 @@ sub run {
     print_backups_info();
     print_mailserver_info();
     print_ftpserver_info();
+    print_exim_info();
     check_for_custom_zonetemplates();
-    print_news();
     check_for_license_info();
+    print_news();
 
     ## [WARN]
     check_port_hash();
@@ -1285,6 +1287,16 @@ sub get_proftpd_conf {
             }
         }
         close $proftpdconf_fh;
+    }
+    return \%conf;
+}
+
+sub get_exim_localopts {
+    my %conf;
+    if ( open( my $conf_fh, '<', '/etc/exim.conf.localopts' ) ) {
+        local $/ = undef;
+        %conf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($conf_fh) );
+        close $conf_fh;
     }
     return \%conf;
 }
@@ -2582,6 +2594,22 @@ sub print_ftpserver_info {
     }
 }
 
+sub print_exim_info {
+    if ( defined $EXIMLOCALOPTS->{acl_delay_unknown_hosts} && $EXIMLOCALOPTS->{acl_delay_unknown_hosts} ) {
+        my $info = '20 second SMTP delay active (by default) for unknown hosts and spam, see DOC-6092.';
+        my $disabled;
+        if ( defined $EXIMLOCALOPTS->{acl_dont_delay_greylisting_trusted_hosts} && $EXIMLOCALOPTS->{acl_dont_delay_greylisting_trusted_hosts} ) {
+            $disabled .= ' [Greylisting Trusted Hosts]';
+        }
+        if ( defined $EXIMLOCALOPTS->{acl_dont_delay_greylisting_common_mail_providers} && $EXIMLOCALOPTS->{acl_dont_delay_greylisting_common_mail_providers} ) {
+            $disabled .= ' [Greylisting Common Mail Providers]';
+        }
+        $info .= ' Disabled for:' . $disabled if length $disabled;
+        print_info('Exim: ');
+        print_normal($info);
+    }
+}
+
 sub check_for_custom_zonetemplates {
     my $template_dir = '/var/cpanel/zonetemplates';
     return if !-e $template_dir;
@@ -2690,10 +2718,6 @@ sub check_for_lsws_update {
 }
 
 sub print_news {
-    if ( cpanel_version_is(qw( >= 11.52.0.0 )) ) {
-        print_info('WHM 11.52+: ');
-        print_normal('Slow email delivery or monitoring service detects SMTP has failed? 11.52 added SMTP connection delays, see DOC-6092.');
-    }
 }
 
 ##############################
