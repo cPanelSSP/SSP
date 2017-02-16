@@ -1642,36 +1642,27 @@ sub print_hostname {
 }
 
 sub print_os {
-    my $os_info               = $OS_RELEASE . " [$HOSTINFO->{'environment'}]";
-    my $php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
-    my $php_selector_disabled = 0;
+    my $os_info                  = $OS_RELEASE . " [$HOSTINFO->{'environment'}]";
+    my $x3_php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
+    my $x3_php_selector_disabled = 0;
 
     if ($IS_CLOUDLINUX) {
-        if ( -f $php_selector_conf ) {
-            if ( open my $file_fh, '<', $php_selector_conf ) {
+        if ( -f $x3_php_selector_conf ) {
+            if ( open my $file_fh, '<', $x3_php_selector_conf ) {
                 while (<$file_fh>) {
                     if (/^file=>lvephpsel,skipobj=>1/) {
-                        $php_selector_disabled = 1;
+                        $x3_php_selector_disabled = 1;
                         last;
                     }
                 }
                 close $file_fh;
             }
-        }
-        else {
-            $php_selector_disabled = 'status unknown';
-        }
-    }
-
-    if ( $IS_CLOUDLINUX == 1 ) {
-        if ( $php_selector_disabled eq 'status unknown' ) {
-            $os_info .= ' [PHP Selector: status unknown]';
-        }
-        elsif ( $php_selector_disabled == 1 ) {
-            $os_info .= ' [PHP Selector: disabled for x3]';
-        }
-        elsif ( $php_selector_disabled == 0 ) {
-            $os_info .= ' [PHP Selector: enabled for x3]';
+            if ( $x3_php_selector_disabled == 1 ) {
+                $os_info .= ' [PHP Selector for x3: disabled]';
+            }
+            elsif ( $x3_php_selector_disabled == 0 ) {
+                $os_info .= ' [PHP Selector for x3: enabled]';
+            }
         }
     }
 
@@ -3275,7 +3266,6 @@ sub check_for_non_default_permissions {
         '/bin/gzip'                             => { mode => ['755'], perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/ln'                               => { mode => [ '0755', '0555' ] },
         '/bin/passwd'                           => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
-        '/bin/rpm'                              => { mode => [ '755',  '555' ],  perms_help => 'If users cannot execute /bin/rpm it will break Cron Jobs in x3 UI (CPANEL-1487)' },
         '/bin/rm'                               => { mode => [ '0755', '0555' ], perms_help => 'File Manager unable to delete files?  This may be why.' },
         '/bin/tar'                              => { mode => ['755'], perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/dev'                                  => { mode => ['0755'], perms_help => 'Breaks many things if non-root users can\'t access this.' },
@@ -3473,6 +3463,9 @@ sub check_for_non_default_permissions {
         else {
             $check{'/usr/bin/python'} = { mode => ['0755'], perms_help => 'If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' };
         }
+    }
+    if ( -e '/usr/local/cpanel/base/frontend/x3' ) {
+        $check{'/bin/rpm'} = { mode => [ '755', '555' ], perms_help => 'If users cannot execute /bin/rpm it will break Cron Jobs in x3 UI (CPANEL-1487)' };
     }
 
     foreach my $backup_path ( $NEW_BACKUP_CONF->{BACKUPDIR}, $OLD_BACKUP_CONF->{BACKUPDIR} ) {
