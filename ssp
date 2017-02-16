@@ -6762,15 +6762,15 @@ sub check_if_backup_dir_is_nfs {
 sub check_if_hostname_missing_from_localdomains {
     my $hostname_check = 0;
 
-    open my $localdomains_fh, '<', '/etc/localdomains';
-    while (<$localdomains_fh>) {
-        if (/^${HOSTNAME}$/) {
-            $hostname_check = 1;
-            last;
+    if ( open my $localdomains_fh, '<', '/etc/localdomains' ) {
+        while (<$localdomains_fh>) {
+            if (/^${HOSTNAME}$/) {
+                $hostname_check = 1;
+                last;
+            }
         }
+        close $localdomains_fh;
     }
-    close $localdomains_fh;
-
     if ( $hostname_check == 0 ) {
         print_warn('Hostname: ');
         print_warning('not found in /etc/localdomains. This can cause "lowest numbered MX record points to local host"');
