@@ -1034,6 +1034,7 @@ sub get_os_info {
         my $line = readline $fh;
         close $fh;
         chomp $line;
+        $line =~ s/^\s+|\s+$//;
         if    ( length $line >= 4 )                                             { $release = $line; }
         if    ( $line =~ m/(?:Corporate|Advanced\sServer|Enterprise|Amazon)/i ) { $ises    = 1; }
         elsif ( $line =~ /CloudLinux|CentOS/i )                                 { $ises    = 2; }
