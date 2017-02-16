@@ -3288,7 +3288,7 @@ sub check_for_non_default_permissions {
         '/etc'                                  => { mode => ['0755'] },
         '/etc/cpbackup.conf'                    => { mode => ['0644'] },
         '/etc/exim.conf'                        => { mode => ['0644'] },
-        '/etc/fstab'                            => { mode => ['0644'], check_missing => 1, perms_help => 'Missing fstab can break /scripts/fixquotas (CPANEL-6082), and bad perms can break cPanel UI (CPANEL-11021).' },
+        '/etc/fstab'                            => { mode => ['0644'], check_missing => 1, perms_help => 'Missing fstab can break /scripts/fixquotas (CPANEL-6082), and bad perms can break cPanel UI (CPANEL-11201).' },
         '/etc/group'                            => { mode => ['0644'] },
         '/etc/hosts'                            => { mode => ['0644'] },
         '/etc/localdomains'                     => { mode => ['0640'], group => 'mail', perms_help => 'Failing to properly create an email forwarder? See ticket 5234627.' },
@@ -3951,6 +3951,7 @@ sub check_easyapache {
 }
 
 sub check_for_ea3_hooks {
+
     # We're not ignoring these when running EA4 until it is impossible to revert to EA3.
     my $hooks;
 
