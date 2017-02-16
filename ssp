@@ -277,13 +277,13 @@ sub run {
     print_cpanel_info();
     check_for_cpanel_update();
     print_uptime();
-    check_for_clustering();
     print_apache_info();
     print_lsws_info();
     check_for_lsws_update();
     print_ea3_php_configuration();
     print_ea4_php_configuration();
     print_if_mod_userdir();
+    check_for_clustering();
     check_sysinfo();
     check_for_remote_mysql();
     print_if_using_mydns_or_nsd();
