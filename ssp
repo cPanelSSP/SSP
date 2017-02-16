@@ -3784,8 +3784,10 @@ sub check_for_hooks_in_scripts_directory {
       4988be925a6f50ec505618a7cec702e2  /scripts/postkillacct
       28620050548a2e4b500ab7426aaa0df5  /scripts/postmodifyacct
       42a624c843f34085f1532b0b4e17fe8c  /scripts/postmodifyacct
+      66c14efb37684262be9f5fe5c13baa15  /scripts/postmodifyacct
       67cefa439c7ea3b1b7643ec739c60006  /scripts/postmodifyacct
       423370856f0be1b80f39d28043d7d4f8  /scripts/postrestoreacct
+      0654757899ca7e348bdffef11e867e09  /scripts/postupcp
       05b7f8b4f2c83f033d124479a1c3eca0  /scripts/postupcp
       22cf7db1c069fd9672cd9dad3a3d371d  /scripts/postupcp
       50bfcdbca45dc5813b5b354ceb24d977  /scripts/postupcp
