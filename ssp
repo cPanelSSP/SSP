@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.147';
+our $VERSION = '4.99.148';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -314,6 +314,7 @@ sub run {
     check_for_custom_apache_includes();
     check_for_tomcatoptions();
     check_for_sneaky_htaccess();
+    check_ea4_paths_conf();
     check_perl_sanity();
     check_for_non_default_permissions();
     check_for_non_default_file_capabilities();
@@ -331,7 +332,7 @@ sub run {
     check_for_gdm();
     check_for_redhat_firewall();
     check_easyapache();
-    check_for_easyapache_hooks();
+    check_for_ea3_hooks();
     check_for_home_noexec();
     check_for_unsupported_nat();
     check_for_oracle_linux();
@@ -455,7 +456,6 @@ sub run {
     check_for_missing_cloudlinux_files();
     check_for_modsec2_stage_files();
     check_for_cron_allow();
-    check_for_missing_fstab();
     check_for_dev_sandbox();
     check_for_jail_owner();
 
@@ -589,7 +589,6 @@ sub non_cpanel_checks_only {
     check_for_broken_mysqldump();
     check_for_readonly_filesystems();
     check_for_missing_cloudlinux_files();
-    check_for_missing_fstab();
     check_for_dev_sandbox();
 
     # [3RDP]
@@ -1902,7 +1901,6 @@ sub check_for_clustering {
     my $cluster_dir = '/var/cpanel/cluster/root/config';
     my @dir_contents;
     my @cluster_members;
-    my ( $cluster_member, $cluster_member_hostname, $cluster_member_role );
 
     if ( -d $cluster_dir ) {
         opendir( my $dir_fh, $cluster_dir );
@@ -1913,28 +1911,20 @@ sub check_for_clustering {
     chdir $cluster_dir or return;
 
     for my $dirent (@dir_contents) {
+        my ( $cluster_member, $cluster_member_hostname, $cluster_member_role );
+        my %cluster_conf;
 
         # only active cluster members have -dnsrole files
         if ( $dirent =~ m{ \A (.+)-dnsrole \z }xms ) {
             $cluster_member = $1;
 
-            if ( open my $file_fh, '<', "${cluster_member}.cache" ) {
-                my $cache_ref;
-                eval 'local $SIG{__DIE__}; local $SIG{__WARN__}; $cache_ref = Storable::fd_retrieve($file_fh);';    # from upcp.static
-                close $file_fh;
-                if ($cache_ref) {
-                    $cluster_member_hostname = $cache_ref->{'host'};
-                }
+            if ( open my $file_fh, '<', $cluster_member ) {
+                local $/;
+                %cluster_conf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($file_fh) );
                 close $file_fh;
             }
-            else {
-                $cluster_member_hostname = '?';
-            }
-
-            if ( !$cluster_member_hostname ) {
-                $cluster_member_hostname = '?';
-            }
-            if ( ${cluster_member} =~ m{ \A (vps\.net|softlayer) \z}xmsi ) {
+            $cluster_member_hostname = defined $cluster_conf{host} ? $cluster_conf{host} : '?';
+            if ( $cluster_member =~ m{ \A (vps\.net|softlayer) \z}xmsi ) {
                 $cluster_member_hostname = '';
             }
 
@@ -1944,22 +1934,17 @@ sub check_for_clustering {
                 }
                 close $file_fh;
             }
-            else {
-                $cluster_member_role = '?';
-            }
+            $cluster_member_role = defined $cluster_member_role ? $cluster_member_role : '?';
 
-            push @cluster_members, $cluster_member_hostname . '_SSP_' . $cluster_member . '_SSP_' . "[${cluster_member_role}]";
+            push @cluster_members, $cluster_member_hostname . ' ' . $cluster_member . ' ' . "[" . $cluster_member_role . "]";
         }
     }
 
-    ## print sorted output for cluster members, by hostname
-    if (@cluster_members) {
-        @cluster_members = sort @cluster_members;
+    return unless @cluster_members;
+    @cluster_members = sort @cluster_members;
 
-        for my $member (@cluster_members) {
-            $member =~ s/_SSP_/ /g;
-            print_magenta("\t \\_ $member");
-        }
+    for my $member (@cluster_members) {
+        print_magenta( "\t \\_ " . $member );
     }
 }
 
@@ -3137,6 +3122,92 @@ sub check_for_sneaky_htaccess {
     }
 }
 
+sub check_ea4_paths_conf {
+    return unless $EA4;
+    my $paths_conf = '/etc/cpanel/ea4/paths.conf';
+    lstat($paths_conf);    # Can now use _ for file tests.
+
+    if ( !-e _ ) {
+        print_warn('EA4: ');
+        print_warning('/etc/cpanel/ea4/paths.conf is missing!');
+        return;
+    }
+    if ( !-f _ ) {
+        print_warn('EA4: ');
+        print_warning('/etc/cpanel/ea4/paths.conf is not a normal file!');
+        return;
+    }
+    if ( -z _ ) {
+        print_warn('EA4: ');
+        print_warning('/etc/cpanel/ea4/paths.conf is empty!');
+        return;
+    }
+    if ( !-T _ ) {
+        print_warn('EA4: ');
+        print_warning('/etc/cpanel/ea4/paths.conf does not appear to be an ASCII text file!');
+        return;
+    }
+
+    my $unknown_count;
+    my %conf;
+    my %default_conf = (    # From ea-apache24-config-runtime-1.0-81.81.4.cpanel.noarch
+        'bin_apachectl'        => '/usr/sbin/apachectl',
+        'bin_httpd'            => '/usr/sbin/httpd',
+        'bin_suexec'           => '/usr/sbin/suexec',
+        'dir_base'             => '/etc/apache2',
+        'dir_conf'             => '/etc/apache2/conf.d',
+        'dir_conf_includes'    => '/etc/apache2/conf.d/includes',
+        'dir_conf_userdata'    => '/etc/apache2/conf.d/userdata',
+        'dir_docroot'          => '/var/www/html',
+        'dir_domlogs'          => '/etc/apache2/logs/domlogs',
+        'dir_logs'             => '/etc/apache2/logs',
+        'dir_modules'          => '/etc/apache2/modules',
+        'dir_run'              => '/run/apache2',
+        'file_access_log'      => '/etc/apache2/logs/access_log',
+        'file_conf'            => '/etc/apache2/conf/httpd.conf',
+        'file_conf_mime_types' => '/etc/mime.types',
+        'file_conf_php_conf'   => '/etc/apache2/conf.d/php.conf',
+        'file_conf_srm_conf'   => '/etc/apache2/conf.d/srm.conf',
+        'file_error_log'       => '/etc/apache2/logs/error_log',
+    );
+    if ( version_compare( $OS_VERSION, qw( < 7.0 ) ) ) {
+        $default_conf{'dir_run'} = '/var/run/apache2';
+    }
+    if ( open my $conf_fh, '<', $paths_conf ) {
+        while (<$conf_fh>) {
+            next if /^(#|$)/;
+            if (m{ \A \s* ([^=]+?) \s* = \s* ([^\$]*?) \Z }x) {    # Cpanel::Config::LoadConfig::loadConfig( $path, $conf, '\s*=\s*', undef, '^\s*' );
+                $conf{$1} = $2;
+            }
+        }
+        close $conf_fh;
+        if ( !scalar keys %conf ) {
+            print_warn('EA4: ');
+            print_warning('/etc/cpanel/ea4/paths.conf does not appear to contain any valid configuration!');
+            return;
+        }
+        foreach my $key ( sort keys %conf ) {
+            if ( !exists $default_conf{$key} ) {                   # EA4 appears to ignore any unknown options, but count them.
+                $unknown_count++;
+                next;
+            }
+            if ( $default_conf{$key} ne $conf{$key} ) {
+                print_warn('EA4: ');
+                print_warning( '/etc/cpanel/ea4/paths.conf non-default setting: [ ' . $key . '=' . $conf{$key} . ' ]' );
+            }
+        }
+        foreach my $key ( sort keys %default_conf ) {
+            next if exists $conf{$key};
+            print_warn('EA4: ');
+            print_warning( '/etc/cpanel/ea4/paths.conf missing default setting: [ ' . $key . ' ]' );
+        }
+        if ($unknown_count) {
+            print_warn('EA4: ');
+            print_warning( '/etc/cpanel/ea4/paths.conf contains ' . $unknown_count . ' unknown configuration setting(s)!' );
+        }
+    }
+}
+
 sub check_perl_sanity {
     my $usr_bin_perl       = '/usr/bin/perl';
     my $usr_local_bin_perl = '/usr/local/bin/perl';
@@ -3217,6 +3288,7 @@ sub check_for_non_default_permissions {
         '/etc'                                  => { mode => ['0755'] },
         '/etc/cpbackup.conf'                    => { mode => ['0644'] },
         '/etc/exim.conf'                        => { mode => ['0644'] },
+        '/etc/fstab'                            => { mode => ['0644'], check_missing => 1, perms_help => 'Missing fstab can break /scripts/fixquotas (CPANEL-6082), and bad perms can break cPanel UI (CPANEL-11021).' },
         '/etc/group'                            => { mode => ['0644'] },
         '/etc/hosts'                            => { mode => ['0644'] },
         '/etc/localdomains'                     => { mode => ['0640'], group => 'mail', perms_help => 'Failing to properly create an email forwarder? See ticket 5234627.' },
@@ -3286,6 +3358,7 @@ sub check_for_non_default_permissions {
     ## If EA4 is running we need to redefine some of the paths from %check as these paths have turned into symlinks.
     ## We also conditionally need to add the new paths that EA4 introduces.
     if ($EA4) {
+        $check{'/etc'}                              = { mode    => ['0755'], perms_help => 'Users need execute permission for this directory to use cPanel MultiPHP. See CPANEL-905.' };
         $check{'/etc/apache2'}                      = { mode    => ['0755'] };
         $check{'/etc/apache2/conf'}                 = { mode    => ['0755'] };
         $check{'/etc/apache2/conf.d'}               = { mode    => ['0755'] };
@@ -3294,8 +3367,8 @@ sub check_for_non_default_permissions {
         $check{'/etc/apache2/logs/error_log'}       = { mode    => ['0644'], user => '*', perms_help => 'If users can\'t read error_log, cPanel Errors (Last 300) won\'t work.' };
         $check{'/etc/apache2/logs/domlogs'}         = { mode    => [ '0711', '0755' ], perms_help => 'If users can\'t access logs, stats won\'t process.  See ticket 5413079.' };
         $check{'/etc/apache2/run'}                  = { symlink => '../../var/run/apache2', symlink_no_absolute => 1, check_missing => 1 };
-        $check{'/etc/cpanel'}                       = { mode    => [ '0755', '0751', '0711' ], perms_help => 'cPanel MultiPHP needs execute access to this directory.  See CPANEL-905.' };
-        $check{'/etc/cpanel/ea4'}                   = { mode    => ['0755'], perms_help => 'cPanel MultiPHP needs read access to this directory.  See CPANEL-905.' };
+        $check{'/etc/cpanel'}                       = { mode    => [ '0755', '0751', '0711' ], perms_help => 'Users need execute permission for this directory to use cPanel MultiPHP.  See CPANEL-905.' };
+        $check{'/etc/cpanel/ea4'}                   = { mode    => ['0755'], perms_help => 'Users need read/execute permission for this directory to use cPanel MultiPHP.  See CPANEL-905.' };
         $check{'/usr/local/apache/bin/apachectl'}   = { symlink => '/usr/sbin/apachectl', check_missing => 1 };
         $check{'/usr/local/apache/bin/httpd'}       = { symlink => '/usr/sbin/httpd', check_missing => 1 };
         $check{'/usr/local/apache/bin/suexec'}      = { symlink => '/usr/sbin/suexec', check_missing => 1 };
@@ -3714,8 +3787,6 @@ sub check_for_hooks_in_scripts_directory {
 
     # default CloudLinux, cPGs hooks that can be ignored
     my %hooks_ignore = qw(
-      16d94b5426681a977e2beedd0ad871e9  /scripts/posteasyapache
-      e5e13640299ec439fb4c7f79a054e42b  /scripts/posteasyapache
       4988be925a6f50ec505618a7cec702e2  /scripts/postkillacct
       28620050548a2e4b500ab7426aaa0df5  /scripts/postmodifyacct
       42a624c843f34085f1532b0b4e17fe8c  /scripts/postmodifyacct
@@ -3753,7 +3824,10 @@ sub check_for_hooks_in_scripts_directory {
     @hooks = grep { !/postsuexecinstall/ && !/post_sync_cleanup/ } @hooks;
 
     # CloudLinux stuff
-    @hooks = grep { !/postwwwacct\.l\.v\.e-manager\.bak/ } @hooks;
+    @hooks = grep { !/\.l\.v\.e-manager\.bak/ } @hooks;
+
+    # EA3 stuff checked elsewhere
+    @hooks = grep { !/easyapache/ } @hooks;
 
     my $hooks_output;
     if (@hooks) {
@@ -3876,13 +3950,17 @@ sub check_easyapache {
     }
 }
 
-sub check_for_easyapache_hooks {
+sub check_for_ea3_hooks {
+    # We're not ignoring these when running EA4 until it is impossible to revert to EA3.
     my $hooks;
 
-    my @hooks = qw( /scripts/before_apache_make
+    my @hooks = qw(
       /scripts/after_apache_make_install
-      /scripts/before_httpd_restart_tests
       /scripts/after_httpd_restart_tests
+      /scripts/before_apache_make
+      /scripts/before_httpd_restart_tests
+      /scripts/posteasyapache
+      /scripts/preeasyapache
     );
 
     # default CloudLinux hooks that can be ignored
@@ -3891,6 +3969,8 @@ sub check_for_easyapache_hooks {
       2af1cea5d3eea8d837b719131ec6d67e  /scripts/before_apache_make
       407df66f28c8822cd4f51fe56160f74e  /scripts/before_apache_make
       41ec2d3f35d8cd7cb01b60485fb3bdbb  /scripts/before_apache_make
+      16d94b5426681a977e2beedd0ad871e9  /scripts/posteasyapache
+      e5e13640299ec439fb4c7f79a054e42b  /scripts/posteasyapache
     );
 
     for my $hook (@hooks) {
@@ -3903,7 +3983,7 @@ sub check_for_easyapache_hooks {
     }
 
     if ($hooks) {
-        print_warn('EA hooks: ');
+        print_warn('EA3 hooks: ');
         print_warning($hooks);
     }
 }
@@ -5090,6 +5170,7 @@ sub check_mysql_config {
         'innodbforcerecovery' => { default => '0', help => 'Makes all InnoDB databases read-only, will break MySQL upgrades.' },
         'logerror'            => { default => '/var/lib/mysql/' . $HOSTNAME . '.err' },
         'lowercasetablenames' => { default => '0', help => 'Will break space usage reporting of databases with mixed-case names. See CPANEL-8453.' },
+        'oldpasswords'        => { default => '0', help => 'Not recommended, non-native passwords are incompatible with MySQL 5.6+ and some MySQL clients. See also CPANEL-10047, 10826, 10940, 10954, 11018, and 11019.' },
         'skipnameresolve'     => { help    => 'Seeing "Can\'t find any matching row"? That may be why.' },
         'skipnetworking'      => { help    => 'Webmail or other MySQL related items not functioning properly? That may be why.' },
         'sqlmode'             => { help    => 'Seeing "Field \'ssl_cipher\' doesn\'t have a default value"? That may be why.' }
@@ -5915,19 +5996,24 @@ sub check_for_rpm_overrides {
 
     if (@dir_contents) {
         print_warn('RPM override: ');
-        print_warning("$rpm_override_dir contains entries, manually review. More info: http://go.cpanel.net/rpmversions");
+        print_warning("$rpm_override_dir contains custom entries, manually review. More info: http://go.cpanel.net/rpmversions");
 
+        my %ignore_package = (
+            'easy-tomcat7' => 'uninstalled'    # easy-tomcat7 is often shown uninstalled, which is OK
+        );
+        if ( cpanel_version_is(qw( >= 11.61.0.0 )) ) {
+            $ignore_package{'perl522'} = 'uninstalled';    # Normal for WHM 62 upgrade process
+        }
         if ( -r $local_versions ) {
             eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require YAML::Syck; };
             if ( !$@ ) {
                 my $ref = YAML::Syck::LoadFile($local_versions);
-                if ( $ref && $ref->{'target_settings'} ) {
+                if ( $ref && exists $ref->{'target_settings'} ) {
                     foreach my $package ( keys %{ $ref->{'target_settings'} } ) {
-                        if ( $ref->{'target_settings'}{$package} =~ m{uninstalled} ) {
-                            unless ( $package eq 'easy-tomcat7' ) {    # cPanel lists easy-tomcat7 as uninstalled by default
-                                print_warn("$package is listed as uninstalled in $local_versions");
-                                print_warning('');
-                            }
+                        next if exists $ignore_package{$package} && $ref->{'target_settings'}{$package} =~ m{$ignore_package{$package}};
+                        if ( $ref->{'target_settings'}{$package} =~ m{(uninstalled|unmanaged)} ) {
+                            print_warn($package);
+                            print_warning( " is listed as " . $1 . " in " . $local_versions );
                         }
                     }
                 }
@@ -8862,12 +8948,6 @@ sub check_ea4_php_fpm {
     }
 
     return 1;
-}
-
-sub check_for_missing_fstab {
-    return if -e "/etc/fstab";
-    print_warn('Filesystem: ');
-    print_warning("/etc/fstab may be missing. Can cause /scripts/fixquotas to fail. See case CPANEL-6082.");
 }
 
 sub get_external_ip {
