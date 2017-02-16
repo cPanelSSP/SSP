@@ -7124,7 +7124,7 @@ sub check_for_noquotafs {
     return if !-f $noquotafs or -z $noquotafs;
 
     print_warn("$noquotafs: ");
-    print_warning('exists. quota issues? See https://documentation.cpanel.net/pages/viewpage.action?pageId=1507750');
+    print_warning('exists. quota issues? See https://documentation.cpanel.net/display/ALD/The+Quota+File+Systems+Configuration+File');
 }
 
 sub check_for_mod_rpaf {
