@@ -7240,28 +7240,31 @@ sub check_for_dirs_that_break_ea {
 }
 
 sub check_for_extra_uid_0_user {
-    my $uid_0_user;
-
+    my @uid_0_users;
     open my $file_fh, '<', '/etc/passwd' or die $!;
     while (<$file_fh>) {
-        if (m{ \A ([^:]+) :x:0: }xms) {
-            next if $1 =~ m{ \A root \z }xms;
-            $uid_0_user = $1;
-            last;
+        if (/\A([^:]+):[^:]+:0:/) {
+            next if $1 eq 'root';
+            push @uid_0_users, $1;
+            last if scalar @uid_0_users >= 5;
         }
     }
     close $file_fh;
 
-    if ( defined($uid_0_user) ) {
-        my $uid_0_user_info = "non-root UID 0 user found: [ " . $uid_0_user . " ]";
+    if (@uid_0_users) {
+        my $info;
+        print_warn('non-root UID 0 user(s) found:');
+        for my $user (@uid_0_users) {
+            $info .= ' [' . $user . ']';
+        }
+        $info .= ' (limit of 5, there may be more!)' if scalar @uid_0_users >= 5;
         for my $pid ( keys(%$PROCESS_REF) ) {
             if ( $PROCESS_REF->{$pid}->{CMD} =~ m{bin/nscd(\s|$)} ) {
-                print_warn($uid_0_user_info);
-                print_warning(" -- and nscd is running! This can break things. See CPANEL-2360.");
-                return;
+                $info .= ' -- and nscd is running! This can break things. See CPANEL-2360.';
+                last;
             }
         }
-        print_warn( $uid_0_user_info . "\n" );
+        print_warning($info);
     }
 }
 
