@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.148';
+our $VERSION = '4.99.149';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -76,6 +76,7 @@ our @RPM_LIST;                  # rpm -qa
 our %CPCONF;                    # cpanel.config
 our $PUREFTPDCONF;              # /etc/pure-ftpd.conf
 our $PROFTPDCONF;               # /etc/proftpd.conf
+our $EXIMLOCALOPTS;             # /etc/exim.conf.localopts
 our $OLD_BACKUP_CONF;           # /etc/cpbackup.conf
 our $NEW_BACKUP_CONF;           # /var/cpanel/backups/config
 our @APACHE_VERSION_OUTPUT;     # httpd -v
@@ -137,6 +138,7 @@ sub init {
         $TIERS           = get_tiers_file();
         $PUREFTPDCONF    = get_pureftpd_conf();
         $PROFTPDCONF     = get_proftpd_conf();
+        $EXIMLOCALOPTS   = get_exim_localopts();
         $EA4_PHP_FPM     = get_ea4_php_fpm_status();
         $APACHE_PER_USER = "none";
         ( $OLD_BACKUP_CONF,   $NEW_BACKUP_CONF )      = get_backup_config();
@@ -182,7 +184,6 @@ sub init {
 
         # TODO: use +c 15 so the entire process name is displayed if >9 chars
         @LSOF_80 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:80' );
-
         {
             if ( open( my $cpconf_fh, '<', '/var/cpanel/cpanel.config' ) ) {
                 local $/ = undef;
@@ -276,13 +277,13 @@ sub run {
     print_cpanel_info();
     check_for_cpanel_update();
     print_uptime();
-    check_for_clustering();
     print_apache_info();
     print_lsws_info();
     check_for_lsws_update();
     print_ea3_php_configuration();
     print_ea4_php_configuration();
     print_if_mod_userdir();
+    check_for_clustering();
     check_sysinfo();
     check_for_remote_mysql();
     print_if_using_mydns_or_nsd();
@@ -290,9 +291,10 @@ sub run {
     print_backups_info();
     print_mailserver_info();
     print_ftpserver_info();
+    print_exim_info();
     check_for_custom_zonetemplates();
-    print_news();
     check_for_license_info();
+    print_news();
 
     ## [WARN]
     check_port_hash();
@@ -444,8 +446,8 @@ sub run {
     check_for_easyparams_attributes();
     check_for_stale_backup_pidfile();
     check_for_allow_update_in_named_conf();
-    check_for_mpm_itk_and_suexec();
-    check_for_modruid2_warnings();
+    check_for_mpm_itk();
+    check_for_mod_ruid2();
     check_for_broken_mysqldump();
     check_exim_log_sanity();
     check_updatelog();
@@ -1034,6 +1036,7 @@ sub get_os_info {
         my $line = readline $fh;
         close $fh;
         chomp $line;
+        $line =~ s/^\s+|\s+$//;
         if    ( length $line >= 4 )                                             { $release = $line; }
         if    ( $line =~ m/(?:Corporate|Advanced\sServer|Enterprise|Amazon)/i ) { $ises    = 1; }
         elsif ( $line =~ /CloudLinux|CentOS/i )                                 { $ises    = 2; }
@@ -1284,6 +1287,16 @@ sub get_proftpd_conf {
             }
         }
         close $proftpdconf_fh;
+    }
+    return \%conf;
+}
+
+sub get_exim_localopts {
+    my %conf;
+    if ( open( my $conf_fh, '<', '/etc/exim.conf.localopts' ) ) {
+        local $/ = undef;
+        %conf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($conf_fh) );
+        close $conf_fh;
     }
     return \%conf;
 }
@@ -1641,36 +1654,27 @@ sub print_hostname {
 }
 
 sub print_os {
-    my $os_info               = $OS_RELEASE . " [$HOSTINFO->{'environment'}]";
-    my $php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
-    my $php_selector_disabled = 0;
+    my $os_info                  = $OS_RELEASE . " [$HOSTINFO->{'environment'}]";
+    my $x3_php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
+    my $x3_php_selector_disabled = 0;
 
     if ($IS_CLOUDLINUX) {
-        if ( -f $php_selector_conf ) {
-            if ( open my $file_fh, '<', $php_selector_conf ) {
+        if ( -f $x3_php_selector_conf ) {
+            if ( open my $file_fh, '<', $x3_php_selector_conf ) {
                 while (<$file_fh>) {
                     if (/^file=>lvephpsel,skipobj=>1/) {
-                        $php_selector_disabled = 1;
+                        $x3_php_selector_disabled = 1;
                         last;
                     }
                 }
                 close $file_fh;
             }
-        }
-        else {
-            $php_selector_disabled = 'status unknown';
-        }
-    }
-
-    if ( $IS_CLOUDLINUX == 1 ) {
-        if ( $php_selector_disabled eq 'status unknown' ) {
-            $os_info .= ' [PHP Selector: status unknown]';
-        }
-        elsif ( $php_selector_disabled == 1 ) {
-            $os_info .= ' [PHP Selector: disabled for x3]';
-        }
-        elsif ( $php_selector_disabled == 0 ) {
-            $os_info .= ' [PHP Selector: enabled for x3]';
+            if ( $x3_php_selector_disabled == 1 ) {
+                $os_info .= ' [PHP Selector for x3: disabled]';
+            }
+            elsif ( $x3_php_selector_disabled == 0 ) {
+                $os_info .= ' [PHP Selector for x3: enabled]';
+            }
         }
     }
 
@@ -2590,6 +2594,22 @@ sub print_ftpserver_info {
     }
 }
 
+sub print_exim_info {
+    if ( defined $EXIMLOCALOPTS->{acl_delay_unknown_hosts} && $EXIMLOCALOPTS->{acl_delay_unknown_hosts} ) {
+        my $info = '20 second SMTP delay active (by default) for unknown hosts and spam, see DOC-6092.';
+        my $disabled;
+        if ( defined $EXIMLOCALOPTS->{acl_dont_delay_greylisting_trusted_hosts} && $EXIMLOCALOPTS->{acl_dont_delay_greylisting_trusted_hosts} ) {
+            $disabled .= ' [Greylisting Trusted Hosts]';
+        }
+        if ( defined $EXIMLOCALOPTS->{acl_dont_delay_greylisting_common_mail_providers} && $EXIMLOCALOPTS->{acl_dont_delay_greylisting_common_mail_providers} ) {
+            $disabled .= ' [Greylisting Common Mail Providers]';
+        }
+        $info .= ' Disabled for:' . $disabled if length $disabled;
+        print_info('Exim: ');
+        print_normal($info);
+    }
+}
+
 sub check_for_custom_zonetemplates {
     my $template_dir = '/var/cpanel/zonetemplates';
     return if !-e $template_dir;
@@ -2698,10 +2718,6 @@ sub check_for_lsws_update {
 }
 
 sub print_news {
-    if ( cpanel_version_is(qw( >= 11.52.0.0 )) ) {
-        print_info('WHM 11.52+: ');
-        print_normal('Slow email delivery or monitoring service detects SMTP has failed? 11.52 added SMTP connection delays, see DOC-6092.');
-    }
 }
 
 ##############################
@@ -3274,7 +3290,6 @@ sub check_for_non_default_permissions {
         '/bin/gzip'                             => { mode => ['755'], perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/ln'                               => { mode => [ '0755', '0555' ] },
         '/bin/passwd'                           => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
-        '/bin/rpm'                              => { mode => [ '755',  '555' ],  perms_help => 'If users cannot execute /bin/rpm it will break Cron Jobs in x3 UI (CPANEL-1487)' },
         '/bin/rm'                               => { mode => [ '0755', '0555' ], perms_help => 'File Manager unable to delete files?  This may be why.' },
         '/bin/tar'                              => { mode => ['755'], perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/dev'                                  => { mode => ['0755'], perms_help => 'Breaks many things if non-root users can\'t access this.' },
@@ -3288,7 +3303,7 @@ sub check_for_non_default_permissions {
         '/etc'                                  => { mode => ['0755'] },
         '/etc/cpbackup.conf'                    => { mode => ['0644'] },
         '/etc/exim.conf'                        => { mode => ['0644'] },
-        '/etc/fstab'                            => { mode => ['0644'], check_missing => 1, perms_help => 'Missing fstab can break /scripts/fixquotas (CPANEL-6082), and bad perms can break cPanel UI (CPANEL-11021).' },
+        '/etc/fstab'                            => { mode => ['0644'], check_missing => 1, perms_help => 'Missing fstab can break /scripts/fixquotas (CPANEL-6082), and bad perms can break cPanel UI (CPANEL-11201).' },
         '/etc/group'                            => { mode => ['0644'] },
         '/etc/hosts'                            => { mode => ['0644'] },
         '/etc/localdomains'                     => { mode => ['0640'], group => 'mail', perms_help => 'Failing to properly create an email forwarder? See ticket 5234627.' },
@@ -3472,6 +3487,9 @@ sub check_for_non_default_permissions {
         else {
             $check{'/usr/bin/python'} = { mode => ['0755'], perms_help => 'If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' };
         }
+    }
+    if ( -e '/usr/local/cpanel/base/frontend/x3' ) {
+        $check{'/bin/rpm'} = { mode => [ '755', '555' ], perms_help => 'If users cannot execute /bin/rpm it will break Cron Jobs in x3 UI (CPANEL-1487)' };
     }
 
     foreach my $backup_path ( $NEW_BACKUP_CONF->{BACKUPDIR}, $OLD_BACKUP_CONF->{BACKUPDIR} ) {
@@ -3790,8 +3808,10 @@ sub check_for_hooks_in_scripts_directory {
       4988be925a6f50ec505618a7cec702e2  /scripts/postkillacct
       28620050548a2e4b500ab7426aaa0df5  /scripts/postmodifyacct
       42a624c843f34085f1532b0b4e17fe8c  /scripts/postmodifyacct
+      66c14efb37684262be9f5fe5c13baa15  /scripts/postmodifyacct
       67cefa439c7ea3b1b7643ec739c60006  /scripts/postmodifyacct
       423370856f0be1b80f39d28043d7d4f8  /scripts/postrestoreacct
+      0654757899ca7e348bdffef11e867e09  /scripts/postupcp
       05b7f8b4f2c83f033d124479a1c3eca0  /scripts/postupcp
       22cf7db1c069fd9672cd9dad3a3d371d  /scripts/postupcp
       50bfcdbca45dc5813b5b354ceb24d977  /scripts/postupcp
@@ -3951,6 +3971,7 @@ sub check_easyapache {
 }
 
 sub check_for_ea3_hooks {
+
     # We're not ignoring these when running EA4 until it is impossible to revert to EA3.
     my $hooks;
 
@@ -6741,15 +6762,15 @@ sub check_if_backup_dir_is_nfs {
 sub check_if_hostname_missing_from_localdomains {
     my $hostname_check = 0;
 
-    open my $localdomains_fh, '<', '/etc/localdomains';
-    while (<$localdomains_fh>) {
-        if (/^${HOSTNAME}$/) {
-            $hostname_check = 1;
-            last;
+    if ( open my $localdomains_fh, '<', '/etc/localdomains' ) {
+        while (<$localdomains_fh>) {
+            if (/^${HOSTNAME}$/) {
+                $hostname_check = 1;
+                last;
+            }
         }
+        close $localdomains_fh;
     }
-    close $localdomains_fh;
-
     if ( $hostname_check == 0 ) {
         print_warn('Hostname: ');
         print_warning('not found in /etc/localdomains. This can cause "lowest numbered MX record points to local host"');
@@ -7127,7 +7148,7 @@ sub check_for_noquotafs {
     return if !-f $noquotafs or -z $noquotafs;
 
     print_warn("$noquotafs: ");
-    print_warning('exists. quota issues? See https://documentation.cpanel.net/pages/viewpage.action?pageId=1507750');
+    print_warning('exists. quota issues? See https://documentation.cpanel.net/display/ALD/The+Quota+File+Systems+Configuration+File');
 }
 
 sub check_for_mod_rpaf {
@@ -7219,28 +7240,31 @@ sub check_for_dirs_that_break_ea {
 }
 
 sub check_for_extra_uid_0_user {
-    my $uid_0_user;
-
+    my @uid_0_users;
     open my $file_fh, '<', '/etc/passwd' or die $!;
     while (<$file_fh>) {
-        if (m{ \A ([^:]+) :x:0: }xms) {
-            next if $1 =~ m{ \A root \z }xms;
-            $uid_0_user = $1;
-            last;
+        if (/\A([^:]+):[^:]+:0:/) {
+            next if $1 eq 'root';
+            push @uid_0_users, $1;
+            last if scalar @uid_0_users >= 5;
         }
     }
     close $file_fh;
 
-    if ( defined($uid_0_user) ) {
-        my $uid_0_user_info = "non-root UID 0 user found: [ " . $uid_0_user . " ]";
+    if (@uid_0_users) {
+        my $info;
+        print_warn('non-root UID 0 user(s) found:');
+        for my $user (@uid_0_users) {
+            $info .= ' [' . $user . ']';
+        }
+        $info .= ' (limit of 5, there may be more!)' if scalar @uid_0_users >= 5;
         for my $pid ( keys(%$PROCESS_REF) ) {
             if ( $PROCESS_REF->{$pid}->{CMD} =~ m{bin/nscd(\s|$)} ) {
-                print_warn($uid_0_user_info);
-                print_warning(" -- and nscd is running! This can break things. See CPANEL-2360.");
-                return;
+                $info .= ' -- and nscd is running! This can break things. See CPANEL-2360.';
+                last;
             }
         }
-        print_warn( $uid_0_user_info . "\n" );
+        print_warning($info);
     }
 }
 
@@ -7317,29 +7341,35 @@ sub check_for_allow_update_in_named_conf {
     }
 }
 
-sub check_for_mpm_itk_and_suexec {
-    return if $EA4;
+sub check_for_mpm_itk {
     return unless $APACHE_PER_USER eq "itk";
-    return unless $EA3_SUEXEC;
-
-    print_warn('MPM ITK: ');
-    print_warning('enabled with suEXEC. This can break redirects like /cpanel. See FB-83405.');
+    if ( defined $EA3_SUEXEC && $EA3_SUEXEC ) {
+        print_warn('MPM ITK: ');
+        print_warning('enabled with suEXEC. This can break redirects like /cpanel. See FB-83405.');
+    }
+    if ($APACHE_MODSEC) {
+        print_warn('MPM ITK: ');
+        print_warning('is incompatible with ModSecurity SecDataDir (collections) until EA-4093 is resolved.');
+    }
 }
 
-sub check_for_modruid2_warnings {
-    if ( $APACHE_PER_USER eq "ruid2" ) {
-        if ( defined $CPCONF{'jailapache'} && $CPCONF{'jailapache'} == 1 ) {
+sub check_for_mod_ruid2 {
+    return unless $APACHE_PER_USER eq "ruid2";
+    if ( defined $CPCONF{'jailapache'} && $CPCONF{'jailapache'} == 1 ) {
+        print_warn('Mod Ruid2: ');
+        print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see FB-84393, FB-104017, and tickets 5015613, 5227891');
+        if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq 'suphp' ) {
             print_warn('Mod Ruid2: ');
-            print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see FB-84393, FB-104017, and tickets 5015613, 5227891');
-            if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq 'suphp' ) {
-                print_warn('Mod Ruid2: ');
-                print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see FB-70561, FB-105901');
-            }
+            print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see FB-70561, FB-105901');
         }
-        if ($LSWS_FULL_VERSION) {
-            print_warn('Mod Ruid2: ');
-            print_warning('could cause file permission problems when using LiteSpeed Web Server (see ticket 5154193)');
-        }
+    }
+    if ($LSWS_FULL_VERSION) {
+        print_warn('Mod Ruid2: ');
+        print_warning('could cause file permission problems when using LiteSpeed Web Server (see ticket 5154193)');
+    }
+    if ($APACHE_MODSEC) {
+        print_warn('Mod Ruid2: ');
+        print_warning('is incompatible with ModSecurity SecDataDir (collections) until EA-4093 is resolved.');
     }
 }
 
