@@ -3027,6 +3027,7 @@ sub check_for_local_templates {
 }
 
 sub check_for_missing_account_suspensions_conf {
+    return if $EA4;
     return if !-f '/usr/local/apache/conf/includes/account_suspensions.conf';
     my @templates = qw(
       /var/cpanel/templates/apache2_4/main.local
