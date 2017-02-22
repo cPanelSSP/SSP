@@ -3076,7 +3076,7 @@ sub check_for_local_makecpphp_template {
 }
 
 sub check_for_custom_apache_includes {
-    my $include_dir = '/usr/local/apache/conf/includes';
+    my $include_dir = $EA4 ? '/etc/apache2/conf.d/includes' : '/usr/local/apache/conf/includes';
 
     return if !-d $include_dir;
 
@@ -3096,18 +3096,15 @@ sub check_for_custom_apache_includes {
     for my $include (@includes) {
         if ( -s "${include_dir}/${include}" ) {
             if ( $include eq 'pre_virtualhost_global.conf' ) {
-                my $md5 = timed_run( 0, 'md5sum', '/usr/local/apache/conf/includes/pre_virtualhost_global.conf' );
+                my $md5 = timed_run( 0, 'md5sum', $include_dir . 'pre_virtualhost_global.conf' );
                 next if ( $md5 && $md5 =~ m{ \A 1693b9075fa54ede224bfeb8ad42a182 \s }xms );
-                $custom_includes .= " [$include]";
             }
-            else {
-                $custom_includes .= " [$include]";
-            }
+            $custom_includes .= ' [' . $include . ']';
         }
     }
 
     if ($custom_includes) {
-        print_warn('Apache Includes: ');
+        print_warn( 'Apache Includes [' . $include_dir . ']:' );
         print_warning($custom_includes);
     }
 }
