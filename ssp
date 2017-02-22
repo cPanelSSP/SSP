@@ -3283,7 +3283,6 @@ sub check_for_non_default_permissions {
     my %check = (
         '/'                                     => { mode => [ '0755', '0555' ], perms_help => '.ftpquota issues? see ticket 4429843', attr_help => 'This can break EA. See ticket 4929961' },
         '/bin/bash'                             => { mode => ['0755'] },
-        '/bin/crontab'                          => { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' },
         '/bin/gtar'                             => { symlink => 'tar', symlink_no_absolute => 1, perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/gzip'                             => { mode => ['755'], perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/ln'                               => { mode => [ '0755', '0555' ] },
@@ -3455,6 +3454,12 @@ sub check_for_non_default_permissions {
         $check{'/usr/local/cpanel/logs/spamd_error_log'}    = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/stats_log'}          = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/tailwatchd_log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+    }
+    if ( cpanel_version_is(qw( >= 11.56.0.12 )) ) {        # CPANEL-3540
+        $check{'/usr/local/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab', check_missing => 1 };
+    }
+    else {
+        $check{'/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
     }
     if ( cpanel_version_is(qw( < 11.49.0.0 )) ) {
         $check{'/var/cpanel/userhomes/cpanelhorde'} = { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' };
