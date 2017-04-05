@@ -2744,9 +2744,20 @@ sub check_selinux_status {
     for my $line (@selinux_status) {
         if ( $line =~ m{ \A SELinux \s status: \s+ ([^\s\n]+) }xms ) {
             return if $1 eq "disabled";
-            print_warn('SELinux: ');
-            print_warning('is NOT disabled!');
-        }
+ 	}
+	
+	elsif ( $line =~ m{ \A Current \s mode: \s+ ([^\s\n]+) }xms) {            
+	    if ( $1 eq "Permissive") {
+		print_info('SELinux: Permissive');
+	    	return;	
+	    }
+	    
+	    else {
+	    	print_warn('SELinux: ');
+            	print_warning('is ENFORCING!');
+            	return;
+	    }
+	}
     }
 }
 
