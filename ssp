@@ -2747,7 +2747,7 @@ sub check_selinux_status {
  	}
 	
 	elsif ( $line =~ m{ \A Current \s mode: \s+ ([^\s\n]+) }xms) {            
-	    if ( $1 eq "Permissive") {
+	    if ( $1 eq "permissive") {
 		print_info('SELinux: Permissive');
 	    	return;	
 	    }
