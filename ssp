@@ -1754,6 +1754,26 @@ sub print_cpanel_info {
     print_info('cPanel Info: ');
     print_normal($output);
 
+    my %eol = (
+        '56' => { expires => 1509408001, text => 'October 31, 2017' },
+        '58' => { expires => 1501459201, text => 'July 31, 2017' },
+        '60' => { expires => 1509408001, text => 'October 31, 2017' },
+        '62' => { expires => 1522454401, text => 'March 31, 2018' }
+    );
+    my @ver = split( /\./, $CPANEL_VERSION, 4 );
+    my $major_ver = ( defined $ver[1] && $ver[1] =~ /^\d+$/ ) ? $ver[1] : undef;
+    my $expire_info;
+    if ($major_ver) {
+        $major_ver++ if $major_ver % 2;    # Bump odd dev versions
+        $expire_info = "has expired." if $major_ver <= 54;
+        $expire_info = "ended on " . $eol{$major_ver}->{'text'} . "." if exists $eol{$major_ver} && $eol{$major_ver}->{'expires'} <= time();
+    }
+    if ($expire_info) {
+        print_crit('cPanel Info: ');
+        print_critical( "Support for this version of WHM/cPanel " . $expire_info );
+        print_critical('         \_ Send customer this premade: "EOL version of cPanel"');
+    }
+
     if ( cpanel_version_is(qw ( >= 11.59.0.0 )) && ( $cpanel_tier =~ /current|edge/i || -e '/var/cpanel/feature_toggles/ea4migration' ) ) {
         print_info('cPanel Info: ');
         print_warning("EA4 Migration UI is enabled/available");
