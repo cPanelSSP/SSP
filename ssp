@@ -297,6 +297,7 @@ sub run {
     print_news();
 
     ## [WARN]
+    check_for_license_error();
     check_port_hash();
     check_selinux_status();
     check_runlevel();
@@ -2747,6 +2748,64 @@ sub print_news {
 ##############################
 #  BEGIN [WARN] CHECKS
 ##############################
+
+sub check_for_license_error {
+    my $license_error_file = '/usr/local/cpanel/logs/license_error.display';
+    stat($license_error_file);
+    return unless -f _;
+    return unless -s _;
+
+    my $license_error;
+    if ( open( my $license_error_fh, '<', $license_error_file ) ) {
+        while (<$license_error_fh>) {
+            if (m{\AThe exact message was: (.+)\Z}ms) {
+                $license_error = $1;
+                chomp $license_error;
+                last;
+            }
+        }
+        close $license_error_fh;
+    }
+
+    return unless defined $license_error;
+
+    if ( cpanel_version_is(qw( < 11.32.0.0 )) ) {
+        print_warn('License Error: ');
+        print_warning( '[ ' . $license_error . ' ]' );
+        print_warning('         \_ Try updating to WHM 11.32 or later to resolve any license-related problems.');
+        return;
+    }
+
+    if (
+        $license_error =~ m{ \A 
+         \QThe hostname must be a Fully Qualified Domain Name! (\E.+\)
+         \Z }xms
+      ) {
+        print_warn('License Error: ');
+        print_warning( '[ ' . $license_error . ' ]' );
+        print_warning('         \_ If this license error is not resolved after correctly setting the hostname, fork ticket for license issue if not related to current issue, send "ESCALATE - License issue to Dev" response, and escalate ticket to "QA/Development".');
+        return;
+    }
+
+    if (
+        $license_error =~ m{ \A 
+         \QAbort, Retry, Fail?\E
+       | \QDoes not compute!\E
+       | \QReturn without Gosub.\E
+       | \QPrinting is not supported on this printer.\E
+       | \QCannot issue a license to \E[^ ]+\Q without a \E(DISTRO|OSVER)\.
+       \Z }xms
+      ) {
+        print_crit('License Error: ');
+        print_critical( '[ ' . $license_error . ' ]' );
+        print_critical('         \_ Fork ticket for license issue if not related to current issue, send "ESCALATE - License issue to Dev" response, and escalate ticket to "QA/Development".');
+        return;
+    }
+
+    # Not any of the above
+    print_warn('License Error: ');
+    print_warning( '[ ' . $license_error . ' ]' );
+}
 
 sub check_port_hash {
     return if ( scalar keys(%$PORT_REF) >= 1 );
