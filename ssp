@@ -297,6 +297,7 @@ sub run {
     print_news();
 
     ## [WARN]
+    check_for_license_error();
     check_port_hash();
     check_selinux_status();
     check_runlevel();
@@ -1754,6 +1755,26 @@ sub print_cpanel_info {
     print_info('cPanel Info: ');
     print_normal($output);
 
+    my %eol = (
+        '56' => { expires => 1509408001, text => 'October 31, 2017' },
+        '58' => { expires => 1501459201, text => 'July 31, 2017' },
+        '60' => { expires => 1509408001, text => 'October 31, 2017' },
+        '62' => { expires => 1522454401, text => 'March 31, 2018' }
+    );
+    my @ver = split( /\./, $CPANEL_VERSION, 4 );
+    my $major_ver = ( defined $ver[1] && $ver[1] =~ /^\d+$/ ) ? $ver[1] : undef;
+    my $expire_info;
+    if ($major_ver) {
+        $major_ver++ if $major_ver % 2;    # Bump odd dev versions
+        $expire_info = "has expired." if $major_ver <= 54;
+        $expire_info = "ended on " . $eol{$major_ver}->{'text'} . "." if exists $eol{$major_ver} && $eol{$major_ver}->{'expires'} <= time();
+    }
+    if ($expire_info) {
+        print_crit('cPanel Info: ');
+        print_critical( "Support for this version of WHM/cPanel " . $expire_info );
+        print_critical('         \_ Send customer this premade: "EOL version of cPanel"');
+    }
+
     if ( cpanel_version_is(qw ( >= 11.59.0.0 )) && ( $cpanel_tier =~ /current|edge/i || -e '/var/cpanel/feature_toggles/ea4migration' ) ) {
         print_info('cPanel Info: ');
         print_warning("EA4 Migration UI is enabled/available");
@@ -2728,6 +2749,64 @@ sub print_news {
 #  BEGIN [WARN] CHECKS
 ##############################
 
+sub check_for_license_error {
+    my $license_error_file = '/usr/local/cpanel/logs/license_error.display';
+    stat($license_error_file);
+    return unless -f _;
+    return unless -s _;
+
+    my $license_error;
+    if ( open( my $license_error_fh, '<', $license_error_file ) ) {
+        while (<$license_error_fh>) {
+            if (m{\AThe exact message was: (.+)\Z}ms) {
+                $license_error = $1;
+                chomp $license_error;
+                last;
+            }
+        }
+        close $license_error_fh;
+    }
+
+    return unless defined $license_error;
+
+    if ( cpanel_version_is(qw( < 11.32.0.0 )) ) {
+        print_warn('License Error: ');
+        print_warning( '[ ' . $license_error . ' ]' );
+        print_warning('         \_ Try updating to WHM 11.32 or later to resolve any license-related problems.');
+        return;
+    }
+
+    if (
+        $license_error =~ m{ \A 
+         \QThe hostname must be a Fully Qualified Domain Name! (\E.+\)
+         \Z }xms
+      ) {
+        print_warn('License Error: ');
+        print_warning( '[ ' . $license_error . ' ]' );
+        print_warning('         \_ If this license error is not resolved after correctly setting the hostname, fork ticket for license issue if not related to current issue, send "ESCALATE - License issue to Dev" response, and escalate ticket to "QA/Development".');
+        return;
+    }
+
+    if (
+        $license_error =~ m{ \A 
+         \QAbort, Retry, Fail?\E
+       | \QDoes not compute!\E
+       | \QReturn without Gosub.\E
+       | \QPrinting is not supported on this printer.\E
+       | \QCannot issue a license to \E[^ ]+\Q without a \E(DISTRO|OSVER)\.
+       \Z }xms
+      ) {
+        print_crit('License Error: ');
+        print_critical( '[ ' . $license_error . ' ]' );
+        print_critical('         \_ Fork ticket for license issue if not related to current issue, send "ESCALATE - License issue to Dev" response, and escalate ticket to "QA/Development".');
+        return;
+    }
+
+    # Not any of the above
+    print_warn('License Error: ');
+    print_warning( '[ ' . $license_error . ' ]' );
+}
+
 sub check_port_hash {
     return if ( scalar keys(%$PORT_REF) >= 1 );
     print_warn('lsof: ');
@@ -2945,7 +3024,7 @@ sub check_for_rawopts {
     }
 
     if (@dir_contents) {
-        print_warn('Rawopts Detected: ');
+        print_warn('EA3 Rawopts Detected: ');
         print_warning('check /var/cpanel/easy/apache/rawopts !');
     }
 }
@@ -2961,7 +3040,7 @@ sub check_for_rawenv {
     }
 
     if (@dir_contents) {
-        print_warn('Rawenv detected: ');
+        print_warn('EA3 Rawenv detected: ');
         print_warning('check /var/cpanel/easy/apache/rawenv !');
     }
 }
@@ -2975,7 +3054,7 @@ sub check_for_custom_opt_mods {
     find( \&find_custom_opt_mods, $dir );
 
     if ( scalar @CUSTOM_OPT_MODS > 10 ) {
-        print_warn("$dir: ");
+        print_warn("EA3 $dir: ");
         print_warning('many custom opt mods exist, check manually');
     }
     elsif (@CUSTOM_OPT_MODS) {
@@ -2983,7 +3062,7 @@ sub check_for_custom_opt_mods {
             $custom_opt_mods .= "$custom_opt_mod ";
         }
 
-        print_warn("$dir: ");
+        print_warn("EA3 $dir: ");
         print_warning($custom_opt_mods);
     }
 }
@@ -3039,6 +3118,7 @@ sub check_for_local_templates {
 }
 
 sub check_for_missing_account_suspensions_conf {
+    return if $EA4;
     return if !-f '/usr/local/apache/conf/includes/account_suspensions.conf';
     my @templates = qw(
       /var/cpanel/templates/apache2_4/main.local
@@ -3082,13 +3162,13 @@ sub check_for_local_makecpphp_template {
     my $makecpphp_local_profile = '/var/cpanel/easy/apache/profile/makecpphp.profile.yaml.local';
 
     if ( -e $makecpphp_local_profile ) {
-        print_warn('makecpphp Local Profile: ');
+        print_warn('EA3 makecpphp Local Profile: ');
         print_warning("exists at $makecpphp_local_profile !");
     }
 }
 
 sub check_for_custom_apache_includes {
-    my $include_dir = '/usr/local/apache/conf/includes';
+    my $include_dir = $EA4 ? '/etc/apache2/conf.d/includes' : '/usr/local/apache/conf/includes';
 
     return if !-d $include_dir;
 
@@ -3108,18 +3188,15 @@ sub check_for_custom_apache_includes {
     for my $include (@includes) {
         if ( -s "${include_dir}/${include}" ) {
             if ( $include eq 'pre_virtualhost_global.conf' ) {
-                my $md5 = timed_run( 0, 'md5sum', '/usr/local/apache/conf/includes/pre_virtualhost_global.conf' );
+                my $md5 = timed_run( 0, 'md5sum', $include_dir . 'pre_virtualhost_global.conf' );
                 next if ( $md5 && $md5 =~ m{ \A 1693b9075fa54ede224bfeb8ad42a182 \s }xms );
-                $custom_includes .= " [$include]";
             }
-            else {
-                $custom_includes .= " [$include]";
-            }
+            $custom_includes .= ' [' . $include . ']';
         }
     }
 
     if ($custom_includes) {
-        print_warn('Apache Includes: ');
+        print_warn( 'Apache Includes [' . $include_dir . ']:' );
         print_warning($custom_includes);
     }
 }
@@ -3297,7 +3374,6 @@ sub check_for_non_default_permissions {
     my %check = (
         '/'                                     => { mode => [ '0755', '0555' ], perms_help => '.ftpquota issues? see ticket 4429843', attr_help => 'This can break EA. See ticket 4929961' },
         '/bin/bash'                             => { mode => ['0755'] },
-        '/bin/crontab'                          => { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' },
         '/bin/gtar'                             => { symlink => 'tar', symlink_no_absolute => 1, perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/gzip'                             => { mode => ['755'], perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/ln'                               => { mode => [ '0755', '0555' ] },
@@ -3443,11 +3519,12 @@ sub check_for_non_default_permissions {
     }
 
     if ( version_compare( $OS_VERSION, qw( < 7 ) ) ) {
-        $check{'/bin'}             = { mode => [ '0755', '0711', '0555' ] };
-        $check{'/sbin'}            = { mode => [ '0755', '0711', '0555' ] };
-        $check{'/usr/bin/crontab'} = { mode => [ '6755', '4755', '4711', '4555' ] };
-        $check{'/usr/bin/passwd'}  = { mode => [ '6755', '4755', '4555', '4511' ] };
-        $check{'/var/run'} = { mode => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
+        $check{'/bin'}             = { mode    => [ '0755', '0711', '0555' ] };
+        $check{'/bin/crontab'}     = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
+        $check{'/sbin'}            = { mode    => [ '0755', '0711', '0555' ] };
+        $check{'/usr/bin/crontab'} = { mode    => [ '6755', '4755', '4711', '4555' ] };
+        $check{'/usr/bin/passwd'}  = { mode    => [ '6755', '4755', '4555', '4511' ] };
+        $check{'/var/run'}         = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
     }
     if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {    # https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Migration_Planning_Guide/sect-Red_Hat_Enterprise_Linux-Migration_Planning_Guide-File_System_Layout.html
         $check{'/bin'}   = { symlink => '/usr/bin',   check_missing => 1 };
@@ -3457,6 +3534,12 @@ sub check_for_non_default_permissions {
         $check{'/sbin'}     = { symlink => '/usr/sbin', check_missing => 1 };
         $check{'/var/lock'} = { symlink => '/run/lock', check_missing => 1 };
         $check{'/var/run'}  = { symlink => '/run',      check_missing => 1 };
+        if ( cpanel_version_is(qw( >= 11.56.0.12 )) ) {    # CPANEL-3540
+            $check{'/usr/local/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab', check_missing => 1 };
+        }
+        else {
+            $check{'/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
+        }
     }
     if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {         # CPANEL-6180 results in these log files having the APPEND-ONLY attribute, so only check other attributes.
         $check{'/usr/local/cpanel/logs/cpdavd_error_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
@@ -3469,6 +3552,9 @@ sub check_for_non_default_permissions {
         $check{'/usr/local/cpanel/logs/spamd_error_log'}    = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/stats_log'}          = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/tailwatchd_log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
+    }
+    else {
+        $check{'/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
     }
     if ( cpanel_version_is(qw( < 11.49.0.0 )) ) {
         $check{'/var/cpanel/userhomes/cpanelhorde'} = { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' };
@@ -3966,18 +4052,18 @@ sub check_easyapache {
             }
         }
         if ( $ea_in_process_list == 0 ) {
-            print_warn('EasyApache: ');
+            print_warn('EA3: ');
             print_warning("$ea_is_running_file exists, but 'easyapache' not found in process list");
         }
         else {
             $ea_is_running = 1;
-            print_warn('EasyApache: ');
+            print_warn('EA3: ');
             print_warning('is running');
         }
     }
 
     if ( -e $apache_update_no_restart and $ea_is_running == 0 ) {
-        print_warn('EasyApache: ');
+        print_warn('EA3: ');
         print_warning("$apache_update_no_restart exists! This will prevent EA from completing successfully.");
     }
 }
@@ -4210,7 +4296,7 @@ sub check_for_empty_easyapache_profiles {
             $templates .= "$template ";
         }
 
-        print_warn("Empty template(s) in $dir: ");
+        print_warn("EA3 Empty template(s) in $dir: ");
         print_warning($templates);
     }
 }
@@ -5877,6 +5963,7 @@ sub check_if_httpdconf_ipaddrs_exist {
 }
 
 sub check_distcache_and_libapr {
+    return if $EA4;
     my $last_success_profile           = '/var/cpanel/easy/apache/profile/_last_success.yaml';
     my $has_distcache                  = 0;
     my $httpd_not_linked_to_system_apr = 0;
@@ -5892,7 +5979,7 @@ sub check_distcache_and_libapr {
     }
 
     if ( $has_distcache == 1 ) {
-        my @ldd = split /\n/, timed_run( 0, 'ldd', '/usr/local/apache/bin/httpd' );
+        my @ldd = split /\n/, timed_run( 0, 'ldd', $HTTPD_PATH );
         for my $line (@ldd) {
             if ( $line =~ m{ libapr(?:.*) \s+ => \s+ (\S+) }xms ) {
                 if ( $1 !~ m{ \A /usr/local/apache/lib/libapr }xms ) {
@@ -5964,6 +6051,7 @@ sub check_for_rpm_overrides {
            $md5_local
         && $md5_local =~ m{ \A (
                                  1d9f5d246ef2c9ab29f33cf00a3af9a5
+                               | 2a18948c9a0419d4398134dddcd72367
                                | 2c8e757e0e38a87f68e8eeb7bd306bf6
                                | 352969216e1673edfa8d4ecf189043dc
                                | 41894ce9a0721ed61db14d5e96e630d0
@@ -6373,7 +6461,7 @@ sub check_for_usr_local_include_jpeglib_h {
 }
 
 sub check_for_bw_module_and_more_than_1024_vhosts {
-    my $httpdconf = '/usr/local/apache/conf/httpd.conf';
+    my $httpdconf = $EA4 ? '/etc/apache2/conf/httpd.conf' : '/usr/local/apache/conf/httpd.conf';
     return if !-f $httpdconf;
 
     return if ( !grep { /^\sbw_module\s/ } @APACHE_MODULES_OUTPUT );
@@ -8323,18 +8411,17 @@ sub print_ebury_cdorked_predef {
 }
 
 sub check_for_cdorked_A {
-    my $apache_bin   = '/usr/local/apache/bin/httpd';
-    my $max_bin_size = 10_485_760;                      # avoid slurping too much mem
-    return if ( !-f $apache_bin );
-    return if ( ( stat($apache_bin) )[7] > $max_bin_size );
+    my $max_bin_size = 10_485_760;    # avoid slurping too much mem
+    return unless -f $HTTPD_PATH;
+    return if ( ( stat($HTTPD_PATH) )[7] > $max_bin_size );
 
     my $has_cdorked = 0;
     my $signature;
     my @apache_bins = ();
-    push @apache_bins, $apache_bin;
+    push @apache_bins, $HTTPD_PATH;
 
     for my $process (@PROCESS_LIST) {
-        if ( $process =~ m{ \A root \s+ (\d+) [^\d]+ $apache_bin }xms ) {
+        if ( $process =~ m{ \A root \s+ (\d+) [^\d]+ $HTTPD_PATH }xms ) {
             my $pid          = $1;
             my $proc_pid_exe = "/proc/" . $pid . "/exe";
             if ( -l $proc_pid_exe && readlink($proc_pid_exe) =~ m{ \(deleted\) }xms ) {
@@ -8498,10 +8585,9 @@ sub check_for_unowned_libkeyutils_files {
 }
 
 sub check_sha1_sigs_httpd {
-    my $httpd = '/usr/local/apache/bin/httpd';
-    return if !-e $httpd;
+    return if !-e $HTTPD_PATH;
     my $infected = 0;
-    return unless my $sha1sum = timed_run( 0, 'sha1sum', $httpd );
+    return unless my $sha1sum = timed_run( 0, 'sha1sum', $HTTPD_PATH );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }
@@ -8539,7 +8625,7 @@ sub check_sha1_sigs_httpd {
 
     if ( $infected == 1 ) {
         print_ebury_cdorked_predef('CDORKED');
-        print_critical( "\t" . $httpd . " has a SHA-1 signature of " . $sha1sum );
+        print_critical( "\t" . $HTTPD_PATH . " has a SHA-1 signature of " . $sha1sum );
         print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
         print_critical();
     }
