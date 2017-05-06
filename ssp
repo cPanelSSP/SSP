@@ -6880,26 +6880,28 @@ sub check_if_hostname_missing_from_localdomains {
 sub check_for_eximstats_newline {
     my $eximstatspass = '/var/cpanel/eximstatspass';
     my $has_newline   = 0;
-
-    if ( !-e $eximstatspass ) {
-        print_warn("$eximstatspass: ");
-        print_warning('missing!');
-    }
-    else {
-        if ( open my $eximstatspass_fh, '<', $eximstatspass ) {
-            while (<$eximstatspass_fh>) {
-                if (/\n/) {
-                    $has_newline = 1;
-                    last;
-                }
-            }
-            close $eximstatspass_fh;
+    
+    if (cpanel_version_is(qw( < 11.64.0.0 ))) {
+        if ( !-e $eximstatspass ) {
+            print_warn("$eximstatspass: ");
+            print_warning('missing!');
         }
-    }
+        else {
+            if ( open my $eximstatspass_fh, '<', $eximstatspass ) {
+                while (<$eximstatspass_fh>) {
+                    if (/\n/) {
+                        $has_newline = 1;
+                        last;
+                    }
+                }
+                close $eximstatspass_fh;
+            }
+        }
 
-    if ( $has_newline == 1 ) {
-        print_warn("$eximstatspass: ");
-        print_warning('contains a newline. Breaks Mail Delivery Reports / eximstats');
+        if ( $has_newline == 1 ) {
+            print_warn("$eximstatspass: ");
+            print_warning('contains a newline. Breaks Mail Delivery Reports / eximstats');
+        }
     }
 
 }
