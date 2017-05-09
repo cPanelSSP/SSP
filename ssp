@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.152';
+our $VERSION = '4.99.153';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -2823,21 +2823,21 @@ sub check_selinux_status {
     for my $line (@selinux_status) {
         if ( $line =~ m{ \A SELinux \s status: \s+ ([^\s\n]+) }xms ) {
             return if $1 eq "disabled";
- 	}
-	
-	elsif ( $line =~ m{ \A Current \s mode: \s+ ([^\s\n]+) }xms) {            
-	    if ( $1 eq "permissive") {
-		print_info('SELinux: ');
-		print_normal('Permissive');
-	    	return;	
-	    }
-	    
-	    else {
-	    	print_warn('SELinux: ');
-            	print_warning('is ENFORCING!');
-            	return;
-	    }
-	}
+        }
+
+        elsif ( $line =~ m{ \A Current \s mode: \s+ ([^\s\n]+) }xms ) {
+            if ( $1 eq "permissive" ) {
+                print_info('SELinux: ');
+                print_normal('Permissive');
+                return;
+            }
+
+            else {
+                print_warn('SELinux: ');
+                print_warning('is ENFORCING!');
+                return;
+            }
+        }
     }
 }
 
@@ -6881,25 +6881,27 @@ sub check_for_eximstats_newline {
     my $eximstatspass = '/var/cpanel/eximstatspass';
     my $has_newline   = 0;
 
-    if ( !-e $eximstatspass ) {
-        print_warn("$eximstatspass: ");
-        print_warning('missing!');
-    }
-    else {
-        if ( open my $eximstatspass_fh, '<', $eximstatspass ) {
-            while (<$eximstatspass_fh>) {
-                if (/\n/) {
-                    $has_newline = 1;
-                    last;
-                }
-            }
-            close $eximstatspass_fh;
+    if ( cpanel_version_is(qw( < 11.63.0.0 )) ) {
+        if ( !-e $eximstatspass ) {
+            print_warn("$eximstatspass: ");
+            print_warning('missing!');
         }
-    }
+        else {
+            if ( open my $eximstatspass_fh, '<', $eximstatspass ) {
+                while (<$eximstatspass_fh>) {
+                    if (/\n/) {
+                        $has_newline = 1;
+                        last;
+                    }
+                }
+                close $eximstatspass_fh;
+            }
+        }
 
-    if ( $has_newline == 1 ) {
-        print_warn("$eximstatspass: ");
-        print_warning('contains a newline. Breaks Mail Delivery Reports / eximstats');
+        if ( $has_newline == 1 ) {
+            print_warn("$eximstatspass: ");
+            print_warning('contains a newline. Breaks Mail Delivery Reports / eximstats');
+        }
     }
 
 }
