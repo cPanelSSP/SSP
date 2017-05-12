@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.153';
+our $VERSION = '4.99.154';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -478,6 +478,7 @@ sub run {
     check_for_zamfoo();         # Master reseller software
     check_for_whmreseller();    # Master reseller software
     check_for_whmphp();         # Master reseller software
+    check_for_whmamp();         # Master reseller software
     check_for_cpremote();
     check_for_els();
     check_for_whmxtra();
@@ -8313,6 +8314,13 @@ sub check_for_whmreseller {
 sub check_for_whmphp {
     if ( -d '/usr/local/cpanel/whostmgr/docroot/cgi/whmphp' ) {
         print_3rdp('WHMPHP: ');
+        print_3rdp2('is installed. Multi-level reseller setups are not supported!');
+    }
+}
+
+sub check_for_whmamp {
+    if ( -d '/usr/local/cpanel/whostmgr/docroot/cgi/whmamp' ) {
+        print_3rdp('WHMAMP: ');
         print_3rdp2('is installed. Multi-level reseller setups are not supported!');
     }
 }
