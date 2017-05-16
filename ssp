@@ -2780,18 +2780,18 @@ sub check_for_license_error {
     if (
         $license_error =~ m{ \A 
          \QThe hostname must be a Fully Qualified Domain Name! (\E.+\)
+       | \QAbort, Retry, Fail?\E
          \Z }xms
       ) {
         print_warn('License Error: ');
         print_warning( '[ ' . $license_error . ' ]' );
-        print_warning('         \_ If this license error is not resolved after correctly setting the hostname, fork ticket for license issue if not related to current issue, send "ESCALATE - License issue to Dev" response, and escalate ticket to "QA/Development".');
+        print_warning('         \_ If this license error is not resolved after correctly setting the hostname AND ensuring that the hostname can be pinged from the local host ( ping `hostname` ), then fork ticket for license issue if not related to current issue, send "ESCALATE - License issue to Dev" response, and escalate ticket to "QA/Development".');
         return;
     }
 
     if (
         $license_error =~ m{ \A 
-         \QAbort, Retry, Fail?\E
-       | \QDoes not compute!\E
+         \QDoes not compute!\E
        | \QReturn without Gosub.\E
        | \QPrinting is not supported on this printer.\E
        | \QCannot issue a license to \E[^ ]+\Q without a \E(DISTRO|OSVER)\.
