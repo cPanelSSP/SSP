@@ -783,6 +783,7 @@ sub all_malware_checks {
     check_for_shellbot();                 # malware
     check_for_ncom_filenames();           # malware
     check_for_cpro();
+    check_for_fkcplisc();
 }
 
 sub get_phpini {
@@ -8928,6 +8929,26 @@ sub check_for_cpro {
         print_critical('The following files were found:');
         print_critical( "\t" . join( " ", @bad_paths ) );
         print_critical("\tL3: See ticket 7790559 for reference.");
+        print_critical();
+    }
+}
+
+sub check_for_fkcplisc {
+    my @bad_paths;
+    my @paths = qw(
+      /usr/local/fkcplisc
+    );
+    for my $path (@paths) {
+
+        if ( -e $path ) {
+            push @bad_paths, $path;
+        }
+    }
+    if (@bad_paths) {
+        print_generic_hack_predef('FKCPLISC');
+        print_critical('The following files or directories were found:');
+        print_critical( "\t" . join( " ", @bad_paths ) );
+        print_critical("\tL3: See TECH-269 for reference.");
         print_critical();
     }
 }
