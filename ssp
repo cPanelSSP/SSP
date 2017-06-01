@@ -1122,26 +1122,7 @@ sub print_tip {
 }
 
 sub get_tiers_file {
-    my $tier;
-    local $SIG{'ALRM'} = sub { return (); };
-    alarm 5;
-
-    my $sock = IO::Socket::INET->new(
-        PeerAddr => 'httpupdate.cpanel.net',
-        PeerPort => '80',
-        Proto    => 'tcp',
-        Timeout  => 3,
-    );
-
-    if ($sock) {
-        print $sock "GET /cpanelsync/TIERS HTTP/1.1\r\nUser-Agent: SSP/" . $VERSION . "\r\nHost: httpupdate.cpanel.net\r\n\r\n";
-        sysread $sock, $tier, 1000;
-        close $sock;
-    }
-
-    alarm 0;
-
-    return $tier;
+    return _http_get( Host => 'httpupdate.cpanel.net', Path => '/cpanelsync/TIERS' );
 }
 
 sub get_process_list {    # Usage of this needs to be deprecated in favor of the %process hash
@@ -1784,16 +1765,11 @@ sub print_cpanel_info {
 }
 
 sub check_for_cpanel_update {
-    my ( $TIERS_DATA, @tiers );
-    my ( $tier,       $available_tier_version );
+    my $tier;
+    my $available_tier_version;
     my $local_tier_name;
-    my $local_tier_version = $CPANEL_VERSION;
-    my $match              = 0;
-    my $update_available   = 0;
+    my $match = 0;
 
-    #
-    # get local tier name (e.g., edge)
-    #
     my $cpupdate_conf = '/etc/cpupdate.conf';
     return if !-f $cpupdate_conf;
 
@@ -1809,44 +1785,15 @@ sub check_for_cpanel_update {
 
     return if !$local_tier_name;
 
-    #
-    # get local tier version (e.g., 11.36.0.4)
-    #
-    if ( $local_tier_version !~ /(\d+\.\d+\.\d+\.\d+)/ ) {
+    if ( $CPANEL_VERSION !~ /(\d+\.\d+\.\d+\.\d+)/ ) {
         print_info('cPanel update check: ');
-        print_warning("unknown or old cPanel version $local_tier_version");
+        print_warning( 'unknown or old cPanel version ' . $CPANEL_VERSION );
         return;
     }
 
-    #
-    # get available tiers and versions (e.g., edge:11.36.0.4)
-    #
-    local $SIG{'ALRM'} = sub { return (); };
+    return unless $TIERS;
+    my @tiers = split /\n/, $TIERS;
 
-    alarm 5;
-
-    my $sock = IO::Socket::INET->new(
-        PeerAddr => 'httpupdate.cpanel.net',
-        PeerPort => 80,
-        Proto    => 'tcp',
-        Timeout  => 3,
-    );
-
-    if ($sock) {
-        print $sock "GET /cpanelsync/TIERS HTTP/1.1\r\nHost: httpupdate.cpanel.net\r\n\r\n";
-        sysread $sock, $TIERS_DATA, 1000;
-        close $sock;
-    }
-
-    alarm 0;
-
-    return if !$TIERS_DATA;
-
-    @tiers = split /\n/, $TIERS_DATA;
-
-    #
-    # does the local server use a recognized tier?
-    #
     for my $line (@tiers) {
         if ( $line =~ m{ \A (.*) : (\d+\.\d+\.\d+\.\d+) \z }xms ) {
             ( $tier, $available_tier_version ) = ( $1, $2 );
@@ -1863,30 +1810,9 @@ sub check_for_cpanel_update {
         return;
     }
 
-    #
-    # does the local tier version match the available tier version?
-    #
-    return if ( $local_tier_version eq $available_tier_version );
-
-    my ( $l1, $l2, $l3, $l4 ) = split /\./, $local_tier_version;
-    my ( $r1, $r2, $r3, $r4 ) = split /\./, $available_tier_version;
-
-    if ( $l1 < $r1 ) {
-        $update_available = 1;
-    }
-    elsif ( ( $l1 == $r1 ) and ( $l2 < $r2 ) ) {
-        $update_available = 1;
-    }
-    elsif ( ( $l1 == $r1 ) and ( $l2 == $r2 ) and ( $l3 < $r3 ) ) {
-        $update_available = 1;
-    }
-    elsif ( ( $l1 == $r1 ) and ( $l2 == $r2 ) and ( $l3 == $r3 ) and ( $l4 < $r4 ) ) {
-        $update_available = 1;
-    }
-
-    if ( $update_available == 1 ) {
+    if ( cpanel_version_is( '<', $available_tier_version ) ) {
         print_info('cPanel update check: ');
-        print_warning("UPDATE AVAILABLE ($local_tier_version -> $available_tier_version)");
+        print_warning( 'UPDATE AVAILABLE (' . $CPANEL_VERSION . ' -> ' . $available_tier_version . ')' );
     }
 }
 
@@ -1977,7 +1903,6 @@ sub check_for_clustering {
 
 sub print_apache_info {
     my $output;
-    my $apache_status;
 
     $output .= "[ EA4 ] " if $EA4;
 
@@ -1990,53 +1915,35 @@ sub print_apache_info {
 
     my ( $apache_uptime, $apache_generations );
 
-    local $SIG{'ALRM'} = sub { };
-    alarm 5;
-
     my $apache_configured_port = 80;
     my $attempted_port = ( split( ':', $CPCONF{'apache_port'} ) )[1];
     if ($attempted_port) {
         $apache_configured_port = $attempted_port;
     }
 
-    my $sock = IO::Socket::INET->new(
-        PeerAddr => '127.0.0.1',
-        PeerPort => $apache_configured_port,
-        Proto    => 'tcp',
-        Timeout  => 3,
-    );
-
-    if ($sock) {
-        print $sock "GET /whm-server-status HTTP/1.0\r\n\r\n";
-        sysread $sock, $apache_status, 10_000;
-        close $sock;
-    }
-
-    alarm 0;
+    my $apache_status = _http_get( Host => '127.0.0.1', Port => $apache_configured_port, Path => '/whm-server-status' );
 
     if ($apache_status) {
         my @apache_status = split /\n/, $apache_status;
 
         for my $line (@apache_status) {
             if ( $line =~ m{ Server \s uptime: \s+ (.*) </dt> }xms ) {
-                $apache_uptime = $1;
-                $apache_uptime = 'Up ' . $apache_uptime;
+                $apache_uptime = 'Up ' . $1;
             }
             if ( $line =~ m{ Parent \s Server \s Generation: (.*) </dt> }xms ) {
-                $apache_generations = $1;
+                $apache_generations = $1 . ' generation(s)';
             }
         }
-        if ( $apache_uptime and $apache_generations ) {
-            $output .= " [ $apache_uptime w/ $apache_generations generation(s) ]";
-        }
+        $output .= ' [ ' . $apache_uptime . ' ]'      if defined $apache_uptime;
+        $output .= ' [ ' . $apache_generations . ' ]' if defined $apache_generations;
     }
     else {
         my $warning = "";
         if ( $apache_configured_port == 80 ) {
-            $warning = 'Is Apache up/slow to respond? (failed: http://localhost/whm-server-status). ';
+            $warning = 'Is Apache up/slow to respond? (failed: http://127.0.0.1/whm-server-status). ';
         }
         else {
-            $warning = 'Is Apache up/slow to respond? (failed: http://localhost:' . $apache_configured_port . '/whm-server-status). ';
+            $warning = 'Is Apache up/slow to respond? (failed: http://127.0.0.1:' . $apache_configured_port . '/whm-server-status). ';
         }
 
         if (@LSOF_80) {
@@ -2700,32 +2607,11 @@ sub check_for_lsws_update {
     return if $LSWS_NUMERIC_VERSION eq "unknown";
     return unless $LSWS_FULL_VERSION =~ /Enterprise/;
 
-    my ( $LSWS_DATA, @lsws_data ) = ();
+    my $reply = _http_get( Host => 'update.litespeedtech.com', Path => '/ws/latest.php' );
+    return unless defined $reply;
+
     my $available_lsws_version;
-
-    local $SIG{'ALRM'} = sub { return (); };
-
-    alarm 5;
-
-    my $sock = IO::Socket::INET->new(
-        PeerAddr => 'update.litespeedtech.com',
-        PeerPort => 80,
-        Proto    => 'tcp',
-        Timeout  => 3,
-    );
-
-    if ($sock) {
-        print $sock "GET /ws/latest.php HTTP/1.1\r\nUser-Agent: SSP/" . $VERSION . "\r\nHost: update.litespeedtech.com\r\n\r\n";
-        sysread $sock, $LSWS_DATA, 1000;
-        close $sock;
-    }
-
-    alarm 0;
-
-    return if !$LSWS_DATA;
-
-    @lsws_data = split /\n/, $LSWS_DATA;
-
+    my @lsws_data = split /\n/, $reply;
     for (@lsws_data) {
         if (m{ \A LSWS=(\d+\.\d+\.\d+) \z }xms) {
             $available_lsws_version = $1;
@@ -4840,7 +4726,6 @@ sub check_for_missing_or_commented_customlog {
 
 sub check_for_cpsources_conf {
     my $cpsources_conf = '/etc/cpsources.conf';
-
     if ( -f $cpsources_conf and !-z $cpsources_conf ) {
         print_warn('/etc/cpsources.conf: ');
         print_warning('exists! This can affect upcp and EA.');
@@ -4853,59 +4738,29 @@ sub check_for_cpsources_conf {
                 push @cpsources_servers, $value;
             }
         }
-
-      CPSOURCES_SERVER:
         foreach my $cpsources_server (@cpsources_servers) {
             chomp $cpsources_server;
             my ( $host, $port ) = split( ':', $cpsources_server );
             if ( !defined($port) ) {
                 $port = 80;
             }
-
-            local $SIG{'ALRM'} = sub {
-                print_warn('/etc/cpsources.conf: ');
-                print_warning("Unresponsive mirror: http://$host:$port");
-                next CPSOURCES_SERVER;
-            };
-
-            my $sock = IO::Socket::INET->new(
-                PeerAddr => $host,
-                PeerPort => $port,
-                Proto    => 'tcp',
-                Timeout  => 3,
-            );
-
-            my $tiers_data;
-
-            if ($sock) {
-                print $sock "GET /cpanelsync/TIERS HTTP/1.1\r\nHost: $host\r\n\r\n";
-                sysread $sock, $tiers_data, 1000;
-                close $sock;
-            }
-
-            alarm 0;
-
+            my $tiers_data = _http_get( Host => $host, Port => $port, Path => '/cpanelsync/TIERS', WantHeaders => 1 );
             if ( !$tiers_data ) {
                 print_warn('/etc/cpsources.conf: ');
                 print_warning("Unresponsive mirror: http://$host:$port");
-                next CPSOURCES_SERVER;
+                next;
             }
-
-            # We care about the first line.
-            # HTTP/1.1 200 OK
-
             ( my $http_response ) = split( '\n', $tiers_data );
             ($http_response) = split( '\r', $http_response );
-
             if ( $http_response =~ /^HTTP\/(\d*?)\.(\d*?) (\d\d\d) (.*?)$/ ) {
                 if ( $3 != 200 ) {
                     print_warn('/etc/cpsources.conf: ');
-                    print_warning("Server $host:$port responds with $http_response when grabbing TIERS file.");
+                    print_warning("Server $host:$port responded with [ $http_response ] when fetching TIERS file.");
                 }
             }
             else {
                 print_warn('/etc/cpsources.conf: ');
-                print_warning("Server $host:$port responds with weird HTTP response $http_response");
+                print_warning("Server $host:$port responds with weird HTTP response [ $http_response ]");
             }
         }
     }
@@ -6368,50 +6223,35 @@ sub check_for_license_info {
     if ( defined($EXTERNAL_IP_ADDRESS) ) {
         my $url = '/?ip=' . $EXTERNAL_IP_ADDRESS;
         $helper_url .= $url;
-        my $sock = IO::Socket::INET->new(
-            PeerAddr => $host,
-            PeerPort => 80,
-            Proto    => 'tcp',
-            Timeout  => 5,
-        ) or return;
+        if ( my $reply = _http_get( Host => $host, Path => $url ) ) {
+            if ( $reply =~ /alt="cPanel\/WHM"/ ) {
+                $license{'cpanel'} = "cPanel";
+            }
 
-        local $SIG{'ALRM'} = sub { return (); };
+            if ( $reply =~ /alt="CloudLinux"/ ) {
+                $license{'cloudlinux'} = "CloudLinux";
+            }
 
-        alarm 5;
-        print $sock "GET ${url} HTTP/1.1\r\nHost: ${host}\r\n\r\n";
-        read $sock, my $buffer, 50_000;
-        alarm 0;
-        close $sock;
+            if ( $reply =~ /alt="KernelCare"/ ) {
+                $license{'kernelcare'} = "KernelCare";
+            }
 
-        if ( $buffer =~ /alt="cPanel\/WHM"/ ) {
-            $license{'cpanel'} = "cPanel";
+            if ( $reply =~ /ONE TIME FEE/ ) {
+                $license{'onetime'} = "One-Time";
+            }
         }
-
-        if ( $buffer =~ /alt="CloudLinux"/ ) {
-            $license{'cloudlinux'} = "CloudLinux";
+        if ( my $licenses = join " ", map { "[" . $license{$_} . "]" } sort keys %license ) {
+            print_info('License: ');
+            print_normal( $EXTERNAL_IP_ADDRESS . ' has ' . $licenses );
         }
-
-        if ( $buffer =~ /alt="KernelCare"/ ) {
-            $license{'kernelcare'} = "KernelCare";
+        else {
+            print_info('License: ');
+            print_normal("Not detected - verify at ${helper_url}");
         }
-
-        if ( $buffer =~ /ONE TIME FEE/ ) {
-            $license{'onetime'} = "One-Time";
+        if ( exists( $license{'onetime'} ) ) {
+            print_warn('License: ');
+            print_warning("may be a one-time cPanel license -- manually verify at [ ${helper_url} ]");
         }
-    }
-
-    if ( my $licenses = join " ", map { "[" . $license{$_} . "]" } sort keys %license ) {
-        print_info('License: ');
-        print_normal( $EXTERNAL_IP_ADDRESS . ' has ' . $licenses );
-    }
-    else {
-        print_info('License: ');
-        print_normal("Not detected - verify at ${helper_url}");
-    }
-
-    if ( exists( $license{'onetime'} ) ) {
-        print_warn('License: ');
-        print_warning("may be a one-time cPanel license -- manually verify at [ ${helper_url} ]");
     }
 
     if ( ( defined($EXTERNAL_IP_ADDRESS) && defined($EXTERNAL_LICENSE_ADDRESS) ) && !( $EXTERNAL_IP_ADDRESS eq $EXTERNAL_LICENSE_ADDRESS ) ) {
@@ -6428,7 +6268,6 @@ sub check_for_license_info {
         print_warn('KernelCare: ');
         print_warning("MAY NOT BE LICENSED! - verify at ${helper_url} - use \"LICENSE - CloudLinux Not Licensed through cPanel\" if relevant");
     }
-
 }
 
 # Yes, this actually happened...
@@ -9114,42 +8953,67 @@ sub get_external_ip {
     die "get_external_ip port number not specified" if !$port;
 
     # myip.cpanel.net supports HTTP ports 80, 2089 and HTTPS port 443.
-    my $host = 'myip.cpanel.net';
-    my $path = '/v1.0/';
     my $ip;
+    my $reply = _http_get( Host => 'myip.cpanel.net', Path => '/v1.0/', Tries => 2, ReportTimeout => 1, Port => $port );
+    if ( defined($reply) && $reply =~ m{ ^ \s* ([0-9]+.[0-9]+.[0-9]+.[0-9]+) \s* $ }xms ) {
+        $ip = $1;
+        chomp $ip;
+        return $ip;
+    }
+    return undef;
+}
+
+sub _http_get {
+    my (%opts_in) = @_;
+    my %opts = (
+        Agent               => "SSP/${VERSION}",
+        MaxReply            => 50_000,
+        Path                => '/',
+        Port                => 80,
+        Proto               => 'tcp',
+        ReportTimeout       => 0,
+        ReportTimeoutHeader => '',
+        Timeout             => 5,
+        Tries               => 1,
+        WantHeaders         => 0,
+        %opts_in
+    );
+    my $try = 0;
     my $reply;
-
-    my $count = 0;
-    for ( 1 .. 2 ) {
-        local $SIG{'ALRM'} = sub {
-            $count++;
-            print_warn("External IP detection via ${host} port ${port} timed out: ");
-            print_warning("attempt ${count} of 2");
+    die unless defined $opts{Host};
+    for ( 1 .. $opts{Tries} ) {
+        local $@;
+        $try++;
+        eval {
+            my $sock;
+            local $SIG{'ALRM'} = sub {
+                close $sock if defined $sock;
+                die "alarm\n";
+            };
+            alarm $opts{Timeout};
+            $sock = IO::Socket::INET->new(
+                PeerAddr => $opts{Host},
+                PeerPort => $opts{Port},
+                Proto    => $opts{Proto},
+                Timeout  => $opts{Timeout},
+            );
+            my $header_host = ( $opts{Port} != 80 ) ? $opts{Host} . ":" . $opts{Port} : $opts{Host};
+            if ($sock) {
+                print $sock "GET " . $opts{Path} . " HTTP/1.0\r\nUser-Agent: " . $opts{Agent} . "\r\nHost: " . $header_host . "\r\nAccept: */*\r\n\r\n";
+                read $sock, $reply, $opts{MaxReply};
+                close $sock;
+            }
+            alarm 0;
         };
-
-        alarm 5;
-
-        my $sock = IO::Socket::INET->new(
-            PeerAddr => $host,
-            PeerPort => $port,
-            Proto    => 'tcp',
-            Timeout  => 5,
-        );
-
-        my $header_host = ( $port != 80 ) ? $host . ":" . $port : $host;
-
-        if ($sock) {
-            print $sock "GET ${path} HTTP/1.1\r\nUser-Agent: SSP/" . $VERSION . "\r\nHost: ${header_host}\r\n\r\n";
-            sysread $sock, $reply, 1500;
-            close $sock;
+        if ( $@ eq "alarm\n" && $opts{ReportTimeout} ) {
+            print_warn( $opts{ReportTimeoutHeader} . 'Request for http://' . $opts{Host} . ':' . $opts{Port} . $opts{Path} . ' timed out' );
+            print_warning( ': attempt ' . $try . ' of ' . $opts{Tries} ) if $opts{Tries} > 1;
+            print RESET;
+            next;
         }
-
-        alarm 0;
-
-        if ( defined($reply) && $reply =~ m{ ^ \s* ([0-9]+.[0-9]+.[0-9]+.[0-9]+) \s* $ }xms ) {
-            $ip = $1;
-            chomp $ip;
-            return $ip;
+        if ( defined $reply && length $reply ) {
+            $reply =~ s/^.*?\R{2}//s unless defined $opts{WantHeaders};
+            return $reply;
         }
     }
     return undef;
