@@ -8285,44 +8285,15 @@ sub check_for_newrelic {
 
 }
 
-sub check_for_zamfoo {
-    my $has_zamfoo = 0;
+sub check_multilevel_reseller {
+    my @ml_plugins = ('zamfoo', 'whmreseller', 'whmphp', 'whmamp'); 
+    my $docroot = '/usr/local/cpanel/whostmgr/docroot/cgi';
+    foreach $plugin (@ml_plugins){
+        if ( -d "$docroot/$plugin") {
+            print_3rdp(uc($plugin));
+            print_3rdp2('is installed. Multi-level reseller setups are not supported!');
 
-    if ( -f '/scripts/prekillacct' ) {
-        open my $file_fh, '<', '/scripts/prekillacct' or return;
-        while (<$file_fh>) {
-            if (/zamfoo/i) {
-                $has_zamfoo = 1;
-                last;
-            }
         }
-        close $file_fh;
-    }
-
-    if ( $has_zamfoo == 1 ) {
-        print_3rdp('Zamfoo: ');
-        print_3rdp2('is installed. Multi-level reseller setups are not supported!');
-    }
-}
-
-sub check_for_whmreseller {
-    if ( -d '/usr/local/cpanel/whostmgr/docroot/cgi/whmreseller' ) {
-        print_3rdp('WHMReseller: ');
-        print_3rdp2('is installed. Multi-level reseller setups are not supported!');
-    }
-}
-
-sub check_for_whmphp {
-    if ( -d '/usr/local/cpanel/whostmgr/docroot/cgi/whmphp' ) {
-        print_3rdp('WHMPHP: ');
-        print_3rdp2('is installed. Multi-level reseller setups are not supported!');
-    }
-}
-
-sub check_for_whmamp {
-    if ( -d '/usr/local/cpanel/whostmgr/docroot/cgi/whmamp' ) {
-        print_3rdp('WHMAMP: ');
-        print_3rdp2('is installed. Multi-level reseller setups are not supported!');
     }
 }
 
