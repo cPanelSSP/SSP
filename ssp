@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.155';
+our $VERSION = '4.99.156';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -8283,11 +8283,11 @@ sub check_for_newrelic {
 }
 
 sub check_for_multilevel_reseller {
-    my @ml_plugins = ('zamfoo', 'whmreseller', 'whmphp', 'whmamp'); 
+    my @ml_plugins = ( 'zamfoo', 'whmreseller', 'whmphp', 'whmamp' );
     my $docroot = '/usr/local/cpanel/whostmgr/docroot/cgi';
-    foreach my $plugin (@ml_plugins){
-        if ( -d "$docroot/$plugin") {
-            print_3rdp(uc($plugin));
+    foreach my $plugin (@ml_plugins) {
+        if ( -d "$docroot/$plugin" ) {
+            print_3rdp( uc($plugin) . ' ' );
             print_3rdp2('is installed. Multi-level reseller setups are not supported!');
 
         }
