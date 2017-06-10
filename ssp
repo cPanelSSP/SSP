@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.153';
+our $VERSION = '4.99.155';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -478,6 +478,7 @@ sub run {
     check_for_zamfoo();         # Master reseller software
     check_for_whmreseller();    # Master reseller software
     check_for_whmphp();         # Master reseller software
+    check_for_whmamp();         # Master reseller software
     check_for_cpremote();
     check_for_els();
     check_for_whmxtra();
@@ -782,6 +783,7 @@ sub all_malware_checks {
     check_for_shellbot();                 # malware
     check_for_ncom_filenames();           # malware
     check_for_cpro();
+    check_for_fkcplisc();
 }
 
 sub get_phpini {
@@ -2779,18 +2781,18 @@ sub check_for_license_error {
     if (
         $license_error =~ m{ \A 
          \QThe hostname must be a Fully Qualified Domain Name! (\E.+\)
+       | \QAbort, Retry, Fail?\E
          \Z }xms
       ) {
         print_warn('License Error: ');
         print_warning( '[ ' . $license_error . ' ]' );
-        print_warning('         \_ If this license error is not resolved after correctly setting the hostname, fork ticket for license issue if not related to current issue, send "ESCALATE - License issue to Dev" response, and escalate ticket to "QA/Development".');
+        print_warning('         \_ If this license error is not resolved after correctly setting the hostname AND ensuring that the hostname can be pinged from the local host ( ping `hostname` ), then fork ticket for license issue if not related to current issue, send "ESCALATE - License issue to Dev" response, and escalate ticket to "QA/Development".');
         return;
     }
 
     if (
         $license_error =~ m{ \A 
-         \QAbort, Retry, Fail?\E
-       | \QDoes not compute!\E
+         \QDoes not compute!\E
        | \QReturn without Gosub.\E
        | \QPrinting is not supported on this printer.\E
        | \QCannot issue a license to \E[^ ]+\Q without a \E(DISTRO|OSVER)\.
@@ -8317,6 +8319,13 @@ sub check_for_whmphp {
     }
 }
 
+sub check_for_whmamp {
+    if ( -d '/usr/local/cpanel/whostmgr/docroot/cgi/whmamp' ) {
+        print_3rdp('WHMAMP: ');
+        print_3rdp2('is installed. Multi-level reseller setups are not supported!');
+    }
+}
+
 sub check_for_cpremote {
     return if !-e '/var/spool/cron/root';
 
@@ -8920,6 +8929,26 @@ sub check_for_cpro {
         print_critical('The following files were found:');
         print_critical( "\t" . join( " ", @bad_paths ) );
         print_critical("\tL3: See ticket 7790559 for reference.");
+        print_critical();
+    }
+}
+
+sub check_for_fkcplisc {
+    my @bad_paths;
+    my @paths = qw(
+      /usr/local/fkcplisc
+    );
+    for my $path (@paths) {
+
+        if ( -e $path ) {
+            push @bad_paths, $path;
+        }
+    }
+    if (@bad_paths) {
+        print_generic_hack_predef('FKCPLISC');
+        print_critical('The following files or directories were found:');
+        print_critical( "\t" . join( " ", @bad_paths ) );
+        print_critical("\tL3: See TECH-269 for reference.");
         print_critical();
     }
 }
