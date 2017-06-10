@@ -475,11 +475,7 @@ sub run {
     check_for_webmin();
     check_for_symantec();
     check_for_newrelic();
-    #check_for_zamfoo();         # Master reseller software
-    #check_for_whmreseller();    # Master reseller software
-    #check_for_whmphp();         # Master reseller software
-    #check_for_whmamp();         # Master reseller software
-    check_multilevel_reseller();
+    check_for_multilevel_reseller();
     check_for_cpremote();
     check_for_els();
     check_for_whmxtra();
@@ -8286,7 +8282,7 @@ sub check_for_newrelic {
 
 }
 
-sub check_multilevel_reseller {
+sub check_for_multilevel_reseller {
     my @ml_plugins = ('zamfoo', 'whmreseller', 'whmphp', 'whmamp'); 
     my $docroot = '/usr/local/cpanel/whostmgr/docroot/cgi';
     foreach my $plugin (@ml_plugins){
