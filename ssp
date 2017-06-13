@@ -380,7 +380,6 @@ sub run {
     check_for_custom_locales();
     check_eximstats_size();
 
-    #check_eximstats_corrupt(); # !! Completely remove after shake-down period for new table check
     check_for_broken_mysql_tables();
     check_for_broken_mysql_horde();
     check_for_clock_skew();
@@ -5569,48 +5568,24 @@ sub check_eximstats_size {
     }
 }
 
-sub check_eximstats_corrupt {
-    return if !-f $MYSQL_ERROR_LOG;
-
-    my $size           = ( stat($MYSQL_ERROR_LOG) )[7];
-    my $bytes_to_check = 20_971_520;                      # 20M limit of logs to check
-    my $seek_position  = 0;
-    my $log_data;
-    my @logs;
-    my $eximstats_is_crashed;
-
-    if ( $size > $bytes_to_check ) {
-        $seek_position = ( $size - $bytes_to_check );
-    }
-
-    if ( open my $file_fh, '<', $MYSQL_ERROR_LOG ) {
-        seek $file_fh, $seek_position, 0;
-        read $file_fh, $log_data, $bytes_to_check;
-        close $file_fh;
-    }
-
-    @logs = split /\n/, $log_data;
-    undef $log_data;
-    @logs = reverse @logs;
-
-    for my $log_line (@logs) {
-
-        # /usr/sbin/mysqld: Table './eximstats/smtp' is marked as crashed and should be repaired
-        if ( $log_line =~ m{ /eximstats/ (.*) marked \s as \s crashed }xms ) {
-            $eximstats_is_crashed = $log_line;
-            last;
-        }
-    }
-
-    if ($eximstats_is_crashed) {
-        print_warn('eximstats: ');
-        print_warning("latest crash: $eximstats_is_crashed");
-    }
-}
-
 sub check_for_broken_mysql_tables {
     my %broken;
-    for ( split /\n/, timed_run( 0, 'mysql', '-NBe', 'SELECT table_schema,table_name,engine,row_format,create_time FROM information_schema.tables WHERE ( table_schema=\'cphulkd\' OR table_schema=\'eximstats\' OR table_schema=\'horde\' OR table_schema=\'modsec\' OR table_schema=\'roundcube\' OR table_schema=\'whmxfer\' ) AND engine IS NULL' ) ) {
+    my @schemas;
+    my $sql_schemas;
+    push @schemas, 'horde'     if cpanel_version_is(qw ( < 11.53.0.0 ));
+    push @schemas, 'whmxfer'   if cpanel_version_is(qw ( < 11.57.0.0 ));
+    push @schemas, 'modsec'    if cpanel_version_is(qw ( < 11.61.0.0 ));
+    push @schemas, 'eximstats' if cpanel_version_is(qw ( < 11.63.0.0 ));
+    push @schemas, 'cphulkd'   if cpanel_version_is(qw ( < 11.65.0.0 ));
+    push @schemas, 'roundcube' if defined $CPCONF{roundcube_db} && $CPCONF{roundcube_db} eq 'mysql';
+
+    return unless scalar @schemas;
+
+    for my $schema ( sort @schemas ) {
+        $sql_schemas .= ' OR ' if length $sql_schemas;
+        $sql_schemas .= 'table_schema=\'' . $schema . '\'';
+    }
+    for ( split /\n/, timed_run( 0, 'mysql', '-NBe', 'SELECT table_schema,table_name,engine,row_format,create_time FROM information_schema.tables WHERE ( ' . $sql_schemas . ' ) AND engine IS NULL' ) ) {
         my @line = split /\t/;
         $broken{ $line[0] }{ $line[1] } = 1;
     }
