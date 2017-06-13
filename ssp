@@ -2003,12 +2003,12 @@ sub print_ea3_php_configuration {
         }
     }
     close $phpconf_fh;
-
+    my $has_ea3_suexec;
     if ( $EA3_SUEXEC && $EA3_SUEXEC eq '1' ) {
-        $EA3_SUEXEC = 'with suexec';
+        $has_ea3_suexec = 'with suexec';
     }
     else {
-        $EA3_SUEXEC = 'without suexec';
+        $has_ea3_suexec = 'without suexec';
     }
 
     if ( $EA3_PHPVERSION == 5 ) {
@@ -2023,7 +2023,7 @@ sub print_ea3_php_configuration {
 
             if ($EA3_PHP5HANDLER) {
                 print_info('PHP Default: ');
-                print_normal("PHP $EA3_PHP5VERSION $EA3_PHP5HANDLER $EA3_SUEXEC");
+                print_normal("PHP $EA3_PHP5VERSION $EA3_PHP5HANDLER $has_ea3_suexec");
             }
         }
 
@@ -2037,7 +2037,7 @@ sub print_ea3_php_configuration {
             }
 
             print_info('PHP Secondary: ');
-            print_normal("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $EA3_SUEXEC");
+            print_normal("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $has_ea3_suexec");
         }
     }
 
@@ -2053,11 +2053,11 @@ sub print_ea3_php_configuration {
 
             if ( $EA3_PHP4HANDLER && $EA3_PHP4HANDLER eq 'fcgi' ) {
                 print_info('PHP Default: ');
-                print_warning("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $EA3_SUEXEC (mod_userdir style URLs don't work with fcgi!)");
+                print_warning("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $has_ea3_suexec (mod_userdir style URLs don't work with fcgi!)");
             }
             else {
                 print_info('PHP Default: ');
-                print_normal("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $EA3_SUEXEC");
+                print_normal("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $has_ea3_suexec");
             }
         }
 
@@ -2071,7 +2071,7 @@ sub print_ea3_php_configuration {
             }
 
             print_info('PHP Secondary: ');
-            print_normal("PHP $EA3_PHP5VERSION $EA3_PHP5HANDLER $EA3_SUEXEC");
+            print_normal("PHP $EA3_PHP5VERSION $EA3_PHP5HANDLER $has_ea3_suexec");
         }
     }
 
