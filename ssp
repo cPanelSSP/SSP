@@ -419,7 +419,6 @@ sub run {
     check_for_invalid_HOMEDIR();
     check_for_unsupported_options_in_phpini();    # FB-75397
     check_for_suphp_but_no_fileprotect();
-    check_for_assp_hates_appconfig_cron();
     check_for_missing_var_cpanel_dynamicui_ftp();
     check_if_backup_dir_is_nfs();
     check_if_hostname_missing_from_localdomains();
@@ -6604,26 +6603,6 @@ sub check_for_suphp_but_no_fileprotect {
     }
 }
 
-sub check_for_assp_hates_appconfig_cron {
-    return if !-f '/var/spool/cron/root';
-
-    my $has_bad_assp_cron = 0;
-
-    open my $cron_fh, '<', '/var/spool/cron/root';
-    while (<$cron_fh>) {
-        if (m{ /usr/local/cpanel/3rdparty/bin/php-cgi \s /usr/local/assp/deluxe/ex_localdomains.php }xms) {
-            $has_bad_assp_cron = 1;
-            last;
-        }
-    }
-    close $cron_fh;
-
-    if ( $has_bad_assp_cron == 1 ) {
-        print_warn('ASSP: ');
-        print_warning('this software uses a cron job which breaks cPanel\'s AppConfig. See 4394109, 4392691. Complain to vendor (grscripts.com)');
-    }
-}
-
 sub check_for_missing_var_cpanel_dynamicui_ftp {
     if ( !-e '/etc/ftpddisable' and !-e '/etc/ftpserverdisable' and !-e '/var/cpanel/dynamicui/ftp' ) {
         print_warn('FTP: ');
@@ -7911,14 +7890,15 @@ sub check_smtp_processes {
             print_3rdp('SMTP: ');
             print_3rdp2( 'a process other than exim is listening on port 25 [' . $href->{IPV} . ' ' . $href->{IP} . '] [USER: ' . $href->{USER} . '] [CMD: ' . $cmd . '] [PID: ' . $pid . ']' );
         }
-        if ( $cmd =~ m{ /assp\.pl \b }xms ) {
+        if ( $cmd =~ m{ assp\.pl }xms ) {
             $assp_running = $pid;
         }
     }
 
     if ($assp_running) {
         print_3rdp('ASSP: ');
-        print_3rdp2( 'assp.pl is listening on port 25 [PID: ' . $assp_running . '] Vendor: http://assp.sourceforge.net' );
+        print_3rdp2( 'assp.pl is listening on port 25 [PID: ' . $assp_running . ']' );
+        print_3rdp2('         \_  SNI is not supported unless enabled in the plugin: http://www.grscripts.com/howtofaq.html -> "Does ASSP Support SNI?"');
     }
 }
 
