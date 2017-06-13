@@ -2470,13 +2470,11 @@ sub print_backups_info {
 }
 
 sub print_mailserver_info {
+    return unless defined $CPCONF{'mailserver'};
+    return unless cpanel_version_is(qw( < 11.53.0.0 ));    # 54+ only supports Dovecot
+
     print_info('Mailserver: ');
-    if ( defined $CPCONF{'mailserver'} ) {
-        print_normal( $CPCONF{'mailserver'} );
-    }
-    else {
-        print_warning('missing setting in cpanel.config');
-    }
+    print_normal( $CPCONF{'mailserver'} );
 }
 
 sub print_ftpserver_info {
