@@ -8933,7 +8933,7 @@ sub _http_get {
             next;
         }
         if ( defined $reply && length $reply ) {
-            $reply =~ s/^.*?\R{2}//s unless defined $opts{WantHeaders};
+            $reply =~ s/^.*?(\r\n){2}//s unless defined $opts{WantHeaders} && $opts{WantHeaders};
             return $reply;
         }
     }
