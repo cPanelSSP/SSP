@@ -5582,7 +5582,7 @@ sub check_for_broken_mysql_tables {
     return unless scalar @schemas;
 
     for my $schema ( sort @schemas ) {
-        $sql_schemas .= ' OR ' if length $sql_schemas;
+        $sql_schemas .= ' OR ' if defined $sql_schemas && length $sql_schemas;
         $sql_schemas .= 'table_schema=\'' . $schema . '\'';
     }
     for ( split /\n/, timed_run( 0, 'mysql', '-NBe', 'SELECT table_schema,table_name,engine,row_format,create_time FROM information_schema.tables WHERE ( ' . $sql_schemas . ' ) AND engine IS NULL' ) ) {
