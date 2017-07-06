@@ -5729,6 +5729,7 @@ sub check_for_percona_rpms {
     my $has_percona = 0;
 
     for my $rpm (@RPM_LIST) {
+        next if $rpm =~ /^percona-toolkit/i;    # Can be used with MariaDB/MySQL
         if ( $rpm =~ /^Percona-/i ) {
             $has_percona = 1;
             last;
