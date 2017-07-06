@@ -6034,8 +6034,9 @@ sub check_for_homeloader_php_extension {
 }
 
 sub check_for_networkmanager {
-    return if version_compare( $OS_VERSION, qw( >= 7 ) );
-    my $networkmanager_running;
+    my $networkmanager_running = 0;
+    my $using_ipaliases        = 0;
+    my $ipaliases              = '/etc/ips';
 
     for my $line (@PROCESS_LIST) {
         if ( $line =~ m{ \A root (?:.*) NetworkManager }xms ) {
@@ -6043,10 +6044,12 @@ sub check_for_networkmanager {
             last;
         }
     }
-
-    if ( $networkmanager_running && $networkmanager_running == 1 ) {
+    if ( my $size_ipaliases = ( stat($ipaliases) )[7] ) {
+        $using_ipaliases = 1 if $size_ipaliases >= 7;    # Minimum possible size
+    }
+    if ( $networkmanager_running && $using_ipaliases ) {
         print_warn('NetworkManager: ');
-        print_warning('found in the process list - see "DisableNetworkManager" wiki article');
+        print_warning('is running, could disrupt ipaliases service - see "How to Disable Network Manager" documentation');
     }
 }
 
