@@ -8259,6 +8259,7 @@ sub check_for_libkeyutils_filenames {
       libns2.so
       libns5.so
       libpw3.so
+      libpw5.so
       tls/libkeyutils.so.1
       tls/libkeyutils.so.1.5
     );
