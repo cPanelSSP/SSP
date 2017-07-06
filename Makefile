@@ -4,7 +4,6 @@ PERLTIDY=/usr/local/cpanel/3rdparty/perl/524/bin/perltidy
 TIDYRC=tools/.perltidyrc
 SSP_SHASUM=shasum -a 512 ssp | awk '{print $$1}'
 NEW_SSPVER=$(shell grep 'our $$VERSION' ssp | awk '{print $$4}' | sed -e "s/'//g" -e 's/;//')
-PREV_SSPVER=head -1 SHA512SUM | awk '{print $$2}'
 
 .DEFAULT: help
 .IGNORE: clean
@@ -50,6 +49,7 @@ ssp.tdy: ssp
 	echo "Running tidy..."
 	$(PERLTIDY) --profile=$(TIDYRC) ssp
 
+## Run basic tests
 test:
 	[ -e /usr/local/cpanel/version ] || ( echo "You're not running this on a WHM system."; exit 2 )
 	perl -c ssp || ( echo "ssp perl syntax check failed"; exit 2 )
