@@ -86,6 +86,8 @@ our $APACHE_BUILT;              # Build date
 our $APACHE_EA_VERSION;         # EA version which built Apache
 our $APACHE_PER_USER;           # Type of per-user Apache module in effect such as Mod Ruid2 or MPM ITK
 our $APACHE_MODSEC;             # mod_security enabled
+our $APACHE_PASSENGER;          # mod_passenger enabled
+our $APACHE_USERDIR;            # mod_userdir enabled
 our ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION );
 our ( $EA3_PHPVERSION, $EA3_PHP5VERSION, $EA3_PHP4VERSION, $EA3_PHP4HANDLER, $EA3_PHP5HANDLER, $EA3_SUEXEC );
 our @LSOF_80;
@@ -130,17 +132,20 @@ sub init {
     $IS_CPANEL       = 1 if -d '/usr/local/cpanel';
 
     if ($IS_CPANEL) {
-        $CPANEL_VERSION  = get_cpanel_version();
-        $EA4             = is_ea4();
-        $EA4_PHP         = _get_installed_ea4_php();
-        $HTTPD_PATH      = get_httpd_path();           # location of operative httpd
-        @PHPINI          = get_phpini();
-        $TIERS           = get_tiers_file();
-        $PUREFTPDCONF    = get_pureftpd_conf();
-        $PROFTPDCONF     = get_proftpd_conf();
-        $EXIMLOCALOPTS   = get_exim_localopts();
-        $EA4_PHP_FPM     = get_ea4_php_fpm_status();
-        $APACHE_PER_USER = "none";
+        $CPANEL_VERSION   = get_cpanel_version();
+        $EA4              = is_ea4();
+        $EA4_PHP          = _get_installed_ea4_php();
+        $HTTPD_PATH       = get_httpd_path();           # location of operative httpd
+        @PHPINI           = get_phpini();
+        $TIERS            = get_tiers_file();
+        $PUREFTPDCONF     = get_pureftpd_conf();
+        $PROFTPDCONF      = get_proftpd_conf();
+        $EXIMLOCALOPTS    = get_exim_localopts();
+        $EA4_PHP_FPM      = get_ea4_php_fpm_status();
+        $APACHE_MODSEC    = 0;
+        $APACHE_PASSENGER = 0;
+        $APACHE_PER_USER  = "none";
+        $APACHE_USERDIR   = 0;
         ( $OLD_BACKUP_CONF,   $NEW_BACKUP_CONF )      = get_backup_config();
         ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION ) = get_lsws_version();
 
@@ -168,17 +173,13 @@ sub init {
                 $APACHE_EA_VERSION =~ s/\.\w\d{1,3}\D+\d+\n//;
             }
 
-            $APACHE_MODSEC = 0;
-            for (@APACHE_MODULES_OUTPUT) {
-                if (/ruid2_module/) {    #
-                    $APACHE_PER_USER = "ruid2";
-                }
-                if (/mpm_itk_module/) {
-                    $APACHE_PER_USER = "itk";
-                }
-                if (/security\d?_module/) {
-                    $APACHE_MODSEC = 1;
-                }
+            for my $mod (@APACHE_MODULES_OUTPUT) {
+                $APACHE_MODSEC    = 1       unless index( $mod, 'security_module' ) == -1;
+                $APACHE_MODSEC    = 1       unless index( $mod, 'security2_module' ) == -1;
+                $APACHE_PASSENGER = 1       unless index( $mod, 'passenger_module' ) == -1;
+                $APACHE_PER_USER  = "ruid2" unless index( $mod, 'ruid2_module' ) == -1;
+                $APACHE_PER_USER  = "itk"   unless index( $mod, 'mpm_itk_module' ) == -1;
+                $APACHE_USERDIR   = 1       unless index( $mod, 'userdir_module' ) == -1;
             }
         }
 
@@ -2256,6 +2257,7 @@ sub print_if_using_mydns_or_nsd {
 }
 
 sub print_if_mod_userdir {
+    return unless $APACHE_USERDIR;
     if ( $EA4 && cpanel_version_is(qw( >= 11.59.0.0 )) ) {
         print_info('Mod Userdir: ');
         print_warning("will not execute PHP scripts via PHP-FPM");
@@ -2263,6 +2265,10 @@ sub print_if_mod_userdir {
     if ( defined($EA4_PHP) && defined( $EA4_PHP->{default} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{handler} ) && $EA4_PHP->{ $EA4_PHP->{default} }->{handler} eq "cgi" ) {
         print_info('Mod Userdir: ');
         print_warning("will not execute PHP scripts via cgi handler");
+    }
+    if ($APACHE_PASSENGER) {
+        print_info('Mod Userdir: ');
+        print_warning('doesn\'t work with Mod Passenger');
     }
     if ( $APACHE_PER_USER eq "ruid2" ) {
         print_info('Mod Userdir: ');
