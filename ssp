@@ -8199,8 +8199,9 @@ sub print_ebury_cdorked_predef {
 }
 
 sub check_for_cdorked_A {
-    my $max_bin_size = 10_485_760;    # avoid slurping too much mem
+    return unless defined $HTTPD_PATH;
     return unless -f $HTTPD_PATH;
+    my $max_bin_size = 10_485_760;    # avoid slurping too much mem
     return if ( ( stat($HTTPD_PATH) )[7] > $max_bin_size );
 
     my $has_cdorked = 0;
@@ -8374,6 +8375,7 @@ sub check_for_unowned_libkeyutils_files {
 }
 
 sub check_sha1_sigs_httpd {
+    return unless defined $HTTPD_PATH;
     return if !-e $HTTPD_PATH;
     my $infected = 0;
     return unless my $sha1sum = timed_run( 0, 'sha1sum', $HTTPD_PATH );
