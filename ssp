@@ -3667,14 +3667,17 @@ sub get_fcap {
 
 sub check_for_non_default_sysctl {
     my %check = (    # 'sysctl_key' => [ ['default1', 'default2', ...], 'Additional info' ]
+        'fs.enforce_symlinksifowner' => [ [ '0', '1' ], ' - Invalid setting - https://docs.cloudlinux.com/index.html?symlink_owner_match_protection.html' ],
+        'fs.protected_hardlinks_create' => [ ['0'], '' ],
+        'fs.protected_symlinks_create'  => [ ['0'], ' - Not recommended. Can prevent creation of access_log symlink in user homes, or switching to a custom cPanel style that is not owned by the "linksafe" group.' ],
         'kernel.user_ptrace'            => [ ['1'], ' - Disabling this may break remote logins from WHM Transfer Tool - see FB-167393' ],
         'net.ipv4.tcp_tw_recycle'       => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
         'net.ipv4.tcp_tw_reuse'         => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
-        'fs.protected_hardlinks_create' => [ ['0'], '' ],
-        'fs.protected_symlinks_create'  => [ ['0'], ' - Not recommended. Can prevent creation of access_log symlink in user homes, or switching to a custom cPanel style that is not owned by the "linksafe" group.' ],
         'vm.overcommit_memory' => [ [ '0', '1' ], ' - Seeing "Out of memory" but there is free memory and no limits?  This might be why.' ],
     );
-
+    if ( defined( $SYSCTL->{'fs.enforce_symlinksifowner'} && $SYSCTL->{'fs.enforce_symlinksifowner'} ) ) {
+        $check{'fs.symlinkown_gid'} = [ ['99'], ' - Incorrect GID - https://docs.cloudlinux.com/index.html?symlink_owner_match_protection.html' ];
+    }
     for my $key ( sort keys %check ) {
         if ( exists $SYSCTL->{$key} ) {
             my $default = 0;
