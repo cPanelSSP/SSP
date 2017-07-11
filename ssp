@@ -3661,9 +3661,11 @@ sub get_fcap {
 
 sub check_for_non_default_sysctl {
     my %check = (    # 'sysctl_key' => [ ['default1', 'default2', ...], 'Additional info' ]
-        'kernel.user_ptrace'      => [ ['1'], ' - Disabling this is known to break remote logins from WHM Transfer Tool - see FB-167393' ],
-        'net.ipv4.tcp_tw_recycle' => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
-        'net.ipv4.tcp_tw_reuse'   => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
+        'kernel.user_ptrace'            => [ ['1'], ' - Disabling this may break remote logins from WHM Transfer Tool - see FB-167393' ],
+        'net.ipv4.tcp_tw_recycle'       => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
+        'net.ipv4.tcp_tw_reuse'         => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
+        'fs.protected_hardlinks_create' => [ ['0'], '' ],
+        'fs.protected_symlinks_create'  => [ ['0'], ' - Not recommended. Can prevent creation of access_log symlink in user homes, or switching to a custom cPanel style that is not owned by the "linksafe" group.' ],
         'vm.overcommit_memory' => [ [ '0', '1' ], ' - Seeing "Out of memory" but there is free memory and no limits?  This might be why.' ],
     );
 
