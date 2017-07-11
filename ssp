@@ -302,6 +302,7 @@ sub run {
     check_for_tomcatoptions();
     check_for_sneaky_htaccess();
     check_ea4_paths_conf();
+    check_apache_missing_modules();
     check_perl_sanity();
     check_for_non_default_permissions();
     check_for_non_default_file_capabilities();
