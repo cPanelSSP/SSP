@@ -6142,6 +6142,7 @@ sub check_for_disabled_services {
         '/etc/pop3disable'                                       => 'courier',
         '/etc/popddisable'                                       => 'courier',
         '/etc/popdisable'                                        => 'courier',
+        '/etc/cpanel-dovecot-solrdisable'                        => 'cpanel-dovecot-solr',
         '/etc/cpanellogddisable'                                 => 'cpanellogd',
         '/etc/cpdavddisable'                                     => 'cpdavd',
         '/etc/cpsrvdddisable'                                    => 'cpsrvd',
