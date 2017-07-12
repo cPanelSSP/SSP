@@ -762,6 +762,7 @@ sub all_malware_checks {
     check_for_xor_ddos();                 # malware
     check_for_shellbot();                 # malware
     check_for_ncom_filenames();           # malware
+    check_for_dirtycow_passwd();          # malware
     check_for_cpro();
     check_for_fkcplisc();
 }
@@ -8660,6 +8661,16 @@ sub check_for_ncom_filenames {
         print_critical("\tL3: check /etc/ld.so.preload");
         print_critical();
     }
+}
+
+sub check_for_dirtycow_passwd {
+    return unless my $gecos = ( getpwuid(0) )[6];
+    return unless $gecos eq 'pwned';
+    print_generic_hack_predef('FireFart / Dirty COW');
+    print_critical('The root user GECOS field in the passwd database is "pwned", which is a typical indication of the FireFart Dirty COW exploit tool.');
+    print_critical("\tL3: use \"L3 - FireFart / Dirty COW Exploit [L3 Only]\"");
+    print_critical("\tL3: Run 'getent passwd root' to verify passwd entry");
+    print_critical();
 }
 
 sub check_for_cpro {
