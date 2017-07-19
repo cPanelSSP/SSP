@@ -5235,6 +5235,7 @@ sub check_cpanel_config {
         'mysql-version'               => { check_missing => 1 },
         'nativessl'                   => { default       => '1', help => 'Native SSL support for WHM/cPanel services is disabled' },
         'skiphttpauth'                => { default       => '1', help => 'HTTP auth enabled' },
+        'skipparentcheck'             => { default       => '0', help => 'Allows other applications to run the cPanel and admin binaries' },
     );
 
     if ( cpanel_version_is(qw( < 11.48.0.0 )) ) {
@@ -6189,11 +6190,12 @@ sub check_for_disabled_services {
     );
 
     my %cpconfcheck = (
-        'skipcpbandwd'  => 'cpbandwd',
-        'skipchkservd'  => 'chkservd',
-        'skipeximstats' => 'eximstats',
-        'skipmailman'   => 'mailman',
-        'skipmodseclog' => 'modseclog',
+        'skipchkservd'   => 'chkservd',
+        'skipcpbandwd'   => 'cpbandwd',
+        'skipeximstats'  => 'eximstats',
+        'skipmailman'    => 'mailman',
+        'skipmodseclog'  => 'modseclog',
+        'skiptailwatchd' => 'tailwatchd',
     );
 
     while ( my ( $touchfile, $service ) = each(%touchfiles) ) {
