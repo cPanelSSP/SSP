@@ -8171,12 +8171,14 @@ sub print_generic_hack_predef {
     print_critical();
     print_crit( '!! [ ' . $name . ' ] !! ' );
     print_critical('Escalate this ticket to L3 using "ESCALATE - Hacked Server Response for L1/L2->L3 ( All Analysts )"');
+    print_critical("\tIf the malware appears to be the direct cause of services being down, please escalate the ticket to Emergency status.");
+
 }
 
 sub print_ebury_cdorked_predef {
     my $name = shift;
     print_generic_hack_predef($name);
-    print_critical("\tL3: use \"L3 - eBury / CDorked - Free Migration [L3 only]\"");
+    print_critical("\tL3: use \"L3 - eBury / CDorked [L3 only]\"");
 }
 
 sub check_for_cdorked_A {
