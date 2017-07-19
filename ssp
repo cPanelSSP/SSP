@@ -8966,26 +8966,27 @@ sub print_bug_report {
 
     print <<END_OF_TEMPLATE
 ==== BEGIN COPY BELOW ====
-----------------------------------------------
-   1. Detailed Explanation
-----------------------------------------------
+{panel:title=(i) Details}
 
+{panel}
 
-----------------------------------------------
-   2. Step-by-Step Instructions
-----------------------------------------------
+----
 
+{panel:title=(+) Step-by-Step Instructions}
 
-----------------------------------------------
-   3. Suggested Resolution / Expected Behavior
-----------------------------------------------
+{panel}
 
+----
 
-----------------------------------------------
-   4. Known work around(s)
-----------------------------------------------
+{panel:title=(?) Suggested Resolution / Expected Behavior}
 
+{panel}
 
+----
+
+{panel:title=(/) Known work around(s)}
+
+{panel}
 ==== END COPY ABOVE ====
 
 Useful Information:
