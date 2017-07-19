@@ -1,7 +1,9 @@
 SHELL=/bin/sh
 PATH=:/usr/local/cpanel/3rdparty/bin:/usr/sbin:/usr/bin
+PERLCRITIC=/usr/local/cpanel/3rdparty/perl/524/bin/perlcritic
+PERLCRITICRC=tools/.perlcriticrc
 PERLTIDY=/usr/local/cpanel/3rdparty/perl/524/bin/perltidy
-TIDYRC=tools/.perltidyrc
+PERLTIDYRC=tools/.perltidyrc
 SSP_SHASUM=shasum -a 512 ssp | awk '{print $$1}'
 NEW_SSPVER=$(shell grep 'our $$VERSION' ssp | awk '{print $$4}' | sed -e "s/'//g" -e 's/;//')
 
@@ -47,12 +49,13 @@ SHA512SUM: tidy
 ssp.tdy: ssp
 	[ -e $(PERLTIDY) ] || echo "perltidy not found!  Are you running this on a WHM 64+ system?"
 	echo "Running tidy..."
-	$(PERLTIDY) --profile=$(TIDYRC) ssp
+	$(PERLTIDY) --profile=$(PERLTIDYRC) ssp
 
 ## Run basic tests
 test:
 	[ -e /usr/local/cpanel/version ] || ( echo "You're not running this on a WHM system."; exit 2 )
 	perl -c ssp || ( echo "ssp perl syntax check failed"; exit 2 )
+	$(PERLCRITIC) --profile $(PERLCRITICRC) ssp
 
 ## Run perltidy on ssp, compare, and ask for overwrite
 tidy: test ssp.tdy

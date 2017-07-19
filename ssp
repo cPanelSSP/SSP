@@ -791,7 +791,7 @@ sub get_httpd_path {
     if ( !$EA4 && -x '/usr/local/apache/bin/httpd' ) {
         return '/usr/local/apache/bin/httpd';
     }
-    return undef;
+    return;
 }
 
 sub get_apache_modules_hash {
@@ -805,7 +805,7 @@ sub is_ea4 {
     if ( -f '/etc/cpanel/ea4/is_ea4' ) {
         return 1;
     }
-    return undef;
+    return;
 }
 
 sub is_kernelcare {
@@ -891,8 +891,8 @@ sub timed_run {    # Borrowed from Cpanel::SafeRun::Timed and modified
     $timer = $OPT_TIMEOUT ? $OPT_TIMEOUT : $timer;
     return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
 
-    open( my $save_stderr_fh, '>&STDERR' );
-    open( STDERR, '>', '/dev/null' );
+    open( my $save_stderr_fh, '>&', 'STDERR' );
+    open( STDERR,             '>',  '/dev/null' );
 
     my $output   = "";                               # In the event of time-out or failure, return empty string instead of undef.
     my $complete = 0;
@@ -914,7 +914,7 @@ sub timed_run {    # Borrowed from Cpanel::SafeRun::Timed and modified
         else {
             warn 'Error while executing: [' . join( ' ', @PROGA ) . ']: ' . $!;
             alarm(0);
-            open( STDERR, '>&=' . fileno($save_stderr_fh) );
+            open( STDERR, '>&=', fileno($save_stderr_fh) );
             return "";
         }
         $complete = 1;
@@ -926,7 +926,7 @@ sub timed_run {    # Borrowed from Cpanel::SafeRun::Timed and modified
         sleep(2);            # Give the process a chance to die 'nicely'
         kill( 9, $pid );     #KILL
     }
-    open( STDERR, '>&=' . fileno($save_stderr_fh) );
+    open( STDERR, '>&=', fileno($save_stderr_fh) );
     return $output;
 }
 
@@ -936,8 +936,8 @@ sub timed_run_trap_stderr {    # Borrowed from Cpanel::SafeRun::Timed and modifi
     $timer = $OPT_TIMEOUT ? $OPT_TIMEOUT : $timer;
     return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
 
-    open( my $save_stderr_fh, '>&STDERR' );
-    open( STDERR, '>', '/dev/null' );
+    open( my $save_stderr_fh, '>&', 'STDERR' );
+    open( STDERR,             '>',  '/dev/null' );
 
     my $output   = "";                               # In the event of time-out or failure, return empty string instead of undef.
     my $complete = 0;
@@ -960,7 +960,7 @@ sub timed_run_trap_stderr {    # Borrowed from Cpanel::SafeRun::Timed and modifi
         else {
             warn 'Error while executing: [' . join( ' ', @PROGA ) . ']: ' . $!;
             alarm(0);
-            open( STDERR, '>&=' . fileno($save_stderr_fh) );
+            open( STDERR, '>&=', fileno($save_stderr_fh) );
             return "";
         }
         $complete = 1;
@@ -972,7 +972,7 @@ sub timed_run_trap_stderr {    # Borrowed from Cpanel::SafeRun::Timed and modifi
         sleep(2);            # Give the process a chance to die 'nicely'
         kill( 9, $pid );     #KILL
     }
-    open( STDERR, '>&=' . fileno($save_stderr_fh) );
+    open( STDERR, '>&=', fileno($save_stderr_fh) );
     return $output;
 }
 
@@ -3232,7 +3232,7 @@ sub check_perl_sanity {
     }
 
     if ( -x $usr_bin_perl and !-l $usr_bin_perl ) {
-        my $mode = ( stat($usr_bin_perl) )[2] & 07777;
+        my $mode = ( stat($usr_bin_perl) )[2] & oct(7777);
         $mode = sprintf "%lo", $mode;
         if ( $mode != 755 ) {
             print_warn('Perl Permissions: ');
@@ -3241,7 +3241,7 @@ sub check_perl_sanity {
     }
 
     if ( -x $usr_local_bin_perl and !-l $usr_local_bin_perl ) {
-        my $mode = ( stat($usr_local_bin_perl) )[2] & 07777;
+        my $mode = ( stat($usr_local_bin_perl) )[2] & oct(7777);
         $mode = sprintf "%lo", $mode;
         if ( $mode != 755 ) {
             print_warn('Perl Permissions: ');
@@ -3530,7 +3530,7 @@ sub check_for_non_default_permissions {
         }
         elsif ( -e _ ) {
             if ( exists $check{$path}->{mode} ) {
-                $mode &= 07777;
+                $mode &= oct(7777);
                 $mode = sprintf "%lo", $mode;
                 my $user = getpwuid($uid);
                 $user = $user || $uid;
@@ -4972,7 +4972,9 @@ sub _resolve {
     alarm $timeout;
 
     if ($addrinfo) {
+        ## no critic
         no strict 'subs';    # Prevent compile-time warnings on older versions of Perl for the NI_* constants which are loaded at run-time.
+        ## use critic
         my $getnameinfo_flags = ( $addr =~ /^\d+\.\d+\.\d+\.\d+$/ ) ? Socket::NI_NAMEREQD : Socket::NI_NUMERICHOST;    # If looking up IP address we require name resolution, otherwise we want the IP address returned.
         my ( $err, @socks ) = getaddrinfo( $addr, "", { socktype => SOCK_RAW } );
         if ( $report_errors && $err ) {
@@ -6368,11 +6370,11 @@ sub check_for_bad_permissions_on_named_ca {
     }
 
     my ( $mode, $uid, $gid ) = ( stat('/var/named/named.ca') )[ 2, 4, 5 ];
-    my $world_readable_bit = $mode & 007;
+    my $world_readable_bit = $mode & oct(4);
     my $user               = getpwuid($uid);
     my $group              = getgrgid($gid);
 
-    if ( ( $user ne 'named' and $group ne 'named' ) and ( $world_readable_bit == 0 ) ) {
+    if ( ( $user ne 'named' or $group ne 'named' ) and ( $world_readable_bit == 0 ) ) {
         print_warn("${namedca}: ");
         print_warning('may not be readable to the \'named\' user, causing named to not restart');
     }
@@ -8896,7 +8898,7 @@ sub get_external_ip {
         chomp $ip;
         return $ip;
     }
-    return undef;
+    return;
 }
 
 sub _http_get {
@@ -8952,7 +8954,7 @@ sub _http_get {
             return $reply;
         }
     }
-    return undef;
+    return;
 }
 
 sub print_bug_report {
