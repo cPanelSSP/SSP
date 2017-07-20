@@ -90,6 +90,7 @@ our @LSOF_80;
 our $OPENSSL_RPM_CHANGELOG;
 our $EA4_PHP_FPM;               # Boolean flag indicating if easyapache4's php fpm is running
 our $ORIGINAL_PATH;
+our %SOCKET;                    # Dispatcher for optional Socket module usage
 
 # Initialize application by setting loading all global variables
 # (except the RPM variables).  That's done within run()
@@ -101,9 +102,11 @@ sub init {
     if ( $< != 0 ) {
         die "SSP must be run as root\n";
     }
-    $ORIGINAL_PATH              = $ENV{'PATH'};
-    $ENV{'PATH'}                = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
-    $|                          = 1;
+    $ORIGINAL_PATH = $ENV{'PATH'};
+    ## no critic (LocalizedPunctuationVars)
+    $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
+    $| = 1;
+    ## use critic
     $Term::ANSIColor::AUTORESET = 1;
     @LOCAL_IPADDRS_LIST         = get_local_ipaddrs();
     @PROCESS_LIST               = get_process_list();
@@ -179,7 +182,23 @@ sub init {
             }
         }
     }
-    $SIG{'INT'} = sub {
+    ## no critic (StringyEval)
+    # This avoids compile-time errors on old Perl where Socket::get(addr|name)info and related constants don't exist.
+    eval q(  # Perl 5.14+
+        # The import is redundant but guarantees the desirable failure of this eval at run-time if anything is missing.
+        Socket->import(qw(getaddrinfo getnameinfo NI_NAMEREQD NI_NUMERICHOST NIx_NOSERV SOCK_RAW));
+        %SOCKET = (
+            'getaddrinfo'    => \&Socket::getaddrinfo,
+            'getnameinfo'    => \&Socket::getnameinfo,
+            'NI_NAMEREQD'    => Socket::NI_NAMEREQD,
+            'NI_NUMERICHOST' => Socket::NI_NUMERICHOST,
+            'NIx_NOSERV'     => Socket::NIx_NOSERV,
+            'SOCK_RAW'       => Socket::SOCK_RAW,
+        );
+        return 1;
+    );
+    ## use critic
+    $SIG{'INT'} = sub {    ## no critic (LocalizedPunctuationVars)
         print "\n\nJust being impatient, or did SSP actually hang? What if it didn't get a chance to check something really important?\n";
         print "\nIf you really want out of here and it didn't work the first time then you interrupted a child and not the parent process. Keep hitting CTRL+C.\n";
         if ($CRIT_BUFFER) {
@@ -610,8 +629,6 @@ sub non_cpanel_checks_only {
         print_magenta("\n\nThere was critical-level output above, here it is again:");
         print $CRIT_BUFFER;
     }
-
-    return 0;
 }
 
 # All checks for DNSONLY go here
@@ -838,10 +855,13 @@ sub get_cpanel_version {
     return $version;
 }
 
-sub version_cmp {    # should only be used by version_compare()
-    no warnings 'uninitialized';    # Prevent uninitialized value warnings when not using all 4 values
-    my ( $a1, $b1, $c1, $d1 ) = split /[\._]/, $_[0];
-    my ( $a2, $b2, $c2, $d2 ) = split /[\._]/, $_[1];
+sub _version_cmp {
+    my ( $first, $second ) = @_;
+    my ( $a1, $b1, $c1, $d1 ) = split /[\._]/, $first;
+    my ( $a2, $b2, $c2, $d2 ) = split /[\._]/, $second;
+    for my $ref ( \$a1, \$b1, \$c1, \$d1, \$a2, \$b2, \$c2, \$d2, ) {    # Fill empties with 0
+        $$ref = 0 unless defined $$ref;
+    }
     return $a1 <=> $a2 || $b1 <=> $b2 || $c1 <=> $c2 || $d1 <=> $d2;
 }
 
@@ -857,21 +877,21 @@ sub version_compare {
     my %modes = (
         '>' => sub {
             return if $_[0] eq $_[1];
-            return version_cmp(@_) > 0;
+            return _version_cmp(@_) > 0;
         },
         '<' => sub {
             return if $_[0] eq $_[1];
-            return version_cmp(@_) < 0;
+            return _version_cmp(@_) < 0;
         },
-        '==' => sub { return $_[0] eq $_[1] || version_cmp(@_) == 0; },
-        '!=' => sub { return $_[0] ne $_[1] && version_cmp(@_) != 0; },
+        '==' => sub { return $_[0] eq $_[1] || _version_cmp(@_) == 0; },
+        '!=' => sub { return $_[0] ne $_[1] && _version_cmp(@_) != 0; },
         '>=' => sub {
             return 1 if $_[0] eq $_[1];
-            return version_cmp(@_) >= 0;
+            return _version_cmp(@_) >= 0;
         },
         '<=' => sub {
             return 1 if $_[0] eq $_[1];
-            return version_cmp(@_) <= 0;
+            return _version_cmp(@_) <= 0;
         }
     );
     return if ( !exists $modes{$mode} );
@@ -879,22 +899,19 @@ sub version_compare {
 }
 
 sub cpanel_version_is {
+    my ( $mode, $ver ) = @_;
     return if !defined($CPANEL_VERSION);
     return if $CPANEL_VERSION eq "unknown";
-    my ( $mode, $ver ) = @_;
     return version_compare( $CPANEL_VERSION, $mode, $ver );
 }
 
-sub timed_run {    # Borrowed from Cpanel::SafeRun::Timed and modified
-    my ( $timer, @PROGA ) = @_;
+sub _timedsaferun {    # Borrowed from WHM 66 Cpanel::SafeRun::Timed and modified
+    my ( $timer, $stderr_to_stdout, @PROGA ) = @_;
+    return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
     $timer = $timer       ? $timer       : 25;       # A timer value of 0 means use the default, currently 25.
     $timer = $OPT_TIMEOUT ? $OPT_TIMEOUT : $timer;
-    return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
 
-    open( my $save_stderr_fh, '>&', 'STDERR' );
-    open( STDERR,             '>',  '/dev/null' );
-
-    my $output   = "";                               # In the event of time-out or failure, return empty string instead of undef.
+    my $output   = "";
     my $complete = 0;
     my $pid;
     my $fh;                                          # FB-63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
@@ -908,72 +925,44 @@ sub timed_run {    # Borrowed from Cpanel::SafeRun::Timed and modified
             close($fh);
         }
         elsif ( defined $pid ) {
-            open( STDIN, '<', '/dev/null' );
+            my $save_stderr_fh;
+            open( STDIN, '<', '/dev/null' );         ## no critic (BriefOpen)
+            if ($stderr_to_stdout) {
+                open( STDERR, '>&', 'STDOUT' );      ## no critic (BriefOpen)
+            }
+            else {
+                open( STDERR, '>', '/dev/null' );    ## no critic (BriefOpen)
+            }
             exec(@PROGA) or exit 1;
         }
         else {
             warn 'Error while executing: [' . join( ' ', @PROGA ) . ']: ' . $!;
             alarm(0);
-            open( STDERR, '>&=', fileno($save_stderr_fh) );
             return "";
         }
         $complete = 1;
         alarm 0;
     };
+    if ($@) {
+        $output .= $@;
+    }
     alarm 0;
     if ( !$complete && $pid && $pid > 0 ) {
         kill( 15, $pid );    #TERM
         sleep(2);            # Give the process a chance to die 'nicely'
         kill( 9, $pid );     #KILL
     }
-    open( STDERR, '>&=', fileno($save_stderr_fh) );
     return $output;
 }
 
-sub timed_run_trap_stderr {    # Borrowed from Cpanel::SafeRun::Timed and modified
+sub timed_run {
     my ( $timer, @PROGA ) = @_;
-    $timer = $timer       ? $timer       : 25;       # A timer value of 0 means use the default, currently 25.
-    $timer = $OPT_TIMEOUT ? $OPT_TIMEOUT : $timer;
-    return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
+    return _timedsaferun( $timer, 0, @PROGA );
+}
 
-    open( my $save_stderr_fh, '>&', 'STDERR' );
-    open( STDERR,             '>',  '/dev/null' );
-
-    my $output   = "";                               # In the event of time-out or failure, return empty string instead of undef.
-    my $complete = 0;
-    my $pid;
-    my $fh;                                          # FB-63723: must declare $fh before eval block in order to avoid unwanted implicit waitpid on die
-    eval {
-        local $SIG{'__DIE__'} = 'DEFAULT';
-        local $SIG{'ALRM'} = sub { $output = ""; print RED ON_BLACK "Timeout while executing: " . join( ' ', @PROGA ) . "\n"; die; };
-        alarm($timer);
-        if ( $pid = open( $fh, '-|' ) ) {
-            local $/;
-            $output = readline($fh);
-            close($fh);
-        }
-        elsif ( defined $pid ) {
-            open( STDIN, '<', '/dev/null' );
-            open( STDERR, '>&STDOUT' );
-            exec(@PROGA) or exit 1;
-        }
-        else {
-            warn 'Error while executing: [' . join( ' ', @PROGA ) . ']: ' . $!;
-            alarm(0);
-            open( STDERR, '>&=', fileno($save_stderr_fh) );
-            return "";
-        }
-        $complete = 1;
-        alarm 0;
-    };
-    alarm 0;
-    if ( !$complete && $pid && $pid > 0 ) {
-        kill( 15, $pid );    #TERM
-        sleep(2);            # Give the process a chance to die 'nicely'
-        kill( 9, $pid );     #KILL
-    }
-    open( STDERR, '>&=', fileno($save_stderr_fh) );
-    return $output;
+sub timed_run_trap_stderr {
+    my ( $timer, @PROGA ) = @_;
+    return _timedsaferun( $timer, 1, @PROGA );
 }
 
 sub get_local_ipaddrs {
@@ -1894,7 +1883,7 @@ sub print_apache_info {
 
     $output .= "[ EA4 ] " if $EA4;
 
-    if ( !$APACHE_VERSION or !$APACHE_BUILT or !$APACHE_EA_VERSION ) {
+    if ( not $APACHE_VERSION or not $APACHE_BUILT or not $APACHE_EA_VERSION ) {
         $output .= 'could not determine Apache info!';
     }
     else {
@@ -2214,7 +2203,7 @@ sub check_for_remote_mysql {
                 $mysql_host = $1;
             }
         }
-        close $my_cnf;
+        close $my_cnf_fh;
     }
 
     if ($mysql_host) {
@@ -2866,28 +2855,19 @@ sub check_cpanelsync_exclude {
     my $rpmversions_file      = '/usr/local/cpanel/etc/rpm.versions';
     my $excluding_rpmversions = 0;
 
-    if ( -f $cpanelsync_exclude and !-z $cpanelsync_exclude ) {
+    if ( -f $cpanelsync_exclude and not -z $cpanelsync_exclude ) {
+        print_warn('cpanelsync exclude: ');
+        print_warning("$cpanelsync_exclude is not empty!");
         if ( open my $file_fh, '<', $cpanelsync_exclude ) {
             while (<$file_fh>) {
                 chomp;
                 if (m{ \A \s* $rpmversions_file \s* \z }xms) {
-                    $excluding_rpmversions = 1;
+                    print_warn('cpanelsync exclude: ');
+                    print_warning("$rpmversions_file found! This should NEVER be done!");
                     last;
                 }
             }
             close $file_fh;
-        }
-    }
-
-    if ( $excluding_rpmversions == 1 ) {
-        print_warn('cpanelsync exclude: ');
-        print_warning("$rpmversions_file found! This should NEVER be done!");
-    }
-    else {
-        # sloppy, as we check this above already, but I'm too busy to care
-        if ( -f $cpanelsync_exclude and !-z $cpanelsync_exclude ) {
-            print_warn('cpanelsync exclude: ');
-            print_warning("$cpanelsync_exclude is not empty!");
         }
     }
 }
@@ -3082,7 +3062,7 @@ sub check_for_custom_apache_includes {
 
 sub check_for_tomcatoptions {
     my $tomcat_options = '/var/cpanel/tomcat.options';
-    if ( -f $tomcat_options and !-z $tomcat_options ) {
+    if ( -f $tomcat_options and not -z $tomcat_options ) {
         print_warn('Tomcat options: ');
         print_warning("$tomcat_options exists");
     }
@@ -3095,7 +3075,7 @@ sub check_for_sneaky_htaccess {
     my $htaccess;
 
     for my $dir (@dirs) {
-        if ( -f $dir . '.htaccess' and !-z $dir . '.htaccess' ) {
+        if ( -f $dir . '.htaccess' and not -z $dir . '.htaccess' ) {
             $htaccess .= $dir . '.htaccess ';
         }
     }
@@ -3224,14 +3204,14 @@ sub check_perl_sanity {
     }
 
     ## a symlink will test true for both -x AND -l
-    if ( -x $usr_bin_perl and !-l $usr_bin_perl ) {
-        if ( -x $usr_local_bin_perl and !-l $usr_local_bin_perl ) {
+    if ( -x $usr_bin_perl and not -l $usr_bin_perl ) {
+        if ( -x $usr_local_bin_perl and not -l $usr_local_bin_perl ) {
             print_warn('perl: ');
             print_warning("$usr_bin_perl and $usr_local_bin_perl are both binaries!");
         }
     }
 
-    if ( -x $usr_bin_perl and !-l $usr_bin_perl ) {
+    if ( -x $usr_bin_perl and not -l $usr_bin_perl ) {
         my $mode = ( stat($usr_bin_perl) )[2] & oct(7777);
         $mode = sprintf "%lo", $mode;
         if ( $mode != 755 ) {
@@ -3240,7 +3220,7 @@ sub check_perl_sanity {
         }
     }
 
-    if ( -x $usr_local_bin_perl and !-l $usr_local_bin_perl ) {
+    if ( -x $usr_local_bin_perl and not -l $usr_local_bin_perl ) {
         my $mode = ( stat($usr_local_bin_perl) )[2] & oct(7777);
         $mode = sprintf "%lo", $mode;
         if ( $mode != 755 ) {
@@ -3620,7 +3600,7 @@ sub check_for_non_default_file_capabilities {
         next unless scalar @result;
         my @missing;
         foreach my $cap ( @{ $check{$path}->{cap} } ) {
-            push @missing, $cap unless grep( /^\Q${cap}\E$/, @result );
+            push @missing, $cap unless grep { /^\Q${cap}\E$/ } @result;
         }
         if ( scalar @missing ) {
             my $help = exists $check{$path}->{help} ? ' - ' . $check{$path}->{help} : '';
@@ -3992,7 +3972,7 @@ sub check_for_ea3_hooks {
     );
 
     for my $hook (@hooks) {
-        if ( -f $hook and !-z $hook ) {
+        if ( -f $hook and not -z $hook ) {
             chomp( my $checksum = timed_run( 0, 'md5sum', $hook ) );
             $checksum =~ s/\s.*//g;
             next if exists $hooks_ignore{$checksum};
@@ -4078,7 +4058,7 @@ sub check_for_usr_local_cpanel_hooks {
     if (@USR_LOCAL_CPANEL_HOOKS) {
         for my $hook (@USR_LOCAL_CPANEL_HOOKS) {
             my $tmp_hook = '/usr/local/cpanel/hooks/' . $hook;
-            if ( -f $tmp_hook and !-z $tmp_hook ) {
+            if ( -f $tmp_hook and not -z $tmp_hook ) {
                 chomp( my $checksum = timed_run( 0, 'md5sum', $tmp_hook ) );
                 $checksum =~ s/\s.*//g;
                 next if exists $hooks_ignore{$checksum};
@@ -4120,7 +4100,7 @@ sub get_mysql_datadir {
 }
 
 sub check_mysqld_warnings_errors {
-    foreach my $mysql_err ( grep ( m{\[(?:err)}i, split( /\n/, timed_run_trap_stderr( 0, 'mysqld', '-u', 'mysql', '--help' ) ) ) ) {
+    foreach my $mysql_err ( grep { m{\[(?:err)}i } split( /\n/, timed_run_trap_stderr( 0, 'mysqld', '-u', 'mysql', '--help' ) ) ) {
         if ( $mysql_err =~ m/open_files_limit=/ ) {
             print_warn('MySQL config missing newline [see FB-64008]: ');
             print_warning($mysql_err);
@@ -4135,7 +4115,7 @@ sub check_mysqld_warnings_errors {
 sub check_for_domain_forwarding {
     my $domainfwdip = '/var/cpanel/domainfwdip';
 
-    if ( -f $domainfwdip and !-z $domainfwdip ) {
+    if ( -f $domainfwdip and not -z $domainfwdip ) {
         print_warn('Domain Forwarding: ');
         print_warning("cat $domainfwdip to see what is being forwarded!");
     }
@@ -4397,7 +4377,7 @@ sub check_php_libmysqlclient_mismatch {
     ## libmysqlclient.so.15 = MySQL-shared 5.0
 
     if ($php4_libmysqlclient_version) {
-        if ( $php4_libmysqlclient_version == 18 and !( $mysql_shared_rpm_version == 56 or $mysql_shared_rpm_version == 55 ) ) {
+        if ( $php4_libmysqlclient_version == 18 and not( $mysql_shared_rpm_version == 56 or $mysql_shared_rpm_version == 55 ) ) {
             $php4_mismatch = 1;
         }
         elsif ( $php4_libmysqlclient_version == 16 and $mysql_shared_rpm_version != 51 ) {
@@ -4414,7 +4394,7 @@ sub check_php_libmysqlclient_mismatch {
     }
 
     if ($php5_libmysqlclient_version) {
-        if ( $php5_libmysqlclient_version == 18 and !( $mysql_shared_rpm_version == 56 or $mysql_shared_rpm_version == 55 ) ) {
+        if ( $php5_libmysqlclient_version == 18 and not( $mysql_shared_rpm_version == 56 or $mysql_shared_rpm_version == 55 ) ) {
             $php5_mismatch = 1;
         }
         elsif ( $php5_libmysqlclient_version == 16 and $mysql_shared_rpm_version != 51 ) {
@@ -4737,17 +4717,19 @@ sub check_for_missing_or_commented_customlog {
 
 sub check_for_cpsources_conf {
     my $cpsources_conf = '/etc/cpsources.conf';
-    if ( -f $cpsources_conf and !-z $cpsources_conf ) {
+    if ( -f $cpsources_conf and not -z $cpsources_conf ) {
         print_warn('/etc/cpsources.conf: ');
         print_warning('exists! This can affect upcp and EA.');
 
-        open( my $cpsources_conf_fh, '<', $cpsources_conf );
         my @cpsources_servers;
-        while (<$cpsources_conf_fh>) {
-            my ( $key, $value ) = split( '=', $_ );
-            if ( $key eq 'HTTPUPDATE' ) {
-                push @cpsources_servers, $value;
+        if ( open( my $cpsources_conf_fh, '<', $cpsources_conf ) ) {
+            while (<$cpsources_conf_fh>) {
+                my ( $key, $value ) = split( '=', $_ );
+                if ( $key eq 'HTTPUPDATE' ) {
+                    push @cpsources_servers, $value;
+                }
             }
+            close $cpsources_conf_fh;
         }
         foreach my $cpsources_server (@cpsources_servers) {
             chomp $cpsources_server;
@@ -4957,10 +4939,6 @@ sub _resolve {
     $report_errors = ( defined $report_errors && $report_errors ne "0" ) ? 1 : 0;
     $timeout = defined $timeout ? $timeout : 3;
     my @results;
-    my $addrinfo = eval {    # Perl 5.14+
-        Socket->import(qw(getaddrinfo getnameinfo NI_NAMEREQD NI_NUMERICHOST NIx_NOSERV SOCK_RAW));
-        1;
-    };
 
     local $SIG{'ALRM'} = sub {
         if ($report_errors) {
@@ -4971,18 +4949,15 @@ sub _resolve {
     };
     alarm $timeout;
 
-    if ($addrinfo) {
-        ## no critic
-        no strict 'subs';    # Prevent compile-time warnings on older versions of Perl for the NI_* constants which are loaded at run-time.
-        ## use critic
-        my $getnameinfo_flags = ( $addr =~ /^\d+\.\d+\.\d+\.\d+$/ ) ? Socket::NI_NAMEREQD : Socket::NI_NUMERICHOST;    # If looking up IP address we require name resolution, otherwise we want the IP address returned.
-        my ( $err, @socks ) = getaddrinfo( $addr, "", { socktype => SOCK_RAW } );
+    if (%SOCKET) {
+        my $getnameinfo_flags = ( $addr =~ /^\d+\.\d+\.\d+\.\d+$/ ) ? $SOCKET{'NI_NAMEREQD'} : $SOCKET{'NI_NUMERICHOST'};    # If looking up IP address we require name resolution, otherwise we want the IP address returned.
+        my ( $err, @socks ) = $SOCKET{'getaddrinfo'}->( $addr, "", { socktype => $SOCKET{'SOCK_RAW'} } );
         if ( $report_errors && $err ) {
             print_warn('Resolver: ');
             print_warning( 'getaddrinfo() failed to resolve "' . $addr . '": ' . $err );
         }
         foreach my $sock (@socks) {
-            my ( $err, $result ) = getnameinfo( $sock->{addr}, $getnameinfo_flags, Socket::NIx_NOSERV );
+            my ( $err, $result ) = $SOCKET{'getnameinfo'}->( $sock->{addr}, $getnameinfo_flags, $SOCKET{'NIx_NOSERV'} );
             if ( $report_errors && $err ) {
                 print_warn('Resolver: ');
                 print_warning( 'getnameinfo() failed to resolve "' . $addr . '": ' . $err );
@@ -5089,7 +5064,7 @@ sub check_roundcube_mysql_pass_mismatch {
         return;
     }
 
-    if ( !$roundcubepass or !$rc_mysql_pass ) {
+    if ( not $roundcubepass or not $rc_mysql_pass ) {
         return;
     }
 
@@ -5117,7 +5092,7 @@ sub check_for_hooks_from_var_cpanel_hooks_yaml {
 
     for my $hook (@hooks_tmp) {
         if ( $hook =~ m/^\// ) {
-            if ( -e $hook and !-z $hook ) {
+            if ( -e $hook and not -z $hook ) {
                 push @hooks, $hook;
             }
         }
@@ -5398,8 +5373,8 @@ sub check_for_non_default_umask {
 }
 
 sub check_for_multiple_imagemagick_installs {
-    if ( -x '/usr/bin/convert' and !-l '/usr/bin/convert' ) {
-        if ( -x '/usr/local/bin/convert' and !-l '/usr/local/bin/convert' ) {
+    if ( -x '/usr/bin/convert' and not -l '/usr/bin/convert' ) {
+        if ( -x '/usr/local/bin/convert' and not -l '/usr/local/bin/convert' ) {
             print_warn('ImageMagick: ');
             print_warning('multiple "convert" binaries found [/usr/bin/convert] [/usr/local/bin/convert]');
         }
@@ -5412,7 +5387,7 @@ sub check_for_kernel_headers_rpm {
         print_warning('/usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
     }
     else {
-        if ( @RPM_LIST && !grep( /^kernel-headers-/, @RPM_LIST ) ) {
+        if ( @RPM_LIST && !grep { /^kernel-headers-/ } @RPM_LIST ) {
             print_warn('kernel-headers RPM: ');
             print_warning('not found. This can cause problems with EA');
         }
@@ -5438,7 +5413,7 @@ sub check_for_broken_rpm {
             help => 'RPM exists',
             run  => sub {           # Only care that the RPM exists.
                 my $rpm = shift;
-                return 1 if grep( /^${rpm}-/, @RPM_LIST );
+                return 1 if grep { /^${rpm}-/ } @RPM_LIST;
                 return 0;
             }
         },
@@ -5446,7 +5421,7 @@ sub check_for_broken_rpm {
             help => 'Missing RPM',
             run  => sub {            # Only care that the RPM is missing.
                 my $rpm = shift;
-                return 0 if grep( /^${rpm}-/, @RPM_LIST );
+                return 0 if grep { /^${rpm}-/ } @RPM_LIST;
                 return 1;
             }
         },
@@ -5454,7 +5429,7 @@ sub check_for_broken_rpm {
             help => 'Verify Failed',
             run  => sub {              # Only performs check if the RPM exists.
                 my $rpm = shift;
-                return 0 if !grep( /^${rpm}-/, @RPM_LIST );
+                return 0 if !grep { /^${rpm}-/ } @RPM_LIST;
                 my $output = timed_run( 0, 'rpm', '-V', $rpm );
                 return 0 if $output eq "";
                 return 1 if $output =~ m{ \A missing }xms;
@@ -5994,7 +5969,7 @@ sub check_for_rpm_overrides {
 sub check_var_cpanel_immutable_files {
     my $immutable_files = '/var/cpanel/immutable_files';
 
-    if ( -e $immutable_files and !-z $immutable_files ) {
+    if ( -e $immutable_files and not -z $immutable_files ) {
         print_warn('immutable files: ');
         print_warning("$immutable_files is not empty!");
     }
@@ -6101,7 +6076,7 @@ sub check_for_var_cpanel_roundcube_install {
 
 sub check_for_missing_etc_localtime {
     stat('/etc/localtime');
-    if ( !-f _ or !-s _ ) {
+    if ( not -f _ or not -s _ ) {
         print_warn('/etc/localtime: ');
         print_warning('Missing or empty! Can break many things including upcp and stats (see tickets 3811269, 7092613, 7124961)');
     }
@@ -6353,6 +6328,7 @@ sub check_for_harmful_php_mode_600_cron {
                 last;
             }
         }
+        close $file_fh;
     }
 
     if ( $has_harmful_cron == 1 ) {
@@ -6374,7 +6350,7 @@ sub check_for_bad_permissions_on_named_ca {
     my $user               = getpwuid($uid);
     my $group              = getgrgid($gid);
 
-    if ( ( $user ne 'named' or $group ne 'named' ) and ( $world_readable_bit == 0 ) ) {
+    if ( not( $user eq 'named' or $group eq 'named' ) and ( $world_readable_bit == 0 ) ) {
         print_warn("${namedca}: ");
         print_warning('may not be readable to the \'named\' user, causing named to not restart');
     }
@@ -6610,7 +6586,7 @@ sub check_for_suphp_but_no_fileprotect {
 }
 
 sub check_for_missing_var_cpanel_dynamicui_ftp {
-    if ( !-e '/etc/ftpddisable' and !-e '/etc/ftpserverdisable' and !-e '/var/cpanel/dynamicui/ftp' ) {
+    if ( not -e '/etc/ftpddisable' and not -e '/etc/ftpserverdisable' and not -e '/var/cpanel/dynamicui/ftp' ) {
         print_warn('FTP: ');
         print_warning('touchfile /v/c/dynamicui/ftp appears to be missing. FTP options may not appear in cPanel. See FB-83193');
     }
@@ -6986,7 +6962,7 @@ sub check_for_port_80_not_apache {
         }
     }
 
-    return if !$filename or !$pid;
+    return if not $filename or not $pid;
 
     my $exe = readlink "/proc/${pid}/exe" or return;
     my $cwd = readlink "/proc/${pid}/cwd" or return;
@@ -7061,7 +7037,7 @@ sub check_for_missing_groups {
 
 sub check_for_noquotafs {
     my $noquotafs = '/var/cpanel/noquotafs';
-    return if !-f $noquotafs or -z $noquotafs;
+    return if not -f $noquotafs or -z $noquotafs;
 
     print_warn("$noquotafs: ");
     print_warning('exists. quota issues? See https://documentation.cpanel.net/display/ALD/The+Quota+File+Systems+Configuration+File');
@@ -7496,9 +7472,9 @@ sub check_for_readonly_filesystems {
     my @read_only_fs = ();
     while (<$fh>) {
         if ( my @fs = split(' ') ) {
-            next if grep( m{ / (virtfs|cagefs-skeleton|machine-id) / }x, $fs[1] );
+            next if grep { m{ / (virtfs|cagefs-skeleton|machine-id) / }x } $fs[1];
             next if "/sys/fs/cgroup" eq $fs[1] and version_compare( $OS_VERSION, qw( >= 7 ) );
-            if ( grep( m{ (^|,) ro (,|$) }x, $fs[3] ) ) {
+            if ( grep { m{ (^|,) ro (,|$) }x } $fs[3] ) {
                 push( @read_only_fs, $fs[1] );
             }
         }
@@ -7573,15 +7549,15 @@ sub check_for_eblockers {
 }
 
 sub check_for_frontpage_rpms {
-    return if ( !-e '/usr/local/frontpage/version5.0/bin/owsadm.exe' );
-    if ( !grep( m{frontpage}, @RPM_LIST ) ) {
+    return unless -e '/usr/local/frontpage/version5.0/bin/owsadm.exe';
+    if ( !grep { m{frontpage} } @RPM_LIST ) {
         print_warn('FrontPage: ');
         print_warning('RPM not installed, but /usr/local/frontpage/version5.0/bin/owsadm.exe exists -- will prevent upgrade to 11.46');
     }
 }
 
 sub check_for_prelink {
-    if ( grep( m{prelink}, @RPM_LIST ) ) {
+    if ( grep { m{prelink} } @RPM_LIST ) {
         if ( open my $file_fh, '<', '/etc/sysconfig/prelink' ) {
             while (<$file_fh>) {
                 if (m{ \A PRELINKING= \s* yes }x) {
@@ -8271,7 +8247,7 @@ sub check_for_libkeyutils_filenames {
     for my $dir (@dirs) {
         next if !-e $dir;
         for my $file (@files) {
-            if ( -f "${dir}/${file}" and !-z "${dir}/${file}" ) {
+            if ( -f "${dir}/${file}" and not -z "${dir}/${file}" ) {
                 $bad_libs .= "\t${dir}/${file}\n";
             }
         }
@@ -8661,7 +8637,7 @@ sub check_for_ncom_filenames {
         for my $file (@files) {
             my $fullpath = $dir . "/" . $file;
             stat $fullpath;
-            if ( -f _ and !-z _ ) {
+            if ( -f _ and not -z _ ) {
                 push @bad_libs, $fullpath;
             }
         }
@@ -8768,7 +8744,7 @@ sub build_openssl_rpm_changelog {
 }
 
 sub check_for_cloudlinux_mysql_gov {
-    if ( my @cl_mysql_rpms = grep ( m{^cl-MySQL-}, @RPM_LIST ) ) {
+    if ( my @cl_mysql_rpms = grep { m{^cl-MySQL-} } @RPM_LIST ) {
         print_warn("CloudLinux MySQL (see FB-64017): ");
         print_warning( join( " ", @cl_mysql_rpms ) );
     }
