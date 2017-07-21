@@ -1,0 +1,11 @@
+severity = 4
+verbose  = [%p] Line %l Column %c - %m - %e. (Severity: %s)\n
+
+[InputOutput::RequireBriefOpen]
+lines = 30
+
+[-Modules::ProhibitMultiplePackages]
+# Must silence because SSP is a modulino.
+
+[-Subroutines::RequireFinalReturn]
+# SSP uses a large number of subs that do not need an explicit return because their return value is not used.
