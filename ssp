@@ -2467,16 +2467,25 @@ sub print_ftpserver_info {
     print_info('FTP Server: ');
 
     my $passiveports = "";
+    my $passiveip    = "";
 
     if ( defined( $CPCONF{'ftpserver'} ) ) {
         if ( $CPCONF{'ftpserver'} eq 'pure-ftpd' ) {
             if ( defined( $PUREFTPDCONF->{'passiveportrange'} ) && defined( $PUREFTPDCONF->{'passiveportrange'}->{value} ) ) {
                 $passiveports = $PUREFTPDCONF->{'passiveportrange'}->{value};
             }
+
+            if ( defined( $PUREFTPDCONF->{'forcepassiveip'} ) && defined( $PUREFTPDCONF->{'forcepassiveip'}->{value} ) ) {
+                $passiveip = $PUREFTPDCONF->{'forcepassiveip'}->{value};
+            }
         }
         if ( $CPCONF{'ftpserver'} eq 'proftpd' ) {
             if ( defined( $PROFTPDCONF->{'passiveports'} ) && defined( $PROFTPDCONF->{'passiveports'}->{value} ) ) {
                 $passiveports = $PROFTPDCONF->{'passiveports'}->{value};
+            }
+
+            if ( defined( $PROFTPDCONF->{'masqueradeaddress'} ) && defined( $PROFTPDCONF->{'masqueradeaddress'}->{value} ) ) {
+                $passiveip = $PROFTPDCONF->{'masqueradeaddress'}->{value};
             }
         }
     }
@@ -2494,6 +2503,15 @@ sub print_ftpserver_info {
     }
 
     my $passivetext = $passiveports ? "enabled - " . ( $fwppactive ? "allowed in iptables" : "not found in iptables" ) : "not enabled";
+
+    if ( $passiveip ne "" && $passiveip ne $EXTERNAL_IP_ADDRESS && defined( $CPCONF{'ftpserver'} ) ) {
+        if ( $CPCONF{'ftpserver'} eq 'proftpd' ) {
+            $passivetext .= " - MasqueradeAddress ( " . $passiveip . " ) doesn't match license IP";
+        }
+        elsif ( $CPCONF{'ftpserver'} eq 'pure-ftpd' ) {
+            $passivetext .= " - ForcePassiveIP ( " . $passiveip . " ) doesn't match license IP";
+        }
+    }
 
     if ( defined( $CPCONF{'ftpserver'} ) ) {
         print_normal( $CPCONF{'ftpserver'} . " ( Passive ports " . $passivetext . " )" );
