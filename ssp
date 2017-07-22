@@ -3878,6 +3878,7 @@ sub check_for_huge_logs {
         '/usr/local/apache/logs/suphp_log'        => {},
         '/var/cpanel/secdatadir/ip.pag'           => { help => 'Apache using a lot of CPU for no good reason? Try moving aside and restarting Apache. See EA-4092.' },
         '/var/named/data/named.run'               => {},
+        '/var/cpanel/eximstats_db.sqlite3'        => { size => 5_000_000_000 },
     );
     for my $log ( keys(%logs) ) {
         if ( -e $log ) {
