@@ -3081,6 +3081,8 @@ sub check_for_custom_apache_includes {
 sub check_for_tomcatoptions {
     my $tomcat_options = '/var/cpanel/tomcat.options';
     if ( -f $tomcat_options and not -z $tomcat_options ) {
+        my $md5 = timed_run( 0, 'md5sum', '/var/cpanel/tomcat.options' );
+        return if ( $md5 && $md5 =~ m{ \A 0cb9b170cbb81795c2669f8ebf08d0dd \s }xms );    ## -Xss2m
         print_warn('Tomcat options: ');
         print_warning("$tomcat_options exists");
     }
