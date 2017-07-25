@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.159';
+our $VERSION = '4.99.160';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -2467,16 +2467,25 @@ sub print_ftpserver_info {
     print_info('FTP Server: ');
 
     my $passiveports = "";
+    my $passiveip    = "";
 
     if ( defined( $CPCONF{'ftpserver'} ) ) {
         if ( $CPCONF{'ftpserver'} eq 'pure-ftpd' ) {
             if ( defined( $PUREFTPDCONF->{'passiveportrange'} ) && defined( $PUREFTPDCONF->{'passiveportrange'}->{value} ) ) {
                 $passiveports = $PUREFTPDCONF->{'passiveportrange'}->{value};
             }
+
+            if ( defined( $PUREFTPDCONF->{'forcepassiveip'} ) && defined( $PUREFTPDCONF->{'forcepassiveip'}->{value} ) ) {
+                $passiveip = $PUREFTPDCONF->{'forcepassiveip'}->{value};
+            }
         }
         if ( $CPCONF{'ftpserver'} eq 'proftpd' ) {
             if ( defined( $PROFTPDCONF->{'passiveports'} ) && defined( $PROFTPDCONF->{'passiveports'}->{value} ) ) {
                 $passiveports = $PROFTPDCONF->{'passiveports'}->{value};
+            }
+
+            if ( defined( $PROFTPDCONF->{'masqueradeaddress'} ) && defined( $PROFTPDCONF->{'masqueradeaddress'}->{value} ) ) {
+                $passiveip = $PROFTPDCONF->{'masqueradeaddress'}->{value};
             }
         }
     }
@@ -2494,6 +2503,15 @@ sub print_ftpserver_info {
     }
 
     my $passivetext = $passiveports ? "enabled - " . ( $fwppactive ? "allowed in iptables" : "not found in iptables" ) : "not enabled";
+
+    if ( $passiveip ne "" && $passiveip ne $EXTERNAL_IP_ADDRESS && defined( $CPCONF{'ftpserver'} ) ) {
+        if ( $CPCONF{'ftpserver'} eq 'proftpd' ) {
+            $passivetext .= " - MasqueradeAddress ( " . $passiveip . " ) doesn't match license IP";
+        }
+        elsif ( $CPCONF{'ftpserver'} eq 'pure-ftpd' ) {
+            $passivetext .= " - ForcePassiveIP ( " . $passiveip . " ) doesn't match license IP";
+        }
+    }
 
     if ( defined( $CPCONF{'ftpserver'} ) ) {
         print_normal( $CPCONF{'ftpserver'} . " ( Passive ports " . $passivetext . " )" );
@@ -3063,6 +3081,8 @@ sub check_for_custom_apache_includes {
 sub check_for_tomcatoptions {
     my $tomcat_options = '/var/cpanel/tomcat.options';
     if ( -f $tomcat_options and not -z $tomcat_options ) {
+        my $md5 = timed_run( 0, 'md5sum', '/var/cpanel/tomcat.options' );
+        return if ( $md5 && $md5 =~ m{ \A 0cb9b170cbb81795c2669f8ebf08d0dd \s }xms );    ## -Xss2m
         print_warn('Tomcat options: ');
         print_warning("$tomcat_options exists");
     }
@@ -3860,6 +3880,7 @@ sub check_for_huge_logs {
         '/usr/local/apache/logs/suphp_log'        => {},
         '/var/cpanel/secdatadir/ip.pag'           => { help => 'Apache using a lot of CPU for no good reason? Try moving aside and restarting Apache. See EA-4092.' },
         '/var/named/data/named.run'               => {},
+        '/var/cpanel/eximstats_db.sqlite3'        => { size => 5_000_000_000 },
     );
     for my $log ( keys(%logs) ) {
         if ( -e $log ) {
