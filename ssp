@@ -2504,7 +2504,7 @@ sub print_ftpserver_info {
 
     my $passivetext = $passiveports ? "enabled - " . ( $fwppactive ? "allowed in iptables" : "not found in iptables" ) : "not enabled";
 
-    if ( $passiveip ne "" && $passiveip ne $EXTERNAL_IP_ADDRESS && defined( $CPCONF{'ftpserver'} ) ) {
+    if ( $passiveip ne "" && defined($EXTERNAL_IP_ADDRESS) && $passiveip ne $EXTERNAL_IP_ADDRESS && defined( $CPCONF{'ftpserver'} ) ) {
         if ( $CPCONF{'ftpserver'} eq 'proftpd' ) {
             $passivetext .= " - MasqueradeAddress ( " . $passiveip . " ) doesn't match license IP";
         }
@@ -5604,6 +5604,7 @@ sub check_for_broken_mysql_tables {
     }
     for ( split /\n/, timed_run( 0, 'mysql', '-NBe', 'SELECT table_schema,table_name,engine,row_format,create_time FROM information_schema.tables WHERE ( ' . $sql_schemas . ' ) AND engine IS NULL' ) ) {
         my @line = split /\t/;
+        next unless scalar @line >= 2;
         $broken{ $line[0] }{ $line[1] } = 1;
     }
     for ( sort( keys(%broken) ) ) {
