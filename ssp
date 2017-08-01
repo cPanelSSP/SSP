@@ -1861,6 +1861,7 @@ sub check_for_clustering {
             if ( open my $file_fh, '<', "${cluster_member}-dnsrole" ) {
                 while (<$file_fh>) {
                     $cluster_member_role = $_;
+                    chomp $cluster_member_role;
                 }
                 close $file_fh;
             }
