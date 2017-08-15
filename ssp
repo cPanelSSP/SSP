@@ -8712,8 +8712,18 @@ sub check_for_cpro {
 sub check_for_fkcplisc {
     my @bad_paths;
     my @paths = qw(
+      /bin/cplicense
+      /bin/cplicense-32bit
+      /bin/cplicense-64bit
+      /bin/jonior-license
+      /sbin/jonrebo
+      /srv/license.php
+      /usr/local/cpanel/cpkeyclt.license
+      /usr/local/cpl2016
       /usr/local/fkcplisc
+      /usr/local/sectools
     );
+
     for my $path (@paths) {
 
         if ( -e $path ) {
@@ -8724,7 +8734,7 @@ sub check_for_fkcplisc {
         print_generic_hack_predef('FKCPLISC');
         print_critical('The following files or directories were found:');
         print_critical( "\t" . join( " ", @bad_paths ) );
-        print_critical("\tL3: See TECH-269 for reference.");
+        print_critical("\tL3: See TECH-269 and TECH-318 for reference.");
         print_critical();
     }
 }
