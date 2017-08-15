@@ -295,6 +295,7 @@ sub run {
     print_mailserver_info();
     print_ftpserver_info();
     print_exim_info();
+    check_for_custom_webtemplates();
     check_for_custom_zonetemplates();
     check_for_license_info();
     print_news();
@@ -2537,6 +2538,22 @@ sub print_exim_info {
         print_info('Exim: ');
         print_normal($info);
     }
+}
+
+sub check_for_custom_webtemplates {
+    my $template_dir = '/var/cpanel/webtemplates';
+    return if !-e $template_dir;
+
+    my $found;
+    my $test_ref = sub {
+        return unless /\.tmpl$/s;
+        $found = 1;
+    };
+    find( { wanted => $test_ref }, $template_dir );
+    return unless $found;
+
+    print_info('Web templates: ');
+    print_normal("found in ${template_dir} -- https://documentation.cpanel.net/display/ALD/Web+Template+Editor");
 }
 
 sub check_for_custom_zonetemplates {
