@@ -1109,15 +1109,22 @@ sub get_process_list {    # Usage of this needs to be deprecated in favor of the
 
 sub get_process_pid_hash {
     my %hash;
+    for ( split /\n/, timed_run( 0, 'ps', 'axwww', '-o', 'user,pid,ppid,etime,comm,cmd' ) ) {
 
-    for ( split /\n/, timed_run( 0, 'ps', 'axwww', '-o', 'user,pid,ppid,comm,cmd' ) ) {
-
-        # nobody    5403  1666 /usr/local/apache/bin/httpd -k start -DSSL
-        if (m{ ^ ([^\s]+) \s+ (\d+) \s+ (\d+) \s+ (.*?) \s+ (.*?) \s* $ }xms) {
+        # 'etimes' format doesn't exist before CentOS 7, so we must suffer with 'etime' [[DD-]hh:]mm:ss and convert
+        # nobody     4452    967    1-05:15:26 httpd           /usr/sbin/httpd -k start
+        # nobody     4453    967    05:40:38 httpd           /usr/sbin/httpd -k start
+        # root      17159   1260       00:37 auth            dovecot/auth -w
+        if (m{ ^ ([^\s]+) \s+ (\d+) \s+ (\d+) \s+ ([0-9:-]+) \s+ (.*?) \s+ (.*?) \s* $ }xms) {
             $hash{$2}{USER} = $1;
             $hash{$2}{PPID} = $3;
-            $hash{$2}{COMM} = $4;
-            $hash{$2}{CMD}  = $5;
+            $hash{$2}{COMM} = $5;
+            $hash{$2}{CMD}  = $6;
+            my ( $seconds, $minutes, $hours, $days ) = reverse split( /[:-]/, $4 );
+            $minutes += 0;
+            $hours   += 0;
+            $days    += 0;
+            $hash{$2}{ETIMES} = ( ( ( ( ( $days * 24 ) + $hours ) * 60 ) + $minutes ) * 60 ) + $seconds;
         }
     }
 
@@ -1942,18 +1949,28 @@ sub print_apache_info {
     }
 
     my %apache_ports;
-
+    my %root_httpd;
     while ( my ( $portnum, $aref ) = each(%$PORT_REF) ) {
         for my $href (@$aref) {
-            next if not $href->{USER} eq "root";
-            next if not $href->{CMD} eq "httpd";
+            next unless $href->{USER} eq "root";
+            next unless $href->{CMD} eq "httpd";
+            my $pid = $href->{PID};
             $apache_ports{$portnum} = 1;
+            if ( defined $PROCESS_REF->{$pid} and $PROCESS_REF->{$pid}{ETIMES} > 60 ) {
+                $root_httpd{$pid} = 1;
+            }
         }
     }
 
     if ( scalar keys(%apache_ports) ) {
         print_info('Apache: ');
         print_normal( 'is listening on ports [ ' . join( " ", sort( keys(%apache_ports) ) ) . ' ]' );
+    }
+
+    if ( scalar keys(%root_httpd) > 1 ) {
+        my $pids = scalar keys(%root_httpd) > 4 ? 'More than 4!' : join( ' ', sort( keys(%root_httpd) ) );
+        print_warn('Apache: ');
+        print_warning( 'multiple root httpd processes (more than 60 seconds old) found [ ' . $pids . ' ] -- See TECH-314.' );
     }
 }
 
