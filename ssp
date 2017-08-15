@@ -7069,7 +7069,7 @@ sub check_for_noquotafs {
 sub check_for_mod_rpaf {
     return unless defined $APACHE_MODULES->{'rpaf_module'};
     print_warn('mod_rpaf: ');
-    print_warning('loaded. May prevent .htaccess from denying access. See 4422297');
+    print_warning('loaded. May prevent mod_http2 from working -- see 8772327. May prevent .htaccess from denying access -- see 4422297');
 }
 
 sub check_for_mod_spdy {
