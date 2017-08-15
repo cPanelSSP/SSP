@@ -3492,7 +3492,7 @@ sub check_for_non_default_permissions {
             my $backup_path_parent;
             foreach my $part (@backup_path_parts) {
                 $backup_path_parent .= '/' . $part;
-                $check{$backup_path_parent} = { mode => [ '0755', '0751', '0711' ], perms_help => "All backup directories MUST be traversable (+x) by all users. See CPANEL-4336." };
+                $check{$backup_path_parent} = { mode => [ '0755', '0751', '0711' ], perms_help => "Ensure that all backup directories are traversable (+x) by all users. See CPANEL-4336." };
             }
         }
     }
