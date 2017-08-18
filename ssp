@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.160';
+our $VERSION = '4.99.161';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -295,6 +295,7 @@ sub run {
     print_mailserver_info();
     print_ftpserver_info();
     print_exim_info();
+    check_for_custom_webtemplates();
     check_for_custom_zonetemplates();
     check_for_license_info();
     print_news();
@@ -1108,15 +1109,22 @@ sub get_process_list {    # Usage of this needs to be deprecated in favor of the
 
 sub get_process_pid_hash {
     my %hash;
+    for ( split /\n/, timed_run( 0, 'ps', 'axwww', '-o', 'user,pid,ppid,etime,comm,cmd' ) ) {
 
-    for ( split /\n/, timed_run( 0, 'ps', 'axwww', '-o', 'user,pid,ppid,comm,cmd' ) ) {
-
-        # nobody    5403  1666 /usr/local/apache/bin/httpd -k start -DSSL
-        if (m{ ^ ([^\s]+) \s+ (\d+) \s+ (\d+) \s+ (.*?) \s+ (.*?) \s* $ }xms) {
+        # 'etimes' format doesn't exist before CentOS 7, so we must suffer with 'etime' [[DD-]hh:]mm:ss and convert
+        # nobody     4452    967    1-05:15:26 httpd           /usr/sbin/httpd -k start
+        # nobody     4453    967    05:40:38 httpd           /usr/sbin/httpd -k start
+        # root      17159   1260       00:37 auth            dovecot/auth -w
+        if (m{ ^ ([^\s]+) \s+ (\d+) \s+ (\d+) \s+ ([0-9:-]+) \s+ (.*?) \s+ (.*?) \s* $ }xms) {
             $hash{$2}{USER} = $1;
             $hash{$2}{PPID} = $3;
-            $hash{$2}{COMM} = $4;
-            $hash{$2}{CMD}  = $5;
+            $hash{$2}{COMM} = $5;
+            $hash{$2}{CMD}  = $6;
+            my ( $seconds, $minutes, $hours, $days ) = reverse split( /[:-]/, $4 );
+            $minutes += 0;
+            $hours   += 0;
+            $days    += 0;
+            $hash{$2}{ETIMES} = ( ( ( ( ( $days * 24 ) + $hours ) * 60 ) + $minutes ) * 60 ) + $seconds;
         }
     }
 
@@ -1861,6 +1869,7 @@ sub check_for_clustering {
             if ( open my $file_fh, '<', "${cluster_member}-dnsrole" ) {
                 while (<$file_fh>) {
                     $cluster_member_role = $_;
+                    chomp $cluster_member_role;
                 }
                 close $file_fh;
             }
@@ -1940,18 +1949,28 @@ sub print_apache_info {
     }
 
     my %apache_ports;
-
+    my %root_httpd;
     while ( my ( $portnum, $aref ) = each(%$PORT_REF) ) {
         for my $href (@$aref) {
-            next if not $href->{USER} eq "root";
-            next if not $href->{CMD} eq "httpd";
+            next unless $href->{USER} eq "root";
+            next unless $href->{CMD} eq "httpd";
+            my $pid = $href->{PID};
             $apache_ports{$portnum} = 1;
+            if ( defined $PROCESS_REF->{$pid} and $PROCESS_REF->{$pid}{ETIMES} > 60 ) {
+                $root_httpd{$pid} = 1;
+            }
         }
     }
 
     if ( scalar keys(%apache_ports) ) {
         print_info('Apache: ');
         print_normal( 'is listening on ports [ ' . join( " ", sort( keys(%apache_ports) ) ) . ' ]' );
+    }
+
+    if ( scalar keys(%root_httpd) > 1 ) {
+        my $pids = scalar keys(%root_httpd) > 4 ? 'More than 4!' : join( ' ', sort( keys(%root_httpd) ) );
+        print_warn('Apache: ');
+        print_warning( 'multiple root httpd processes (more than 60 seconds old) found [ ' . $pids . ' ] -- See TECH-314.' );
     }
 }
 
@@ -2504,7 +2523,7 @@ sub print_ftpserver_info {
 
     my $passivetext = $passiveports ? "enabled - " . ( $fwppactive ? "allowed in iptables" : "not found in iptables" ) : "not enabled";
 
-    if ( $passiveip ne "" && $passiveip ne $EXTERNAL_IP_ADDRESS && defined( $CPCONF{'ftpserver'} ) ) {
+    if ( $passiveip ne "" && defined($EXTERNAL_IP_ADDRESS) && $passiveip ne $EXTERNAL_IP_ADDRESS && defined( $CPCONF{'ftpserver'} ) ) {
         if ( $CPCONF{'ftpserver'} eq 'proftpd' ) {
             $passivetext .= " - MasqueradeAddress ( " . $passiveip . " ) doesn't match license IP";
         }
@@ -2536,6 +2555,22 @@ sub print_exim_info {
         print_info('Exim: ');
         print_normal($info);
     }
+}
+
+sub check_for_custom_webtemplates {
+    my $template_dir = '/var/cpanel/webtemplates';
+    return if !-e $template_dir;
+
+    my $found;
+    my $test_ref = sub {
+        return unless /\.tmpl$/s;
+        $found = 1;
+    };
+    find( { wanted => $test_ref }, $template_dir );
+    return unless $found;
+
+    print_info('Web templates: ');
+    print_normal("found in ${template_dir} -- https://documentation.cpanel.net/display/ALD/Web+Template+Editor");
 }
 
 sub check_for_custom_zonetemplates {
@@ -3491,7 +3526,7 @@ sub check_for_non_default_permissions {
             my $backup_path_parent;
             foreach my $part (@backup_path_parts) {
                 $backup_path_parent .= '/' . $part;
-                $check{$backup_path_parent} = { mode => [ '0755', '0751', '0711' ], perms_help => "All backup directories MUST be traversable (+x) by all users. See CPANEL-4336." };
+                $check{$backup_path_parent} = { mode => [ '0755', '0751', '0711' ], perms_help => "Ensure that all backup directories are traversable (+x) by all users. See CPANEL-4336." };
             }
         }
     }
@@ -5604,6 +5639,7 @@ sub check_for_broken_mysql_tables {
     }
     for ( split /\n/, timed_run( 0, 'mysql', '-NBe', 'SELECT table_schema,table_name,engine,row_format,create_time FROM information_schema.tables WHERE ( ' . $sql_schemas . ' ) AND engine IS NULL' ) ) {
         my @line = split /\t/;
+        next unless scalar @line >= 2;
         $broken{ $line[0] }{ $line[1] } = 1;
     }
     for ( sort( keys(%broken) ) ) {
@@ -7067,7 +7103,7 @@ sub check_for_noquotafs {
 sub check_for_mod_rpaf {
     return unless defined $APACHE_MODULES->{'rpaf_module'};
     print_warn('mod_rpaf: ');
-    print_warning('loaded. May prevent .htaccess from denying access. See 4422297');
+    print_warning('loaded. May prevent mod_http2 from working -- see 8772327. May prevent .htaccess from denying access -- see 4422297');
 }
 
 sub check_for_mod_spdy {
@@ -8710,8 +8746,18 @@ sub check_for_cpro {
 sub check_for_fkcplisc {
     my @bad_paths;
     my @paths = qw(
+      /bin/cplicense
+      /bin/cplicense-32bit
+      /bin/cplicense-64bit
+      /bin/jonior-license
+      /sbin/jonrebo
+      /srv/license.php
+      /usr/local/cpanel/cpkeyclt.license
+      /usr/local/cpl2016
       /usr/local/fkcplisc
+      /usr/local/sectools
     );
+
     for my $path (@paths) {
 
         if ( -e $path ) {
@@ -8722,7 +8768,7 @@ sub check_for_fkcplisc {
         print_generic_hack_predef('FKCPLISC');
         print_critical('The following files or directories were found:');
         print_critical( "\t" . join( " ", @bad_paths ) );
-        print_critical("\tL3: See TECH-269 for reference.");
+        print_critical("\tL3: See TECH-269 and TECH-318 for reference.");
         print_critical();
     }
 }
