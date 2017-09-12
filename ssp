@@ -65,6 +65,8 @@ our $CPUINFO;
 our $MEMINFO;
 our $SYSCTL;
 our $MYSQL_CONF;
+our $MYSQL_NUMERIC_VERSION;
+our $MYSQL_FULL_VERSION;
 our $MYSQL_DATADIR;
 our $MYSQL_ERROR_LOG;
 our @MYSQL_RPM_VERSIONS;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
@@ -126,7 +128,8 @@ sub init {
     $OS                         = get_os();
     ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES ) = get_os_info();
     if ( $OS_TYPE eq "cloudlinux" ) { $IS_CLOUDLINUX = 1; }
-    $MYSQL_CONF      = get_mysql_conf();
+    $MYSQL_CONF = get_mysql_conf();
+    ( $MYSQL_NUMERIC_VERSION, $MYSQL_FULL_VERSION ) = get_mysql_version();
     $MYSQL_DATADIR   = get_mysql_datadir();           # needs $MYSQL_CONF
     $MYSQL_ERROR_LOG = get_mysql_error_log();         # needs $MYSQL_CONF
     $IS_CPANEL       = 1 if -d '/usr/local/cpanel';
@@ -375,6 +378,7 @@ sub run {
     check_for_hooks_from_var_cpanel_hooks_yaml();
     check_mysqld_warnings_errors();
     check_mysql_config();
+    check_mysql_datadir();
     check_for_extra_mysql_config_files();
     check_perl_version_less_than_588();
     check_for_low_ulimit_for_root();
@@ -2273,17 +2277,13 @@ sub print_if_mod_userdir {
 }
 
 sub print_mysql_version {
-    my $mysql_output = timed_run( 0, 'mysql', '-V' );
-    if ($mysql_output) {
-        chomp $mysql_output;
-        print_info('MySQL Version: ');
-        print_normal($mysql_output);
-        if ($IS_CPANEL) {
-            my $mysql_distrib = "Distrib " . $CPCONF{'mysql-version'};
-            chomp($mysql_distrib);
-            if ( !( $mysql_output =~ m/$mysql_distrib/ ) ) {
-                print_warning( "\t \\_ mysql-version=" . $CPCONF{'mysql-version'} . ' in cpanel.config does not match installed version!' );
-            }
+    return unless defined $MYSQL_FULL_VERSION and defined $MYSQL_NUMERIC_VERSION;
+    print_info('MySQL Version: ');
+    print_normal($MYSQL_FULL_VERSION);
+    if ( $IS_CPANEL and defined $CPCONF{'mysql-version'} ) {
+        my $test_version = $CPCONF{'mysql-version'} . '.';
+        unless ( index( $MYSQL_NUMERIC_VERSION, $test_version ) == 0 ) {
+            print_warning( "\t \\_ mysql-version=" . $CPCONF{'mysql-version'} . ' in cpanel.config does not match installed version!' );
         }
     }
 }
@@ -4155,6 +4155,16 @@ sub check_for_sql_safe_mode {
     }
 }
 
+sub get_mysql_version {
+    my $mysql_output = timed_run( 0, 'mysql', '-V' );
+    chomp $mysql_output;
+    my $version;
+    if ( defined $mysql_output and $mysql_output =~ m{Distrib \s* ([0-9A-Za-z.]+)}xms ) {
+        $version = $1;
+    }
+    return ( $version, $mysql_output );
+}
+
 sub get_mysql_datadir {
     my $datadir = '/var/lib/mysql/';
     if ( $MYSQL_CONF->{'LINES'} && $MYSQL_CONF->{'mysqld'}{'datadir'} ) {
@@ -5241,6 +5251,21 @@ sub check_mysql_config {
             print_warning( '[ ' . $optname . ' ] not found ' . $help );
         }
     }
+}
+
+sub check_mysql_datadir {
+    return unless defined $OS_VERSION            and version_compare( $OS_VERSION,            qw( >= 7 ) );
+    return unless defined $MYSQL_NUMERIC_VERSION and version_compare( $MYSQL_NUMERIC_VERSION, qw( >= 10.1.16 ) );
+    my $bad_path_regex = '^\/(home|usr|etc|boot)(\/|\s*$)';
+    if ( defined $MYSQL_CONF->{'mysqld'}{'datadir'}[1] and $MYSQL_CONF->{'mysqld'}{'datadir'}[1] =~ m/$bad_path_regex/ ) {
+        print_warn('MySQL: ');
+        print_warning('/etc/my.cnf datadir points to a systemd protected directory which can prevent MariaDB 10.1.16+ from starting. See CPANEL-15633.');
+    }
+    if ( -l '/var/lib/mysql' and readlink('/var/lib/mysql') =~ m/$bad_path_regex/ ) {
+        print_warn('MySQL: ');
+        print_warning('/var/lib/mysql symlink resolves to a systemd protected directory which can prevent MariaDB 10.1.16+ from starting. See CPANEL-15633.');
+    }
+
 }
 
 sub check_for_extra_mysql_config_files {
