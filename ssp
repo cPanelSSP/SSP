@@ -5464,7 +5464,8 @@ sub check_for_kernel_headers_rpm {
 sub check_for_broken_rpm {
     return unless @RPM_LIST;
     my %rpms = (    # 'rpm name' => { check => ['check1', 'check2', ...], help => 'Additional info' } # Check types should be ordered by dependency, first failure skips other checks for that RPM.
-        'cpuspeed' => { check => ['exists'], help => 'May cause yum to crash when updating kernel. Send "cpuspeed detected" predefined response.' }
+        'cpuspeed'     => { check => ['exists'], help => 'May cause yum to crash when updating kernel. Send "cpuspeed detected" predefined response.' },
+        'crypto-utils' => { check => ['exists'], help => '"certwatch" cron job can send email notices regarding expiring certificates.  See ticket 7822329.' },
     );
 
     if ($EA4) {
