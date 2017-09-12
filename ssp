@@ -79,6 +79,7 @@ our $PROFTPDCONF;               # /etc/proftpd.conf
 our $EXIMLOCALOPTS;             # /etc/exim.conf.localopts
 our $OLD_BACKUP_CONF;           # /etc/cpbackup.conf
 our $NEW_BACKUP_CONF;           # /var/cpanel/backups/config
+our $CPUPDATECONF;              # /etc/cpupdate.conf
 our @APACHE_VERSION_OUTPUT;     # httpd -v
 our $APACHE_VERSION;            # Version string
 our $APACHE_BUILT;              # Build date
@@ -144,6 +145,7 @@ sub init {
         $APACHE_MODULES = get_apache_modules_hash();
         ( $OLD_BACKUP_CONF,   $NEW_BACKUP_CONF )      = get_backup_config();
         ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION ) = get_lsws_version();
+        $CPUPDATECONF = get_cpupdate_conf();
 
         if ($HTTPD_PATH) {
             @APACHE_VERSION_OUTPUT = split /\n/, timed_run( 0, $HTTPD_PATH, '-v' );
@@ -309,6 +311,7 @@ sub run {
     check_for_missing_usr_bin_crontab();
     check_if_upcp_is_running();
     check_valid_upcp();
+    check_cpupdate_conf();
     check_interface_lo();
     check_cpanelconfig_filetype();
     check_cpanelsync_exclude();
@@ -1378,6 +1381,16 @@ sub get_meminfo {
     return \%meminfo;
 }
 
+sub get_cpupdate_conf {
+    my %conf;
+    if ( open( my $conf_fh, '<', '/etc/cpupdate.conf' ) ) {
+        local $/ = undef;
+        %conf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($conf_fh) );
+        close $conf_fh;
+    }
+    return \%conf;
+}
+
 sub format_meminfo {
     my ($num) = @_;
     return 'none or unknown' if ( !defined($num) );
@@ -1700,17 +1713,7 @@ sub print_cpanel_info {
         $birthday = localtime $ctime;
     }
 
-    if ( open my $cpupdate_fh, '<', '/etc/cpupdate.conf' ) {
-        while (<$cpupdate_fh>) {
-            if (m{ \A CPANEL=(.*) }xmsi) {
-                chomp( $cpanel_tier = $1 );
-            }
-        }
-        close $cpupdate_fh;
-    }
-    else {
-        $cpanel_tier = 'Unknown (could not open/read /etc/cpupdate.conf ?)';
-    }
+    $cpanel_tier = defined $CPUPDATECONF->{CPANEL} ? $CPUPDATECONF->{CPANEL} : 'Unknown (could not open/read /etc/cpupdate.conf ?)';
 
     my $ctime       = ( stat('/usr/local/cpanel/version') )[10];
     my $last_update = time() - $ctime;
@@ -1755,20 +1758,7 @@ sub check_for_cpanel_update {
     my $local_tier_name;
     my $match = 0;
 
-    my $cpupdate_conf = '/etc/cpupdate.conf';
-    return if !-f $cpupdate_conf;
-
-    if ( open my $file_fh, '<', $cpupdate_conf ) {
-        while (<$file_fh>) {
-            if (/\bcpanel=(.*)/i) {
-                $local_tier_name = $1;
-                last;
-            }
-        }
-        close $file_fh;
-    }
-
-    return if !$local_tier_name;
+    return unless defined $CPUPDATECONF->{CPANEL};
 
     if ( $CPANEL_VERSION !~ /(\d+\.\d+\.\d+\.\d+)/ ) {
         print_info('cPanel update check: ');
@@ -1782,7 +1772,7 @@ sub check_for_cpanel_update {
     for my $line (@tiers) {
         if ( $line =~ m{ \A (.*) : (\d+\.\d+\.\d+\.\d+) \z }xms ) {
             ( $tier, $available_tier_version ) = ( $1, $2 );
-            if ( $tier =~ /^${local_tier_name}$/i ) {
+            if ( $tier =~ /^$CPUPDATECONF->{CPANEL}$/i ) {
                 $match = 1;
                 last;
             }
@@ -1791,7 +1781,7 @@ sub check_for_cpanel_update {
 
     if ( $match == 0 ) {
         print_info('cPanel update check: ');
-        print_warning("server is configured to use an unknown tier ($local_tier_name)");
+        print_warning( "server is configured to use an unknown tier (" . $CPUPDATECONF->{CPANEL} . ")" );
         return;
     }
 
@@ -2843,6 +2833,27 @@ sub check_valid_upcp {
     if ( !$updatenow_valid ) {
         print_warn('Valid updatenow.static: ');
         print_warning("No VERSION_BUILD info found in $updatenow_static, could be broken!");
+    }
+}
+
+sub check_cpupdate_conf {
+    return unless defined $CPUPDATECONF;
+    my $_is_allowed = sub {
+        my ($type) = @_;
+        return 0 if ( defined $CPUPDATECONF->{$type} and ( $CPUPDATECONF->{$type} eq "never" or $CPUPDATECONF->{$type} eq "manual" ) );
+        return 1;
+    };
+    unless ( $_is_allowed->('UPDATES') ) {
+        print_warn('/etc/cpupdate.conf: ');
+        print_warning('UPDATES set to never or manual -- do not run /scripts/upcp without customer approval. Recommend enabling automatic updates if the issue would be resolved by an update.');
+    }
+    unless ( $_is_allowed->('RPMUP') ) {
+        print_warn('/etc/cpupdate.conf: ');
+        print_warning('RPMUP set to never or manual -- prevents automatic updates to EA4 and other yum-managed packages. Recommend enabling automatic updates if the issue would be resolved by an update.');
+    }
+    unless ( $_is_allowed->('SARULESUP') ) {
+        print_warn('/etc/cpupdate.conf: ');
+        print_warning('SARULESUP set to never or manual -- prevents automatic updates of SpamAssassin rules. Recommend enabling automatic updates if the issue would be resolved by an update.');
     }
 }
 
