@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.161';
+our $VERSION = '4.99.162';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -65,6 +65,8 @@ our $CPUINFO;
 our $MEMINFO;
 our $SYSCTL;
 our $MYSQL_CONF;
+our $MYSQL_NUMERIC_VERSION;
+our $MYSQL_FULL_VERSION;
 our $MYSQL_DATADIR;
 our $MYSQL_ERROR_LOG;
 our @MYSQL_RPM_VERSIONS;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
@@ -79,6 +81,7 @@ our $PROFTPDCONF;               # /etc/proftpd.conf
 our $EXIMLOCALOPTS;             # /etc/exim.conf.localopts
 our $OLD_BACKUP_CONF;           # /etc/cpbackup.conf
 our $NEW_BACKUP_CONF;           # /var/cpanel/backups/config
+our $CPUPDATECONF;              # /etc/cpupdate.conf
 our @APACHE_VERSION_OUTPUT;     # httpd -v
 our $APACHE_VERSION;            # Version string
 our $APACHE_BUILT;              # Build date
@@ -125,7 +128,8 @@ sub init {
     $OS                         = get_os();
     ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES ) = get_os_info();
     if ( $OS_TYPE eq "cloudlinux" ) { $IS_CLOUDLINUX = 1; }
-    $MYSQL_CONF      = get_mysql_conf();
+    $MYSQL_CONF = get_mysql_conf();
+    ( $MYSQL_NUMERIC_VERSION, $MYSQL_FULL_VERSION ) = get_mysql_version();
     $MYSQL_DATADIR   = get_mysql_datadir();           # needs $MYSQL_CONF
     $MYSQL_ERROR_LOG = get_mysql_error_log();         # needs $MYSQL_CONF
     $IS_CPANEL       = 1 if -d '/usr/local/cpanel';
@@ -144,6 +148,7 @@ sub init {
         $APACHE_MODULES = get_apache_modules_hash();
         ( $OLD_BACKUP_CONF,   $NEW_BACKUP_CONF )      = get_backup_config();
         ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION ) = get_lsws_version();
+        $CPUPDATECONF = get_cpupdate_conf();
 
         if ($HTTPD_PATH) {
             @APACHE_VERSION_OUTPUT = split /\n/, timed_run( 0, $HTTPD_PATH, '-v' );
@@ -309,6 +314,7 @@ sub run {
     check_for_missing_usr_bin_crontab();
     check_if_upcp_is_running();
     check_valid_upcp();
+    check_cpupdate_conf();
     check_interface_lo();
     check_cpanelconfig_filetype();
     check_cpanelsync_exclude();
@@ -372,6 +378,7 @@ sub run {
     check_for_hooks_from_var_cpanel_hooks_yaml();
     check_mysqld_warnings_errors();
     check_mysql_config();
+    check_mysql_datadir();
     check_for_extra_mysql_config_files();
     check_perl_version_less_than_588();
     check_for_low_ulimit_for_root();
@@ -1378,6 +1385,16 @@ sub get_meminfo {
     return \%meminfo;
 }
 
+sub get_cpupdate_conf {
+    my %conf;
+    if ( open( my $conf_fh, '<', '/etc/cpupdate.conf' ) ) {
+        local $/ = undef;
+        %conf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($conf_fh) );
+        close $conf_fh;
+    }
+    return \%conf;
+}
+
 sub format_meminfo {
     my ($num) = @_;
     return 'none or unknown' if ( !defined($num) );
@@ -1700,17 +1717,7 @@ sub print_cpanel_info {
         $birthday = localtime $ctime;
     }
 
-    if ( open my $cpupdate_fh, '<', '/etc/cpupdate.conf' ) {
-        while (<$cpupdate_fh>) {
-            if (m{ \A CPANEL=(.*) }xmsi) {
-                chomp( $cpanel_tier = $1 );
-            }
-        }
-        close $cpupdate_fh;
-    }
-    else {
-        $cpanel_tier = 'Unknown (could not open/read /etc/cpupdate.conf ?)';
-    }
+    $cpanel_tier = defined $CPUPDATECONF->{CPANEL} ? $CPUPDATECONF->{CPANEL} : 'Unknown (could not open/read /etc/cpupdate.conf ?)';
 
     my $ctime       = ( stat('/usr/local/cpanel/version') )[10];
     my $last_update = time() - $ctime;
@@ -1755,20 +1762,7 @@ sub check_for_cpanel_update {
     my $local_tier_name;
     my $match = 0;
 
-    my $cpupdate_conf = '/etc/cpupdate.conf';
-    return if !-f $cpupdate_conf;
-
-    if ( open my $file_fh, '<', $cpupdate_conf ) {
-        while (<$file_fh>) {
-            if (/\bcpanel=(.*)/i) {
-                $local_tier_name = $1;
-                last;
-            }
-        }
-        close $file_fh;
-    }
-
-    return if !$local_tier_name;
+    return unless defined $CPUPDATECONF->{CPANEL};
 
     if ( $CPANEL_VERSION !~ /(\d+\.\d+\.\d+\.\d+)/ ) {
         print_info('cPanel update check: ');
@@ -1782,7 +1776,7 @@ sub check_for_cpanel_update {
     for my $line (@tiers) {
         if ( $line =~ m{ \A (.*) : (\d+\.\d+\.\d+\.\d+) \z }xms ) {
             ( $tier, $available_tier_version ) = ( $1, $2 );
-            if ( $tier =~ /^${local_tier_name}$/i ) {
+            if ( $tier =~ /^$CPUPDATECONF->{CPANEL}$/i ) {
                 $match = 1;
                 last;
             }
@@ -1791,7 +1785,7 @@ sub check_for_cpanel_update {
 
     if ( $match == 0 ) {
         print_info('cPanel update check: ');
-        print_warning("server is configured to use an unknown tier ($local_tier_name)");
+        print_warning( "server is configured to use an unknown tier (" . $CPUPDATECONF->{CPANEL} . ")" );
         return;
     }
 
@@ -2283,17 +2277,13 @@ sub print_if_mod_userdir {
 }
 
 sub print_mysql_version {
-    my $mysql_output = timed_run( 0, 'mysql', '-V' );
-    if ($mysql_output) {
-        chomp $mysql_output;
-        print_info('MySQL Version: ');
-        print_normal($mysql_output);
-        if ($IS_CPANEL) {
-            my $mysql_distrib = "Distrib " . $CPCONF{'mysql-version'};
-            chomp($mysql_distrib);
-            if ( !( $mysql_output =~ m/$mysql_distrib/ ) ) {
-                print_warning( "\t \\_ mysql-version=" . $CPCONF{'mysql-version'} . ' in cpanel.config does not match installed version!' );
-            }
+    return unless defined $MYSQL_FULL_VERSION and defined $MYSQL_NUMERIC_VERSION;
+    print_info('MySQL Version: ');
+    print_normal($MYSQL_FULL_VERSION);
+    if ( $IS_CPANEL and defined $CPCONF{'mysql-version'} ) {
+        my $test_version = $CPCONF{'mysql-version'} . '.';
+        unless ( index( $MYSQL_NUMERIC_VERSION, $test_version ) == 0 ) {
+            print_warning( "\t \\_ mysql-version=" . $CPCONF{'mysql-version'} . ' in cpanel.config does not match installed version!' );
         }
     }
 }
@@ -2843,6 +2833,27 @@ sub check_valid_upcp {
     if ( !$updatenow_valid ) {
         print_warn('Valid updatenow.static: ');
         print_warning("No VERSION_BUILD info found in $updatenow_static, could be broken!");
+    }
+}
+
+sub check_cpupdate_conf {
+    return unless defined $CPUPDATECONF;
+    my $_is_allowed = sub {
+        my ($type) = @_;
+        return 0 if ( defined $CPUPDATECONF->{$type} and ( $CPUPDATECONF->{$type} eq "never" or $CPUPDATECONF->{$type} eq "manual" ) );
+        return 1;
+    };
+    unless ( $_is_allowed->('UPDATES') ) {
+        print_warn('/etc/cpupdate.conf: ');
+        print_warning('UPDATES set to never or manual -- do not run /scripts/upcp without customer approval. Recommend enabling automatic updates if the issue would be resolved by an update.');
+    }
+    unless ( $_is_allowed->('RPMUP') ) {
+        print_warn('/etc/cpupdate.conf: ');
+        print_warning('RPMUP set to never or manual -- prevents automatic updates to EA4 and other yum-managed packages. Recommend enabling automatic updates if the issue would be resolved by an update.');
+    }
+    unless ( $_is_allowed->('SARULESUP') ) {
+        print_warn('/etc/cpupdate.conf: ');
+        print_warning('SARULESUP set to never or manual -- prevents automatic updates of SpamAssassin rules. Recommend enabling automatic updates if the issue would be resolved by an update.');
     }
 }
 
@@ -4144,6 +4155,16 @@ sub check_for_sql_safe_mode {
     }
 }
 
+sub get_mysql_version {
+    my $mysql_output = timed_run( 0, 'mysql', '-V' );
+    chomp $mysql_output;
+    my $version;
+    if ( defined $mysql_output and $mysql_output =~ m{Distrib \s* ([0-9A-Za-z.]+)}xms ) {
+        $version = $1;
+    }
+    return ( $version, $mysql_output );
+}
+
 sub get_mysql_datadir {
     my $datadir = '/var/lib/mysql/';
     if ( $MYSQL_CONF->{'LINES'} && $MYSQL_CONF->{'mysqld'}{'datadir'} ) {
@@ -5232,6 +5253,21 @@ sub check_mysql_config {
     }
 }
 
+sub check_mysql_datadir {
+    return unless defined $OS_VERSION            and version_compare( $OS_VERSION,            qw( >= 7 ) );
+    return unless defined $MYSQL_NUMERIC_VERSION and version_compare( $MYSQL_NUMERIC_VERSION, qw( >= 10.1.16 ) );
+    my $bad_path_regex = '^\/(home|usr|etc|boot)(\/|\s*$)';
+    if ( defined $MYSQL_CONF->{'mysqld'}{'datadir'}[1] and $MYSQL_CONF->{'mysqld'}{'datadir'}[1] =~ m/$bad_path_regex/ ) {
+        print_warn('MySQL: ');
+        print_warning('/etc/my.cnf datadir points to a systemd protected directory which can prevent MariaDB 10.1.16+ from starting. See CPANEL-15633.');
+    }
+    if ( -l '/var/lib/mysql' and readlink('/var/lib/mysql') =~ m/$bad_path_regex/ ) {
+        print_warn('MySQL: ');
+        print_warning('/var/lib/mysql symlink resolves to a systemd protected directory which can prevent MariaDB 10.1.16+ from starting. See CPANEL-15633.');
+    }
+
+}
+
 sub check_for_extra_mysql_config_files {
 
     # It's silly how many locations mysqld looks for a configuration file.
@@ -5453,7 +5489,8 @@ sub check_for_kernel_headers_rpm {
 sub check_for_broken_rpm {
     return unless @RPM_LIST;
     my %rpms = (    # 'rpm name' => { check => ['check1', 'check2', ...], help => 'Additional info' } # Check types should be ordered by dependency, first failure skips other checks for that RPM.
-        'cpuspeed' => { check => ['exists'], help => 'May cause yum to crash when updating kernel. Send "cpuspeed detected" predefined response.' }
+        'cpuspeed'     => { check => ['exists'], help => 'May cause yum to crash when updating kernel. Send "cpuspeed detected" predefined response.' },
+        'crypto-utils' => { check => ['exists'], help => '"certwatch" cron job can send email notices regarding expiring certificates.  See ticket 7822329.' },
     );
 
     if ($EA4) {
