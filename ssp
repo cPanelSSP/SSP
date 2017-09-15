@@ -790,6 +790,7 @@ sub all_malware_checks {
     check_for_dirtycow_passwd();          # malware
     check_for_cpro();
     check_for_fkcplisc();
+    check_for_cgls();
 }
 
 sub get_phpini {
@@ -8806,6 +8807,28 @@ sub check_for_fkcplisc {
         print_critical('The following files or directories were found:');
         print_critical( "\t" . join( " ", @bad_paths ) );
         print_critical("\tL3: See TECH-269 and TECH-318 for reference.");
+        print_critical();
+    }
+}
+
+sub check_for_cgls {
+    my @bad_paths;
+    my @paths = qw(
+      /etc/cron.d/cgls
+      /usr/local/cgls
+    );
+
+    for my $path (@paths) {
+        if ( -e $path ) {
+            push @bad_paths, $path;
+        }
+    }
+
+    if (@bad_paths) {
+        print_generic_hack_predef('CGLS');
+        print_critical('The following files or directories were found:');
+        print_critical( "\t" . join( " ", @bad_paths ) );
+        print_critical("\tL3: See TECH-333 for reference.");
         print_critical();
     }
 }
