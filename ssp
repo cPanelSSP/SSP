@@ -273,6 +273,7 @@ sub run {
     check_for_os_release_5();
     check_for_os_release_7();
     check_for_os_release_32bit();
+    check_for_ea3();
 
     ## [INFO]
     print "\n";
@@ -1622,6 +1623,16 @@ sub check_for_os_release_32bit {
     print_crit('CentOS/RHEL/CL i386 (32-bit): ');
     print_critical('This operating system is not supported in WHM 58 and later (x86_64 only).');
     print_critical('         \_ Send customer this premade: "MIGRATION - 32-bit CentOS/RHEL/CL EOL"');
+}
+
+sub check_for_ea3 {
+    return if $EA4;
+    my $httpd_path = '/usr/local/apache/bin/httpd';
+    return if -l $httpd_path;
+    return unless -f $httpd_path;
+    print_crit('EasyApache 3: ');
+    print_critical('Support is ending in early 2018.');
+    print_critical('         \_ Send customer this premade: "MIGRATION - EA3 EOL"');
 }
 
 ##############################
