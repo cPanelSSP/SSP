@@ -8762,10 +8762,12 @@ sub check_for_cpro {
     my @bad_paths;
     my @paths = qw(
       /usr/bin/clnupdate
+      /usr/bin/update_cpanelv2
       /usr/bin/yasin
       /usr/local/cpanel/license/update_cpanelv2
       /usr/local/cpanel/whostmgr/cgi/check.php
     );
+
     for my $path (@paths) {
 
         if ( -e $path ) {
