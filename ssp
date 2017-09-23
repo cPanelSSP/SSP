@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.163';
+our $VERSION = '4.99.164';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -1736,6 +1736,7 @@ sub print_cpanel_info {
         '58' => { expires => 1501459201, text => 'July 31, 2017' },
         '60' => { expires => 1509408001, text => 'October 31, 2017' },
         '62' => { expires => 1522454401, text => 'March 31, 2018' }
+        '64' => { expires => 1505970000, text => 'September 21, 2017' }
     );
     my @ver = split( /\./, $CPANEL_VERSION, 4 );
     my $major_ver = ( defined $ver[1] && $ver[1] =~ /^\d+$/ ) ? $ver[1] : undef;
