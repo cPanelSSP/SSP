@@ -1735,7 +1735,7 @@ sub print_cpanel_info {
         '56' => { expires => 1509408001, text => 'October 31, 2017' },
         '58' => { expires => 1501459201, text => 'July 31, 2017' },
         '60' => { expires => 1509408001, text => 'October 31, 2017' },
-        '62' => { expires => 1522454401, text => 'March 31, 2018' }
+        '62' => { expires => 1522454401, text => 'March 31, 2018' },
         '64' => { expires => 1505970000, text => 'September 21, 2017' }
     );
     my @ver = split( /\./, $CPANEL_VERSION, 4 );
