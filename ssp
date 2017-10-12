@@ -1962,10 +1962,11 @@ sub print_apache_info {
             next unless $href->{USER} eq "root";
             next unless $href->{CMD} eq "httpd";
             my $pid = $href->{PID};
-            $apache_ports{$portnum} = 1;
             if ( defined $PROCESS_REF->{$pid} and $PROCESS_REF->{$pid}{ETIMES} > 60 ) {
+                next if $PROCESS_REF->{$pid}{CMD} =~ m{ \A /apache/bin/httpd }xms;    # Ignore these - see TECH-334
                 $root_httpd{$pid} = 1;
             }
+            $apache_ports{$portnum} = 1;
         }
     }
 
