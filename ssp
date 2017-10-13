@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.165';
+our $VERSION = '4.99.166';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -49,9 +49,8 @@ our $CPANEL_VERSION;    # Current cpanel version of system
 our $HOSTNAME;
 our $OS;
 our $IS_CPANEL     = 0;
-our $IS_CLOUDLINUX = 0;
 our $IS_KERNELCARE = 0;
-our ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES );
+our ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES, $IS_AMAZON, $IS_CLOUDLINUX );
 our $EXTERNAL_IP_ADDRESS;
 our $EXTERNAL_LICENSE_ADDRESS;
 our $TIERS;
@@ -126,8 +125,7 @@ sub init {
     $LIBKEYUTILS_FILES_REF      = build_libkeyutils_file_list();
     $HOSTNAME                   = hostname();
     $OS                         = get_os();
-    ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES ) = get_os_info();
-    if ( $OS_TYPE eq "cloudlinux" ) { $IS_CLOUDLINUX = 1; }
+    ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES, $IS_AMAZON, $IS_CLOUDLINUX ) = get_os_info();
     $MYSQL_CONF = get_mysql_conf();
     ( $MYSQL_NUMERIC_VERSION, $MYSQL_FULL_VERSION ) = get_mysql_version();
     $MYSQL_DATADIR   = get_mysql_datadir();           # needs $MYSQL_CONF
@@ -273,6 +271,7 @@ sub run {
     check_for_os_release_5();
     check_for_os_release_7();
     check_for_os_release_32bit();
+    check_for_ea3();
 
     ## [INFO]
     print "\n";
@@ -1000,7 +999,9 @@ sub get_os {
 
 # ripped from /usr/local/cpanel/Cpanel/Sys/OS.pm
 sub get_os_info {
-    my $ises = 0;
+    my $is_es         = 0;
+    my $is_amazon     = 0;
+    my $is_cloudlinux = 0;
     my $version;
     my $os      = "UNKNOWN";
     my $release = "UNKNOWN";
@@ -1009,7 +1010,7 @@ sub get_os_info {
     foreach my $test_release_file ( 'CentOS-release', 'redhat-release', 'system-release' ) {
         if ( -e '/etc/' . $test_release_file ) {
             if ( ( ($os) = $test_release_file =~ m/^([^\-_]+)/ )[0] ) {
-                $os              = lc $os;                         #lc ok here as no danger of utf-8 data
+                $os              = lc $os;
                 $os_release_file = '/etc/' . $test_release_file;
 
                 if ( $os eq 'system' ) {
@@ -1027,8 +1028,8 @@ sub get_os_info {
         chomp $line;
         $line =~ s/^\s+|\s+$//;
         if    ( length $line >= 4 )                                             { $release = $line; }
-        if    ( $line =~ m/(?:Corporate|Advanced\sServer|Enterprise|Amazon)/i ) { $ises    = 1; }
-        elsif ( $line =~ /CloudLinux|CentOS/i )                                 { $ises    = 2; }
+        if    ( $line =~ m/(?:Corporate|Advanced\sServer|Enterprise|Amazon)/i ) { $is_es   = 1; }
+        elsif ( $line =~ /CloudLinux|CentOS/i )                                 { $is_es   = 2; }
 
         if    ( $line =~ /(\d+\.\d+)/ ) { $version = $1; }
         elsif ( $line =~ /(\d+)/ )      { $version = $1; }
@@ -1036,7 +1037,10 @@ sub get_os_info {
         if ( $line =~ /(centos|cloudlinux|amazon)/i ) { $os = lc $1; }
     }
 
-    return ( $release, $os, $version, $ises );
+    $is_amazon     = 1 if $os eq "amazon";
+    $is_cloudlinux = 1 if $os eq "cloudlinux";
+
+    return ( $release, $os, $version, $is_es, $is_amazon, $is_cloudlinux );
 }
 
 sub print_version {
@@ -1624,6 +1628,16 @@ sub check_for_os_release_32bit {
     print_critical('         \_ Send customer this premade: "MIGRATION - 32-bit CentOS/RHEL/CL EOL"');
 }
 
+sub check_for_ea3 {
+    return if $EA4;
+    my $httpd_path = '/usr/local/apache/bin/httpd';
+    return if -l $httpd_path;
+    return unless -f $httpd_path;
+    print_crit('EasyApache 3: ');
+    print_critical('Support is ending in early 2018.');
+    print_critical('         \_ Send customer this premade: "MIGRATION - EA3 EOL"');
+}
+
 ##############################
 #  BEGIN [INFO] CHECKS
 ##############################
@@ -1736,7 +1750,7 @@ sub print_cpanel_info {
         '58' => { expires => 1501459201, text => 'July 31, 2017' },
         '60' => { expires => 1509408001, text => 'October 31, 2017' },
         '62' => { expires => 1522454401, text => 'March 31, 2018' },
-        '64' => { expires => 1505970000, text => 'September 21, 2017' }
+        '64' => { expires => 1505952001, text => 'September 21, 2017' },
     );
     my @ver = split( /\./, $CPANEL_VERSION, 4 );
     my $major_ver = ( defined $ver[1] && $ver[1] =~ /^\d+$/ ) ? $ver[1] : undef;
@@ -1951,10 +1965,11 @@ sub print_apache_info {
             next unless $href->{USER} eq "root";
             next unless $href->{CMD} eq "httpd";
             my $pid = $href->{PID};
-            $apache_ports{$portnum} = 1;
             if ( defined $PROCESS_REF->{$pid} and $PROCESS_REF->{$pid}{ETIMES} > 60 ) {
+                next if $PROCESS_REF->{$pid}{CMD} =~ m{ \A /apache/bin/httpd }xms;    # Ignore these - see TECH-334
                 $root_httpd{$pid} = 1;
             }
+            $apache_ports{$portnum} = 1;
         }
     }
 
@@ -3202,7 +3217,7 @@ sub check_ea4_paths_conf {
         'file_conf_srm_conf'   => '/etc/apache2/conf.d/srm.conf',
         'file_error_log'       => '/etc/apache2/logs/error_log',
     );
-    if ( version_compare( $OS_VERSION, qw( < 7.0 ) ) ) {
+    if ( version_compare( $OS_VERSION, qw( < 7.0 ) ) or $IS_AMAZON ) {
         $default_conf{'dir_run'} = '/var/run/apache2';
     }
     if ( open my $conf_fh, '<', $paths_conf ) {
@@ -3458,7 +3473,7 @@ sub check_for_non_default_permissions {
         close $wwwacctconf_fh;
     }
 
-    if ( version_compare( $OS_VERSION, qw( < 7 ) ) ) {
+    if ( version_compare( $OS_VERSION, qw( < 7 ) ) or $IS_AMAZON ) {
         $check{'/bin'}             = { mode    => [ '0755', '0711', '0555' ] };
         $check{'/bin/crontab'}     = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
         $check{'/sbin'}            = { mode    => [ '0755', '0711', '0555' ] };
@@ -3466,7 +3481,7 @@ sub check_for_non_default_permissions {
         $check{'/usr/bin/passwd'}  = { mode    => [ '6755', '4755', '4555', '4511' ] };
         $check{'/var/run'}         = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
     }
-    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {    # https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Migration_Planning_Guide/sect-Red_Hat_Enterprise_Linux-Migration_Planning_Guide-File_System_Layout.html
+    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) and not $IS_AMAZON ) {    # https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Migration_Planning_Guide/sect-Red_Hat_Enterprise_Linux-Migration_Planning_Guide-File_System_Layout.html
         $check{'/bin'}   = { symlink => '/usr/bin',   check_missing => 1 };
         $check{'/lib'}   = { symlink => '/usr/lib',   check_missing => 1 };
         $check{'/lib64'} = { symlink => '/usr/lib64', check_missing => 1 };
@@ -3474,14 +3489,14 @@ sub check_for_non_default_permissions {
         $check{'/sbin'}     = { symlink => '/usr/sbin', check_missing => 1 };
         $check{'/var/lock'} = { symlink => '/run/lock', check_missing => 1 };
         $check{'/var/run'}  = { symlink => '/run',      check_missing => 1 };
-        if ( cpanel_version_is(qw( >= 11.56.0.12 )) ) {    # CPANEL-3540
+        if ( cpanel_version_is(qw( >= 11.56.0.12 )) ) {                       # CPANEL-3540
             $check{'/usr/local/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab', check_missing => 1 };
         }
         else {
             $check{'/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
         }
     }
-    if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {         # CPANEL-6180 results in these log files having the APPEND-ONLY attribute, so only check other attributes.
+    if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {                            # CPANEL-6180 results in these log files having the APPEND-ONLY attribute, so only check other attributes.
         $check{'/usr/local/cpanel/logs/cpdavd_error_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/cphulkd.log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/cphulkd_errors.log'} = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
@@ -8767,10 +8782,12 @@ sub check_for_cpro {
     my @bad_paths;
     my @paths = qw(
       /usr/bin/clnupdate
+      /usr/bin/update_cpanelv2
       /usr/bin/yasin
       /usr/local/cpanel/license/update_cpanelv2
       /usr/local/cpanel/whostmgr/cgi/check.php
     );
+
     for my $path (@paths) {
 
         if ( -e $path ) {

@@ -13,9 +13,9 @@ NEW_SHASUM_SUFFIX=$(NEW_SHASUM_SEPARATOR)$(NEW_VER)
 
 .DEFAULT: help
 .IGNORE: clean
-.PHONY: all clean help test tidy
+.PHONY: clean commit final help test tidy
 .PRECIOUS: $(PROJECT)
-.SILENT: all help SHA512SUM $(PROJECT).tdy test tidy
+.SILENT: commit final help SHA512SUM $(PROJECT).tdy test tidy
 
 # A line beginning with a double hash mark is used to provide help text for the target that follows it when running 'make help' or 'make'.  The help target must be first.
 # "Invisible" targets should not be marked with help text.
@@ -34,12 +34,23 @@ help:
 	{ lastLine = $$0 }' $(MAKEFILE_LIST)
 	printf "\n"
 
-## Make ready for commit
-all: SHA512SUM
-	
 ## Clean up
 clean:
 	$(RM) $(PROJECT).tdy
+
+## Commit an intermediate change
+commit: tidy
+ifndef COMMITMSG
+	echo 'COMMITMSG is undefined.  Add COMMITMSG="My commit description" to make command line.' && exit 2
+endif
+	git add $(PROJECT)
+	git commit -m "$(COMMITMSG)"
+
+## Make final commit
+final: SHA512SUM
+	git add $(PROJECT) SHA512SUM
+	git commit -m "$(PROJECT) $(NEW_VER)"
+	echo 'Ready to git push to origin!'
 
 ## Add new version to SHA512SUM file
 SHA512SUM: tidy
