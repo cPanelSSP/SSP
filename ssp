@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.164';
+our $VERSION = '4.99.165';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -7708,9 +7708,13 @@ sub check_for_missing_cloudlinux_files {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/sbin/lvectl - check/repair lve-utils RPM');
     }
+    if ( !-x "/usr/bin/selectorctl" ) {
+        print_warn('CloudLinux: ');
+        print_warning('missing or non-executable /usr/bin/selectorctl - check/repair lvemanager RPM - This will incorrectly cause cPanel EA4 to be used.');
+    }
     if ( !-x "/usr/sbin/lveinfo" ) {
         print_warn('CloudLinux: ');
-        print_warning('missing or non-executable /usr/sbin/lveinfo - check/repair lve-stats RPM');
+        print_warning('missing or non-executable /usr/sbin/lveinfo - check/repair lve-stats RPM - This will incorrectly cause cPanel EA4 to be used.');
     }
     if ( !-x "/usr/sbin/spacewalk-channel" ) {
         print_warn('CloudLinux: ');
