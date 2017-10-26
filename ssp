@@ -5996,6 +5996,7 @@ sub check_for_rpm_overrides {
                                | 2c8e757e0e38a87f68e8eeb7bd306bf6
                                | 352969216e1673edfa8d4ecf189043dc
                                | 41894ce9a0721ed61db14d5e96e630d0
+                               | 54015dd9569256894ee29c103c64a732
                                | 57baebe121bcd5ab9752dd63f60ecd81
                                | 76401bdaab660d4ee5679df3c1732309
                                | 94f54ec9f5fecf733f0d27b87e5a6c29
