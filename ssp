@@ -3864,6 +3864,7 @@ sub check_for_hooks_in_scripts_directory {
     # default CloudLinux, cPGs hooks that can be ignored
     my %hooks_ignore = qw(
       4988be925a6f50ec505618a7cec702e2  /scripts/postkillacct
+      49e17847bdcb790fd30a1916427091b3  /scripts/postkillacct
       28620050548a2e4b500ab7426aaa0df5  /scripts/postmodifyacct
       42a624c843f34085f1532b0b4e17fe8c  /scripts/postmodifyacct
       66c14efb37684262be9f5fe5c13baa15  /scripts/postmodifyacct
@@ -3872,6 +3873,7 @@ sub check_for_hooks_in_scripts_directory {
       0654757899ca7e348bdffef11e867e09  /scripts/postupcp
       05b7f8b4f2c83f033d124479a1c3eca0  /scripts/postupcp
       22cf7db1c069fd9672cd9dad3a3d371d  /scripts/postupcp
+      3fa559a9f0a4766c4219fa2c601d473d  /scripts/postupcp
       50bfcdbca45dc5813b5b354ceb24d977  /scripts/postupcp
       57f8ea2d494e299827cc365c86a357ac  /scripts/postupcp
       6db9b6bfb975adbe908300cc802774a8  /scripts/postupcp
@@ -3884,12 +3886,16 @@ sub check_for_hooks_in_scripts_directory {
       677da3bdd8fbd16d4b8917a9fe0f6f89  /scripts/postwwwacct
       9de3100a4f39d98ae49449350af8928a  /scripts/postwwwacct
       a4df04a6440073fe40363cfd241b1fe7  /scripts/postwwwacct
+      ca853c528aa3a30613753fd0d4d8c26f  /scripts/postwwwacct
       d296b6bc92e8a60424c6e017219ddaf6  /scripts/postwwwacct
+      f293233e17d93d74b6a98c930237aa2e  /scripts/postwwwacct
+      2ff00926df02021ba10913aa5a5bc0ec  /scripts/prekillacct
       44caf075fc0f9847ede43de5dd563edc  /scripts/prekillacct
       46fee9faf2d5f83cbcda17ce0178a465  /scripts/prekillacct
       677da3bdd8fbd16d4b8917a9fe0f6f89  /scripts/prekillacct
       86f9b53c81a8f2fd77a8626ddd3b2c71  /scripts/prekillacct
       88f73e4fd1384479e4069a68ae4e1489  /scripts/prekillacct
+      abee6662e56ba0b283423eccdef49ed7  /scripts/prekillacct
       94a4366ea0417d2e4715dd968ddd94cb  /scripts/preupcp
     );
 
@@ -5984,12 +5990,14 @@ sub check_for_rpm_overrides {
     if (
            $md5_local
         && $md5_local =~ m{ \A (
-                                 1d9f5d246ef2c9ab29f33cf00a3af9a5
+                                 1311deca9b898350d3660f6ea381af4b
+                               | 1d9f5d246ef2c9ab29f33cf00a3af9a5
                                | 2a18948c9a0419d4398134dddcd72367
                                | 2c8e757e0e38a87f68e8eeb7bd306bf6
                                | 352969216e1673edfa8d4ecf189043dc
                                | 41894ce9a0721ed61db14d5e96e630d0
                                | 57baebe121bcd5ab9752dd63f60ecd81
+                               | 76401bdaab660d4ee5679df3c1732309
                                | 94f54ec9f5fecf733f0d27b87e5a6c29
                                | a89257469792a846e8db72edd6d29919
                                | a8eca141eda7464bc7c12f3607f5511c
