@@ -2894,7 +2894,7 @@ sub check_interface_lo {
 
 sub check_loopback_connection {
     return unless $IS_CPANEL;
-    my @ports     = qw( 25 80 143 );
+    my @ports     = qw( 25 80 2086 );
     my $connected = 0;
 
     for my $port (@ports) {
@@ -2915,7 +2915,7 @@ sub check_loopback_connection {
 
     if ( !$connected ) {
         print_warn('Loopback connectivity: ');
-        print_warning('could not connect to 127.0.0.1 on ports 25, 80, or 143');
+        print_warning('could not connect to 127.0.0.1 on port 25, 80, or 2086');
     }
 }
 
