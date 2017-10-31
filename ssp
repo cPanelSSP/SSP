@@ -338,6 +338,7 @@ sub run {
     check_limitsconf();
     check_disk_space();
     check_disk_inodes();
+    check_mounts();
     check_for_hooks_in_scripts_directory();
     check_for_huge_logs();
     check_easy_skip_cpanelsync();
@@ -346,7 +347,6 @@ sub run {
     check_for_redhat_firewall();
     check_easyapache();
     check_for_ea3_hooks();
-    check_for_home_noexec();
     check_for_unsupported_nat();
     check_for_oracle_linux();
     check_for_usr_local_cpanel_hooks();
@@ -430,10 +430,8 @@ sub run {
     check_for_unsupported_options_in_phpini();    # FB-75397
     check_for_suphp_but_no_fileprotect();
     check_for_missing_var_cpanel_dynamicui_ftp();
-    check_if_backup_dir_is_nfs();
     check_if_hostname_missing_from_localdomains();
     check_for_eximstats_newline();
-    check_for_nfs();
     check_for_processes_killed_by_lfd();
     check_for_processes_killed_by_oom();
     check_for_processes_killed_by_prm();
@@ -684,7 +682,6 @@ sub dnsonly_checks_only {
     check_disk_inodes();
     check_for_gdm();
     check_for_redhat_firewall();
-    check_for_home_noexec();
     check_for_unsupported_nat();
     check_for_oracle_linux();
     check_for_proc_mdstat_recovery();
@@ -4076,15 +4073,59 @@ sub check_for_ea3_hooks {
     }
 }
 
-sub check_for_home_noexec {
-    my @mount = split /\n/, timed_run( 0, 'mount' );
+sub check_mounts {
+    my @mounts = split /\n/, timed_run( 0, 'mount' );
+    return unless scalar @mounts;
+    my $has_nfs = 0;
+    my $old_backups_dir;
+    my $old_backups_dir_nfs;
+    my $new_backups_dir;
+    my $new_backups_dir_nfs;
 
-    for my $mount (@mount) {
+    if (    defined $OLD_BACKUP_CONF->{'BACKUPDIR'}
+        and defined $OLD_BACKUP_CONF->{'BACKUPENABLE'}
+        and $OLD_BACKUP_CONF->{'BACKUPENABLE'} =~ /yes/i ) {
+        $old_backups_dir = $OLD_BACKUP_CONF->{'BACKUPDIR'};
+        $old_backups_dir .= '/' unless substr( $old_backups_dir, -1 ) eq '/';
+    }
+    if (    defined $NEW_BACKUP_CONF->{'BACKUPDIR'}
+        and defined $NEW_BACKUP_CONF->{'BACKUPENABLE'}
+        and $NEW_BACKUP_CONF->{'BACKUPENABLE'} =~ /yes/i ) {
+        $new_backups_dir = $NEW_BACKUP_CONF->{'BACKUPDIR'};
+        $new_backups_dir .= '/' unless substr( $new_backups_dir, -1 ) eq '/';
+    }
+
+    for my $mount (@mounts) {
+        my $nfs_mount_path;
+        if ( $mount =~ m{ on \s ([^\s]+) \s type \s nfs[34]? \s }xms ) {
+            $nfs_mount_path = $1;
+            $nfs_mount_path .= '/' unless substr( $nfs_mount_path, -1 ) eq '/';
+            $has_nfs = 1;
+            if ( $old_backups_dir and index( $old_backups_dir, $nfs_mount_path ) == 0 ) {
+                $old_backups_dir_nfs = 1;
+            }
+            if ( $new_backups_dir and index( $new_backups_dir, $nfs_mount_path ) == 0 ) {
+                $new_backups_dir_nfs = 1;
+            }
+        }
         if ( $mount =~ m{ \s on \s (/home([^\s]?)) \s (:?.*) noexec }xms ) {
             my $noexec_partition = $1;
             print_warn('mounted noexec: ');
             print_warning($noexec_partition);
         }
+    }
+
+    if ($has_nfs) {
+        print_warn('NFS: ');
+        print_warning('filesystem(s) with NFS detected.');
+    }
+    if ($old_backups_dir_nfs) {
+        print_warn('Backups: ');
+        print_warning("$old_backups_dir is NFS (used by old backup system)");
+    }
+    if ($new_backups_dir_nfs) {
+        print_warn('Backups: ');
+        print_warning("$new_backups_dir is NFS (used by new backup system)");
     }
 }
 
@@ -6713,72 +6754,6 @@ sub check_for_missing_var_cpanel_dynamicui_ftp {
     }
 }
 
-sub check_if_backup_dir_is_nfs {
-    my $old_backups_dir;
-    my $new_backups_dir;
-    my $cpbackup_conf;
-    my $config;
-    my $old_backups_dir_nfs = 0;
-    my $new_backups_dir_nfs = 0;
-
-    if ( -e '/etc/cpbackup.conf' ) {
-        open my $file_fh, '<', '/etc/cpbackup.conf';
-        while (<$file_fh>) {
-            local $/;
-            $cpbackup_conf = <$file_fh>;
-        }
-        close $file_fh;
-    }
-
-    if ( -e '/var/cpanel/backups/config' ) {
-        open my $file_fh, '<', '/var/cpanel/backups/config';
-        while (<$file_fh>) {
-            local $/;
-            $config = <$file_fh>;
-        }
-        close $file_fh;
-    }
-
-    if ( $cpbackup_conf and $cpbackup_conf =~ /BACKUPENABLE yes/ and $cpbackup_conf =~ /BACKUPDIR (.*)/ ) {
-        $old_backups_dir = $1;
-    }
-
-    if ( $config and $config =~ /BACKUPENABLE: 'yes'/ and $config =~ /BACKUPDIR: (.*)/ ) {
-        $new_backups_dir = $1;
-    }
-
-    my @mount;
-
-    open my $mount_fh, '-|', '/bin/mount' or return;
-    while (<$mount_fh>) {
-        chomp;
-        push @mount, $_;
-    }
-    close $mount_fh;
-
-    for my $mount (@mount) {
-        if ($old_backups_dir) {
-            if ( $mount =~ /$old_backups_dir type nfs / ) {
-                $old_backups_dir_nfs = 1;
-            }
-        }
-        if ($new_backups_dir) {
-            if ( $mount =~ /$new_backups_dir type nfs / ) {
-                $new_backups_dir_nfs = 1;
-            }
-        }
-    }
-
-    if ( $old_backups_dir_nfs == 1 ) {
-        print_warn('Backups: ');
-        print_warning("$old_backups_dir is NFS (used by old backup system)");
-    }
-    if ( $new_backups_dir_nfs == 1 ) {
-        print_warn('Backup: ');
-        print_warning("$new_backups_dir is NFS (used by new backup system)");
-    }
-}
-
 sub check_if_hostname_missing_from_localdomains {
     my $hostname_check = 0;
 
@@ -6824,24 +6799,6 @@ sub check_for_eximstats_newline {
         }
     }
 
-}
-
-sub check_for_nfs {
-    my $has_nfs = 0;
-
-    open my $mount_fh, '-|', '/bin/mount' or return;
-    while (<$mount_fh>) {
-        if (m{ type[ \t] nfs [ \t] }xms) {
-            $has_nfs = 1;
-            last;
-        }
-    }
-    close $mount_fh;
-
-    if ( $has_nfs == 1 ) {
-        print_warn('NFS: ');
-        print_warning('filesystem(s) with NFS detected. This can cause cPanel to load slowly (see ticket 4380977, FB-79549)');
-    }
 }
 
 sub check_for_processes_killed_by_lfd {
