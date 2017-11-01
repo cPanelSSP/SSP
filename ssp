@@ -7651,35 +7651,19 @@ sub check_for_prelink {
 sub check_for_php_selector_incompatibilities {
     return unless $IS_CLOUDLINUX;
 
-    # http://docs.cloudlinux.com/php_selector.html - not compatible with MPM ITK, Mod RUID2, DSO
-    my $php_selector_conf     = '/usr/local/cpanel/base/frontend/x3/dynamicui/dynamicui_lvephpsel.conf';
-    my $php_selector_disabled = 0;
-    if ( -f $php_selector_conf ) {
-        if ( open my $file_fh, '<', $php_selector_conf ) {
-            while (<$file_fh>) {
-                if (/^file=>lvephpsel,skipobj=>1/) {
-                    $php_selector_disabled = 1;
-                    last;
-                }
-            }
-            close $file_fh;
-        }
-    }
-    return if $php_selector_disabled;
-
     if ( defined $APACHE_MODULES->{'mpm_itk_module'} ) {
         print_warn('MPM ITK: ');
-        print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/php_selector.html');
+        print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/index.html?php_selector.html');
     }
 
     if ( defined $APACHE_MODULES->{'ruid2_module'} ) {
         print_warn('Mod Ruid2: ');
-        print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/php_selector.html');
+        print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/index.html?php_selector.html');
     }
 
     if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq 'dso' ) {
         print_warn('DSO PHP handler: ');
-        print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/php_selector.html');
+        print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/index.html?php_selector.html');
     }
 }
 
