@@ -3505,9 +3505,6 @@ sub check_for_non_default_permissions {
         $check{'/usr/local/cpanel/logs/stats_log'}          = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
         $check{'/usr/local/cpanel/logs/tailwatchd_log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
     }
-    else {
-        $check{'/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
-    }
     if ( cpanel_version_is(qw( < 11.49.0.0 )) ) {
         $check{'/var/cpanel/userhomes/cpanelhorde'} = { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' };
     }
@@ -3623,6 +3620,7 @@ sub check_for_non_default_permissions {
             my $test_ref = sub {
                 my $linktarget;
                 if ($is_recursive) {
+                    return if substr( $_, -10 ) eq "quota.user";
                     $linktarget = -l $_ ? readlink($_) : "";
                     return if exists $check{$_} && !exists $check{$_}->{attr_recursive};    # If we check a path directly then we don't need to check it in a recursive sweep.
                     return if exists $check{$linktarget};                                   # Don't check a link target that we've explicitly checked.
