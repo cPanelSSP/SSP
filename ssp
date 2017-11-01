@@ -48,8 +48,9 @@ our $HTTPD_PATH;
 our $CPANEL_VERSION;    # Current cpanel version of system
 our $HOSTNAME;
 our $OS;
-our $IS_CPANEL     = 0;
-our $IS_KERNELCARE = 0;
+our $IS_CPANEL;
+our $IS_CPANEL_SOLO;
+our $IS_KERNELCARE;
 our ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES, $IS_AMAZON, $IS_CLOUDLINUX );
 our $EXTERNAL_IP_ADDRESS;
 our $EXTERNAL_LICENSE_ADDRESS;
@@ -131,6 +132,7 @@ sub init {
     $MYSQL_DATADIR   = get_mysql_datadir();           # needs $MYSQL_CONF
     $MYSQL_ERROR_LOG = get_mysql_error_log();         # needs $MYSQL_CONF
     $IS_CPANEL       = 1 if -d '/usr/local/cpanel';
+    $IS_CPANEL_SOLO  = is_cpanel_solo();
 
     if ($IS_CPANEL) {
         $CPANEL_VERSION = get_cpanel_version();
@@ -822,6 +824,22 @@ sub is_ea4 {
 sub is_kernelcare {
     return 1 if -e '/usr/bin/kcarectl';
     return 0;
+}
+
+sub is_cpanel_solo {
+    my $license_file = '/usr/local/cpanel/cpanel.lisc';
+    my $is_cpanel_solo;
+
+    if ( open my $license_fh, '<', $license_file ) {
+        while (<$license_fh>) {
+            if (m{ \A maxusers: \s 1 \Z }xms) {
+                $is_cpanel_solo = 1;
+                last;
+            }
+        }
+        close $license_fh;
+    }
+    return $is_cpanel_solo;
 }
 
 sub get_cpanel_version {
@@ -6124,6 +6142,10 @@ sub check_for_license_info {
     my $helper_url = "http://" . $host;
     my %license;
 
+    if ($IS_CPANEL_SOLO) {
+        print_info('License: ');
+        print_normal('cPanel Solo (limited to 1 account)');
+    }
     if ( defined($EXTERNAL_IP_ADDRESS) ) {
         my $url = '/?ip=' . $EXTERNAL_IP_ADDRESS;
         $helper_url .= $url;
@@ -6382,9 +6404,15 @@ sub check_for_stupid_touchfile {
 }
 
 sub check_for_dev_sandbox {
-    return if !-e '/var/cpanel/dev_sandbox';
-    print_warn('/var/cpanel/dev_sandbox: ');
-    print_warning('exists! Should NEVER exist on production servers.');
+    my @touchfiles = qw{
+      /var/cpanel/align_memory_to_arch
+      /var/cpanel/dev_sandbox
+    };
+    my @found = grep { -e $_ } @touchfiles;
+    for my $touchfile (@found) {
+        print_warn( $touchfile . ': ' );
+        print_warning('Should NEVER exist on production servers.');
+    }
 }
 
 sub check_for_jail_owner {
