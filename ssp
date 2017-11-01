@@ -308,6 +308,7 @@ sub run {
 
     ## [WARN]
     check_for_license_error();
+    check_var_cpanel_users();
     check_port_hash();
     check_selinux_status();
     check_runlevel();
@@ -334,7 +335,6 @@ sub run {
     check_for_non_default_file_capabilities();
     check_for_non_default_sysctl();
     check_for_stale_lockfiles();
-    check_var_cpanel_users_files_ownership();
     check_root_suspended();
     check_limitsconf();
     check_disk_space();
@@ -371,7 +371,6 @@ sub run {
     check_for_non_default_modsec_rules();
     check_etc_hosts_sanity();
     check_localhost_resolution();
-    check_for_empty_or_missing_files();
     check_for_apache_listen_host_is_localhost();
     check_roundcube_mysql_pass_mismatch();
     check_for_hooks_from_var_cpanel_hooks_yaml();
@@ -3693,17 +3692,16 @@ sub check_for_stale_lockfiles {
     }
 }
 
-sub check_var_cpanel_users_files_ownership {
+sub check_var_cpanel_users {
     my $var_cpanel_users = '/var/cpanel/users';
-    return if !-d $var_cpanel_users;
+    return unless -d $var_cpanel_users;
     return unless opendir( my $dir_fh, $var_cpanel_users );
-    my @files = grep { !m/^(?:\.\.?|root|system|nobody)$/ } readdir $dir_fh;
+    my @files = grep { !m/^(?:\.\.?|root|system|nobody|cp[0-9]{7,8}[a-z]{6})$/ } readdir $dir_fh;
     closedir $dir_fh;
 
     my $group_root_files;
     for my $file (@files) {
         next if ( $file !~ /^[a-z0-9]+$/ );
-        next if ( $file =~ /^cp[0-9]{7,8}[a-z]{6}$/ );    # ticket system creates temporary user in cp12345678abcdef format, ignore these
         my $gid = ( stat( '/var/cpanel/users/' . $file ) )[5];
         if ( $gid == 0 ) {
             $group_root_files .= " $file";
@@ -3713,6 +3711,24 @@ sub check_var_cpanel_users_files_ownership {
     if ($group_root_files) {
         print_warn('/v/c/users file(s) owned by group "root": ');
         print_warning($group_root_files);
+    }
+
+    # No need to continue if no users
+    return unless scalar @files;
+
+    my $userdatadomains = '/etc/userdatadomains';
+    if ( !-e $userdatadomains ) {
+        print_warn('Missing file: ');
+        print_warning("$userdatadomains (new server with no accounts, perhaps)");
+    }
+    elsif ( -f $userdatadomains and -z $userdatadomains ) {
+        print_warn('Empty file: ');
+        print_warning("$userdatadomains (generate it with /scripts/updateuserdatacache --force)");
+    }
+
+    if ( $IS_CPANEL_SOLO and scalar @files > 1 ) {
+        print_crit('License: ');
+        print_critical('found more than 1 account (under /var/cpanel/users) but this is licensed for cPanel Solo!');
     }
 }
 
@@ -5021,28 +5037,6 @@ sub _resolve {
     }
     alarm 0;
     return @results;
-}
-
-sub check_for_empty_or_missing_files {
-    my $var_cpanel_users = '/var/cpanel/users';
-    return if !-d $var_cpanel_users;
-    return unless opendir( my $dir_fh, $var_cpanel_users );
-    my @dir_contents = grep { !/^(\.\.?|cp\d+[a-z]+)$/ } readdir $dir_fh;
-    closedir $dir_fh;
-
-    # if there are no users on the box, don't warn about userdatadomains
-    return if scalar @dir_contents == 0;
-
-    my $userdatadomains = '/etc/userdatadomains';
-
-    if ( !-e $userdatadomains ) {
-        print_warn('Missing file: ');
-        print_warning("$userdatadomains (new server with no accounts, perhaps)");
-    }
-    elsif ( -f $userdatadomains and -z $userdatadomains ) {
-        print_warn('Empty file: ');
-        print_warning("$userdatadomains (generate it with /scripts/updateuserdatacache --force)");
-    }
 }
 
 sub check_for_apache_listen_host_is_localhost {
