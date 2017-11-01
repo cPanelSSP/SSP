@@ -322,7 +322,6 @@ sub run {
     check_for_custom_opt_mods();
     check_for_local_templates();
     check_for_missing_account_suspensions_conf();
-    check_for_local_makecpphp_template();
     check_for_custom_apache_includes();
     check_for_tomcatoptions();
     check_for_sneaky_htaccess();
@@ -362,7 +361,6 @@ sub run {
     check_yum_conf();
     check_for_cpanel_files();
     check_bash_history_for_certain_commands();
-    check_wwwacctconf_for_incorrect_minuid();
     check_roots_cron_for_certain_commands();
     check_for_missing_or_commented_customlog();
     check_for_cpsources_conf();
@@ -383,16 +381,13 @@ sub run {
     check_for_low_ulimit_for_root();
     check_for_fork_bomb_protection();
     check_for_harmful_php_mode_600_cron();
-    check_for_cPanel_lower_than_11_30_7_3();
     check_for_custom_exim_conf_local();
     check_for_maxclients_or_maxrequestworkers_reached();
     check_for_non_default_umask();
     check_for_multiple_imagemagick_installs();
-    check_for_custom_locales();
     check_eximstats_size();
 
     check_for_broken_mysql_tables();
-    check_for_broken_mysql_horde();
     check_for_clock_skew();
     check_for_zlib_h();
     check_if_httpdconf_ipaddrs_exist();
@@ -419,17 +414,14 @@ sub run {
     check_for_uppercase_chars_in_hostname();
     check_for_bad_permissions_on_named_ca();
     check_for_use_compiled_dnsadmin();
-    check_for_mysql_root_pass_with_single_quote();
     check_for_jailshell_additional_mounts_trailing_slash();
     check_for_allow_query_localhost();
     check_for_nocloudlinux_touchfile();
-    check_for_mysql_upgrade_touchfile();
     check_for_stupid_touchfile();
     check_for_phphandler_and_opcode_caching_incompatibility();
     check_for_invalid_HOMEDIR();
     check_for_unsupported_options_in_phpini();    # FB-75397
     check_for_suphp_but_no_fileprotect();
-    check_for_missing_var_cpanel_dynamicui_ftp();
     check_if_hostname_missing_from_localdomains();
     check_for_eximstats_newline();
     check_for_processes_killed_by_lfd();
@@ -452,7 +444,6 @@ sub run {
     check_for_dirs_that_break_ea();
     check_for_extra_uid_0_user();
     check_for_easyparams_attributes();
-    check_for_stale_backup_pidfile();
     check_for_allow_update_in_named_conf();
     check_for_mpm_itk();
     check_for_mod_ruid2();
@@ -588,7 +579,6 @@ sub non_cpanel_checks_only {
     check_for_cloudlinux_mysql_gov();
     check_for_perl_env_var();
     check_for_uppercase_chars_in_hostname();
-    check_for_mysql_root_pass_with_single_quote();
     check_for_nocloudlinux_touchfile();
     check_for_processes_killed_by_lfd();
     check_for_processes_killed_by_oom();
@@ -700,7 +690,6 @@ sub dnsonly_checks_only {
     check_localhost_resolution();
     check_perl_version_less_than_588();
     check_for_fork_bomb_protection();
-    check_for_cPanel_lower_than_11_30_7_3();
     check_for_non_default_umask();
     check_for_clock_skew();
     check_for_percona_rpms();
@@ -1738,6 +1727,7 @@ sub print_cpanel_info {
         print_crit('cPanel Info: ');
         print_critical( "Support for this version of WHM/cPanel " . $expire_info );
         print_critical('         \_ Send customer this premade: "EOL version of cPanel"');
+        print_critical('         \_ Some SSP output may be irrelevant, incomplete, or inaccurate for EOL versions!');
     }
 
     if ( cpanel_version_is(qw ( >= 11.59.0.0 )) && ( $cpanel_tier =~ /current|edge/i || -e '/var/cpanel/feature_toggles/ea4migration' ) ) {
@@ -2084,68 +2074,39 @@ sub print_ea4_php_configuration {
 }
 
 sub _get_installed_ea4_php {
+
+    # Only supports WHM 54+
     return if !$EA4;
     my $php = {};
     my @available_php;
     my @current_php;
     my ( $available_php, $current_php );
-    if ( cpanel_version_is(qw ( >= 11.53 )) ) {
-        (@current_php) = split( /\n/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
-        foreach my $line (@current_php) {
-            my $pkg;
-            if ( $line =~ /DEFAULT PHP: (ea-php\d{1,2})/ ) {
-                $pkg                        = $1;
-                $php->{$pkg}->{default_php} = 1;
-                $php->{default}             = $pkg;
-                next;
-            }
-            if ( $line =~ /(ea-php\d{1,2}) SAPI:\s(\w+)/ ) {
-                $pkg                    = $1;
-                $php->{$pkg}->{handler} = $2;
-                $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
-                foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
-                    if (/PHP\s(\d\.\d+\.\d+)\s\(cli\)\s\(built:\s(\w+\s+\d+\s\d+\s\d+:\d+:\d+)/) {
-                        $php->{$pkg}->{release_version} = $1;
-                        $php->{$pkg}->{build_time}      = $2;
-                        $php->{$pkg}->{build_time} =~ s/  / /;
-                    }
-                    if (/Zend\sEngine\sv(\d+\.\d+\.\d+)/) {
-                        $php->{$pkg}->{zend} = $1;
-                    }
-                }
-
-                # Gather a list of modules for this given PHP Binary
-                @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
-            }
+    (@current_php) = split( /\n/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
+    foreach my $line (@current_php) {
+        my $pkg;
+        if ( $line =~ /DEFAULT PHP: (ea-php\d{1,2})/ ) {
+            $pkg                        = $1;
+            $php->{$pkg}->{default_php} = 1;
+            $php->{default}             = $pkg;
+            next;
         }
-    }
-    else {    # WHM <= 11.52
-        ( $available_php, $current_php ) = split( /\nC/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
-        @available_php = grep { !/handlers/ } split( /\n/, $available_php );
-        @current_php   = grep { !/handlers/ } split( /\n/, $current_php );
-        foreach my $line (@current_php) {
-            if ( $line =~ /(ea-php\d{1,2}):\s(\w+)/m ) {
-                my $pkg = $1;
-                $php->{$pkg}->{handler} = $2;
-                $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
-                if ( $line =~ /DEFAULT/i ) {
-                    $php->{$pkg}->{default_php} = 1;
-                    $php->{default} = $pkg;
+        if ( $line =~ /(ea-php\d{1,2}) SAPI:\s(\w+)/ ) {
+            $pkg                    = $1;
+            $php->{$pkg}->{handler} = $2;
+            $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
+            foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
+                if (/PHP\s(\d\.\d+\.\d+)\s\(cli\)\s\(built:\s(\w+\s+\d+\s\d+\s\d+:\d+:\d+)/) {
+                    $php->{$pkg}->{release_version} = $1;
+                    $php->{$pkg}->{build_time}      = $2;
+                    $php->{$pkg}->{build_time} =~ s/  / /;
                 }
-                foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
-                    if (/PHP\s(\d\.\d+\.\d+)\s\(cli\)\s\(built:\s(\w+\s+\d+\s\d+\s\d+:\d+:\d+)/) {
-                        $php->{$pkg}->{release_version} = $1;
-                        $php->{$pkg}->{build_time}      = $2;
-                        $php->{$pkg}->{build_time} =~ s/  / /;
-                    }
-                    if (/Zend\sEngine\sv(\d+\.\d+\.\d+)/) {
-                        $php->{$pkg}->{zend} = $1;
-                    }
+                if (/Zend\sEngine\sv(\d+\.\d+\.\d+)/) {
+                    $php->{$pkg}->{zend} = $1;
                 }
-
-                # Gather a list of modules for this given PHP Binary
-                @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
             }
+
+            # Gather a list of modules for this given PHP Binary
+            @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
         }
     }
     return $php;
@@ -2607,10 +2568,6 @@ sub print_lsws_info {
     else {
         print_info('LiteSpeed Web Server: ');
         print_warning('non-Enterprise editions of LiteSpeed are NOT directly supported');
-        if ( cpanel_version_is(qw( < 11.59.9999.111 )) ) {
-            print_info('LiteSpeed Web Server: ');
-            print_warning('Only WHM 60 and later support SNI with OpenLiteSpeed - see CPANEL-8151');
-        }
     }
     print_info('LiteSpeed Web Server: ');
     print_warning('whm-server-status is incompatible with LiteSpeed');
@@ -3070,17 +3027,6 @@ sub check_for_missing_account_suspensions_conf {
     }
 }
 
-sub check_for_local_makecpphp_template {
-    return if cpanel_version_is(qw( >= 11.36.0.0 ));    # makecpphp has been removed from 11.36+
-
-    my $makecpphp_local_profile = '/var/cpanel/easy/apache/profile/makecpphp.profile.yaml.local';
-
-    if ( -e $makecpphp_local_profile ) {
-        print_warn('EA3 makecpphp Local Profile: ');
-        print_warning("exists at $makecpphp_local_profile !");
-    }
-}
-
 sub check_for_custom_apache_includes {
     my $include_dir = $EA4 ? '/etc/apache2/conf.d/includes' : '/usr/local/apache/conf/includes';
 
@@ -3309,6 +3255,7 @@ sub check_for_non_default_permissions {
         '/bin/passwd'                           => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
         '/bin/rm'                               => { mode => [ '0755', '0555' ], perms_help => 'File Manager unable to delete files?  This may be why.' },
         '/bin/tar'                              => { mode => ['755'], perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
+        '/scripts'                              => { symlink => '/usr/local/cpanel/scripts', check_missing => 1 },
         '/dev'                                  => { mode => ['0755'], perms_help => 'Breaks many things if non-root users can\'t access this.' },
         '/dev/log'                              => { mode => ['0666'], perms_help => 'CSF RESTRICT_SYSLOG can change this. See ticket 4875833. Non-root users may not be able to log to syslog, including user cron jobs to /var/log/cron.' },
         '/dev/null'                             => { mode => ['0666'], perms_help => 'Breaks many things if non-root users can\'t write to this.' },
@@ -3357,6 +3304,16 @@ sub check_for_non_default_permissions {
         '/usr/local/cpanel/bin/sendmail'        => { mode => ['0755'] },
         '/usr/local/cpanel/cpanel.lisc'         => { mode => ['0644'] },
         '/usr/local/cpanel/cpsanitycheck.so'    => { mode => ['0754'] },
+        '/usr/local/cpanel/logs/cpdavd_error_log' => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
+        '/usr/local/cpanel/logs/cphulkd.log'        => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
+        '/usr/local/cpanel/logs/cphulkd_errors.log' => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
+        '/usr/local/cpanel/logs/cpdavd_error_log'   => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
+        '/usr/local/cpanel/logs/dnsadmin_log'       => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
+        '/usr/local/cpanel/logs/error_log'          => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
+        '/usr/local/cpanel/logs/queueprocd.log'     => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
+        '/usr/local/cpanel/logs/spamd_error_log'    => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
+        '/usr/local/cpanel/logs/stats_log'          => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
+        '/usr/local/cpanel/logs/tailwatchd_log'     => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
         '/usr/local/cpanel/php/cpanel.php'      => { mode => ['0644'] },
         '/usr/local/sbin'                       => { mode => [ '0755', '0711', '0555' ] },
         '/usr/sbin'                             => { mode => [ '0755', '0711', '0555' ] },
@@ -3460,42 +3417,10 @@ sub check_for_non_default_permissions {
         $check{'/lib'}   = { symlink => '/usr/lib',   check_missing => 1 };
         $check{'/lib64'} = { symlink => '/usr/lib64', check_missing => 1 };
         $check{'/run'} = { mode => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
-        $check{'/sbin'}     = { symlink => '/usr/sbin', check_missing => 1 };
-        $check{'/var/lock'} = { symlink => '/run/lock', check_missing => 1 };
-        $check{'/var/run'}  = { symlink => '/run',      check_missing => 1 };
-        if ( cpanel_version_is(qw( >= 11.56.0.12 )) ) {                       # CPANEL-3540
-            $check{'/usr/local/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab', check_missing => 1 };
-        }
-        else {
-            $check{'/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
-        }
-    }
-    if ( cpanel_version_is(qw( >= 11.57.0.0 )) ) {                            # CPANEL-6180 results in these log files having the APPEND-ONLY attribute, so only check other attributes.
-        $check{'/usr/local/cpanel/logs/cpdavd_error_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/cphulkd.log'}        = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/cphulkd_errors.log'} = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/cpdavd_error_log'}   = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/dnsadmin_log'}       = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/error_log'}          = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/queueprocd.log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/spamd_error_log'}    = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/stats_log'}          = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-        $check{'/usr/local/cpanel/logs/tailwatchd_log'}     = { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] };
-    }
-    if ( cpanel_version_is(qw( < 11.49.0.0 )) ) {
-        $check{'/var/cpanel/userhomes/cpanelhorde'} = { mode => [ '0700', '0711' ], user => 'cpanelhorde', group => 'cpanelhorde', perms_help => 'might affect Horde attachments.  See ticket 6139315.' };
-    }
-    if ( cpanel_version_is(qw( < 11.48.2.1 )) ) {
-        $check{'/etc/localdomains'} = { group => 'root' };
-    }
-    if ( ( cpanel_version_is(qw( >= 11.44.0.0 )) && cpanel_version_is(qw( < 11.44.0.8 )) ) || ( cpanel_version_is(qw( >= 11.42.0.0 )) && cpanel_version_is(qw( < 11.42.1.18 )) ) ) {
-        $check{'/usr/local/cpanel/bin/sendmail'} = { mode => ['4755'], perms_help => 'CGIEmail wants suid /u/l/cpanel/bin/sendmail (FB-86561)' };
-    }
-    if ( cpanel_version_is(qw( <= 11.36.0.0 )) ) {
-        $check{'/usr/local/cpanel/bin/cpwrap'} = { mode => ['4755'] };
-    }
-    if ( cpanel_version_is(qw( >= 11.29.0.0)) ) {
-        $check{'/scripts'} = { symlink => '/usr/local/cpanel/scripts', check_missing => 1 };
+        $check{'/sbin'}                  = { symlink => '/usr/sbin',                               check_missing => 1 };
+        $check{'/usr/local/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab', check_missing => 1 };
+        $check{'/var/lock'}              = { symlink => '/run/lock',                               check_missing => 1 };
+        $check{'/var/run'}               = { symlink => '/run',                                    check_missing => 1 };
     }
     if ( defined $CPCONF{'skipawstats'} && $CPCONF{'skipawstats'} == 0 ) {
         $check{'/usr/local/cpanel/3rdparty/bin/awstats.pl'} = { mode => ['0755'] };
@@ -3707,7 +3632,7 @@ sub check_for_non_default_sysctl {
         'fs.enforce_symlinksifowner' => [ [ '0', '1' ], ' - Invalid setting - https://docs.cloudlinux.com/index.html?symlink_owner_match_protection.html' ],
         'fs.protected_hardlinks_create' => [ ['0'], '' ],
         'fs.protected_symlinks_create'  => [ ['0'], ' - Not recommended. Can prevent creation of access_log symlink in user homes, or switching to a custom cPanel style that is not owned by the "linksafe" group.' ],
-        'kernel.user_ptrace'            => [ ['1'], ' - Disabling this may break remote logins from WHM Transfer Tool - see FB-167393' ],
+        'kernel.user_ptrace'            => [ ['1'], '' ],
         'net.ipv4.tcp_tw_recycle'       => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
         'net.ipv4.tcp_tw_reuse'         => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
         'vm.overcommit_memory' => [ [ '0', '1' ], ' - Seeing "Out of memory" but there is free memory and no limits?  This might be why.' ],
@@ -4214,14 +4139,8 @@ sub get_mysql_datadir {
 
 sub check_mysqld_warnings_errors {
     foreach my $mysql_err ( grep { m{\[(?:err)}i } split( /\n/, timed_run_trap_stderr( 0, 'mysqld', '-u', 'mysql', '--help' ) ) ) {
-        if ( $mysql_err =~ m/open_files_limit=/ ) {
-            print_warn('MySQL config missing newline [see FB-64008]: ');
-            print_warning($mysql_err);
-        }
-        else {
-            print_warn('MySQL config errors: ');
-            print_warning($mysql_err);
-        }
+        print_warn('MySQL config errors: ');
+        print_warning($mysql_err);
     }
 }
 
@@ -4615,8 +4534,6 @@ sub check_for_cpanel_files {
       /usr/local/cpanel/cpsrvd
     );
 
-    push @files, '/usr/local/cpanel/cpsrvd-ssl' if cpanel_version_is(qw( < 11.45.0.0 ));
-
     for my $file (@files) {
         if ( !-e $file ) {
             print_warn('Critical file missing: ');
@@ -4659,33 +4576,6 @@ sub check_bash_history_for_certain_commands {
 
         print_warn("$bash_history commands found: ");
         print_warning($commands);
-    }
-}
-
-sub check_wwwacctconf_for_incorrect_minuid {
-    return unless cpanel_version_is(qw ( < 11.52.0.0 ));
-    my $wwwacctconf = '/etc/wwwacct.conf';
-    my $minuid;
-    my $floor = 500;
-    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {
-        $floor = 1000;
-    }
-
-    if ( open my $wwwacctconf_fh, '<', $wwwacctconf ) {
-        while (<$wwwacctconf_fh>) {
-            if (/^MINUID\s(\d+)$/) {
-                $minuid = $1;
-                last;
-            }
-        }
-        close $wwwacctconf_fh;
-    }
-
-    if ( $minuid and $minuid =~ /\d+/ ) {
-        if ( $minuid < $floor or $minuid > 60000 ) {
-            print_warn('MINUID: ');
-            print_warning("$wwwacctconf has a MINUID value of $minuid (must be between $floor and 60000 or will cause issues with account creation)");
-        }
     }
 }
 
@@ -5253,11 +5143,6 @@ sub check_mysql_config {
         'sqlmode'             => { help    => 'Seeing "Field \'ssl_cipher\' doesn\'t have a default value"? That may be why.' }
     );
 
-    if ( cpanel_version_is(qw( >= 11.49.0.0 )) && cpanel_version_is(qw( < 11.50.0.11 )) ) {
-        $mysqld_checks{'collationdatabase'} = { help => 'Did horde fail to convert to SQLite?  See FB-127529.' };
-        $mysqld_checks{'collationserver'}   = { help => 'Did horde fail to convert to SQLite?  See FB-127529.' };
-    }
-
     if ( defined( $MEMINFO->{memtotal} ) ) {
         my $mem_mb = int( $MEMINFO->{memtotal} / 1024 );
 
@@ -5343,14 +5228,8 @@ sub check_cpanel_config {
         'skipparentcheck'             => { default       => '0', help => 'Allows other applications to run the cPanel and admin binaries' },
     );
 
-    if ( cpanel_version_is(qw( < 11.48.0.0 )) ) {
-        $cpanel_checks{'use_safe_quotas'} = { default => '0', help => 'Suspend and unsuspend will be slow. Useless on RHEL/CentOS 5+. See FB-63646.' };
-    }
     if ( defined $CPCONF{'maxmem'} && $CPCONF{'maxmem'} < 512 ) {
         $cpanel_checks{'maxmem'} = { default => '512', help => '< 512M, phpmyadmin may fail' };
-    }
-    if ( cpanel_version_is(qw( < 11.42.1.1 )) ) {
-        $cpanel_checks{'cgihidepass'} = { default => '0', help => 'Tweak setting "Hide login password from cgi scripts" is enabled. Expired passwords can\'t be changed via WHM. See FB-87581' };
     }
 
     for my $check ( sort( keys(%cpanel_checks) ) ) {
@@ -5399,14 +5278,6 @@ sub check_for_fork_bomb_protection {
         print_warn('Fork Bomb Protection: ');
         print_warning('enabled!');
     }
-}
-
-# cPanel < 11.30.7.3 will get YAML::Syck from CPAN. If this causes any issues with
-# Cpanel::TaskQueue, cPanel's position is to upgrade cPanel.
-sub check_for_cPanel_lower_than_11_30_7_3 {
-    return if cpanel_version_is(qw( >= 11.30.7.3 ));
-    print_warn('cPanel: ');
-    print_warning('versions < 11.30.7.3 use YAML::Syck from CPAN. If problems with Cpanel::TaskQueue, cPanel needs to be updated');
 }
 
 sub check_for_custom_exim_conf_local {
@@ -5602,74 +5473,6 @@ sub check_for_ea4_mismatch {
     }
 }
 
-sub check_for_custom_locales {
-    return if cpanel_version_is(qw( >= 11.46.0.0 ));
-
-    my $locale_dir = '/var/cpanel/locale.local';
-    my $users_dir  = '/var/cpanel/users';
-
-    return if !-d $locale_dir;
-    return if !-d $users_dir;
-
-    my ( @locale_dir_contents_tmp, @locale_dir_contents, @cpanel_users );
-    my ( @users_locales, @users_with_custom_locales );
-
-    opendir( my $locale_dir_fh, $locale_dir );
-    @locale_dir_contents_tmp = grep { !/^\.\.?$/ } readdir $locale_dir_fh;
-    closedir $locale_dir_fh;
-
-    return if !@locale_dir_contents_tmp;
-
-    for my $locale (@locale_dir_contents_tmp) {
-        $locale =~ s/^en\.yaml//g;    # doesn't seem to be affected
-        $locale =~ s/\.yaml$//g;
-        push @locale_dir_contents, $locale;
-    }
-
-    return if !@locale_dir_contents;
-
-    opendir( my $users_dir_fh, $users_dir );
-    @cpanel_users = grep { !/^(\.\.?|root)$/ } readdir $users_dir_fh;
-    closedir $users_dir_fh;
-
-    return if !@cpanel_users;
-
-    my $user_count = scalar @cpanel_users;
-
-    if ( $user_count > 2000 ) {
-        print_warn("cpusers: ");
-        print_warning("Too many cpanel users to do locales check: $user_count");
-        return;
-    }
-
-    for my $user (@cpanel_users) {
-        if ( open my $user_fh, '<', "${users_dir}/${user}" ) {
-            while (<$user_fh>) {
-                if (/^LOCALE=(.*)/) {
-                    push @users_locales, "${user}:${1}\n";
-                    last;
-                }
-            }
-            close $user_fh;
-        }
-    }
-
-    return if !@users_locales;
-
-    for my $user_and_locale (@users_locales) {
-        my ( $user, $locale ) = split /:/, $user_and_locale;
-        if ( grep { m{ \A $locale \z }xms } @locale_dir_contents ) {
-            push @users_with_custom_locales, $user;
-            last;
-        }
-    }
-
-    return if !@users_with_custom_locales;
-
-    print_warn('locales: ');
-    print_warning('Users with custom locales detected. Seeing "500 Internal Server Error" in cPanel? May be related, check FB-62119 and FB-107865');
-}
-
 sub check_eximstats_size {
     return if !-d $MYSQL_DATADIR;
 
@@ -5721,18 +5524,6 @@ sub check_for_broken_mysql_tables {
         print_warn('mysql: broken tables - ');
         my $tables = scalar keys( %{ $broken{$_} } ) > 4 ? 'More than 4!' : join( ' ', sort( keys( %{ $broken{$_} } ) ) );
         print_warning( $_ . ' [ ' . $tables . ' ]' );
-    }
-}
-
-sub check_for_broken_mysql_horde {
-    return if cpanel_version_is(qw ( >= 11.50.0.12 ));
-    chomp( my $columns = timed_run( 0, 'mysql', '-NBe', 'SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=\'horde\' AND table_name=\'horde_alarms\'' ) );
-    return if !defined $columns;
-    return unless $columns =~ m{ \A [0-9]+ \z }xms;
-    $columns += 0;
-    if ( $columns > 0 && $columns != 12 ) {
-        print_warn('mysql: ');
-        print_warning('horde.horde_alarms does not contain the expected 12 columns, this will prevent Horde conversion to SQLite in WHM 11.50.  See FB-189785.');
     }
 }
 
@@ -6415,6 +6206,8 @@ sub check_for_usr_local_include_jpeglib_h {
 }
 
 sub check_for_bw_module_and_more_than_1024_vhosts {
+
+    # Remove on EA3 deprecation
     my $httpdconf = $EA4 ? '/etc/apache2/conf/httpd.conf' : '/usr/local/apache/conf/httpd.conf';
     return if !-f $httpdconf;
     return unless defined $APACHE_MODULES->{'bw_module'};
@@ -6523,30 +6316,6 @@ sub check_for_use_compiled_dnsadmin {
     print_warning('Tweak Settings >> Use compiled dnsadmin: On. If problems with custom dnsadmin modules, see if disabling helps (see ticket 4279965)');
 }
 
-sub check_for_mysql_root_pass_with_single_quote {
-    my $mycnf = '/root/.my.cnf';
-    return if !-f $mycnf;
-
-    my $has_single_quote = 0;
-
-    open my $mycnf_fh, '<', $mycnf or return;
-    while (<$mycnf_fh>) {
-        chomp;
-        if (/^(?:[\s\t]?)+pass(?:[^"']+)?=(?:[\s\t]?)+(?:["']?)(.*)(?:["']+)$/) {
-            if ( $1 =~ /'/ ) {
-                $has_single_quote = 1;
-                last;
-            }
-        }
-    }
-    close $mycnf_fh;
-
-    if ( $has_single_quote && $has_single_quote == 1 ) {
-        print_warn('mysql root user: ');
-        print_warning('pass has single quote. This breaks mysql_upgrade! mysql.proc issues? See FB-73533');
-    }
-}
-
 sub check_for_jailshell_additional_mounts_trailing_slash {
     my $mounts_file = '/var/cpanel/jailshell-additional-mounts';
     return if ( !-f $mounts_file );
@@ -6603,14 +6372,6 @@ sub check_for_nocloudlinux_touchfile {
     if ( -e '/var/cpanel/nocloudlinux' ) {
         print_warn('/var/cpanel/nocloudlinux: ');
         print_warning('exists! CloudLinux cannot be installed when this file is present.');
-    }
-}
-
-sub check_for_mysql_upgrade_touchfile {
-    return if cpanel_version_is(qw( >= 11.46.1.0 ));
-    if ( -e '/var/cpanel/mysql_upgrade_in_progress' ) {
-        print_warn('/var/cpanel/mysql_upgrade_in_progress: ');
-        print_warning('exists! See FB-113349.');
     }
 }
 
@@ -6717,13 +6478,6 @@ sub check_for_suphp_but_no_fileprotect {
             print_warn('suPHP: ');
             print_warning("enabled, but /var/cpanel/fileprotect not found. New users' public_htmls will be user:user");
         }
-    }
-}
-
-sub check_for_missing_var_cpanel_dynamicui_ftp {
-    if ( not -e '/etc/ftpddisable' and not -e '/etc/ftpserverdisable' and not -e '/var/cpanel/dynamicui/ftp' ) {
-        print_warn('FTP: ');
-        print_warning('touchfile /v/c/dynamicui/ftp appears to be missing. FTP options may not appear in cPanel. See FB-83193');
     }
 }
 
@@ -7056,6 +6810,7 @@ sub check_for_missing_groups {
       cpanelphpmyadmin
       cpanelphppgadmin
       cpanelroundcube
+      cpses
       mail
       mailman
       mailnull
@@ -7067,10 +6822,6 @@ sub check_for_missing_groups {
       sshd
       wheel
     );
-
-    push @groups, 'cpses'           if cpanel_version_is(qw( >= 11.39.0.0 ));    # Added in 11.40?
-    push @groups, 'cpanellogaholic' if cpanel_version_is(qw( < 11.47.0.0 ));     # Removed in 11.48
-    push @groups, 'cpanelhorde'     if cpanel_version_is(qw( < 11.49.0.0 ));     # Removed in 11.50
 
     my $missing_groups;
 
@@ -7219,46 +6970,6 @@ sub check_for_easyparams_attributes {
     }
 }
 
-sub check_for_stale_backup_pidfile {
-    return if cpanel_version_is(qw( >= 11.50.1 ));    # FB-82849
-    my @pidfiles = qw(
-      /var/cpanel/backuprunning
-      /var/cpanel/new_backuprunning
-    );
-
-    my $found_pid     = 0;
-    my $found_process = 0;
-
-    for my $pidfile (@pidfiles) {
-        my $pid;
-
-        if ( -s $pidfile ) {
-            open my $fh, '<', $pidfile or return;
-            chomp( $pid = readline $fh );
-            close $fh;
-
-            for my $process (@PROCESS_LIST) {
-                if ( $process =~ / \A [^ ]+ \s+ $pid \s+ (.*) /xms ) {
-                    $found_pid = 1;
-                    if ( ( $pidfile eq '/var/cpanel/backuprunning' ) && ( $process =~ m# (/usr/local/cpanel)?/scripts/cpbackup(\s|$)# ) ) {
-                        $found_process = 1;
-                        last;
-                    }
-                    if ( ( $pidfile eq '/var/cpanel/new_backuprunning' ) && ( $process =~ m# /usr/local/cpanel/bin/backup(\s|$)# ) ) {
-                        $found_process = 1;
-                        last;
-                    }
-                }
-            }
-
-            if ( $found_pid == 1 and $found_process == 0 ) {
-                print_warn('Backups: ');
-                print_warning("pid $pid from $pidfile does not match a valid backup process");
-            }
-        }
-    }
-}
-
 sub check_for_allow_update_in_named_conf {
     my $namedconf = '/etc/named.conf';
     return if !-e $namedconf;
@@ -7283,10 +6994,6 @@ sub check_for_allow_update_in_named_conf {
 
 sub check_for_mpm_itk {
     return unless defined $APACHE_MODULES->{'mpm_itk_module'};
-    if ( defined $EA3_SUEXEC && $EA3_SUEXEC ) {
-        print_warn('MPM ITK: ');
-        print_warning('enabled with suEXEC. This can break redirects like /cpanel. See FB-83405.');
-    }
     if ( defined $APACHE_MODULES->{'security_module'} || defined $APACHE_MODULES->{'security2_module'} ) {
         print_warn('MPM ITK: ');
         print_warning('is incompatible with ModSecurity SecDataDir (collections) until EA-4093 is resolved.');
@@ -7469,7 +7176,7 @@ sub check_for_broken_mysqldump {
     # tested via MySQL55-client
     if ( $exit_status && $exit_status != 1 ) {
         print_warn("$md: ");
-        print_warning('may be broken (exit status != 1). This can cause eximstats and other issues. See FB-98477');
+        print_warning('may be broken (exit status != 1).');
     }
 }
 
