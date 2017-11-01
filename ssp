@@ -5551,9 +5551,10 @@ sub check_for_kernel_headers_rpm {
 sub check_for_broken_rpm {
     return unless @RPM_LIST;
     my %rpms = (    # 'rpm name' => { check => ['check1', 'check2', ...], help => 'Additional info' } # Check types should be ordered by dependency, first failure skips other checks for that RPM.
-        'bind-chroot'  => { check => ['exists'], help => 'Not supported -- should be removed and excluded in yum.conf. See https://documentation.cpanel.net/display/ALD/Installation+Guide+-+Customize+Your+Installation#InstallationGuide-CustomizeYourInstallation-Excludepackages' },
-        'cpuspeed'     => { check => ['exists'], help => 'May cause yum to crash when updating kernel. Send "cpuspeed detected" predefined response.' },
-        'crypto-utils' => { check => ['exists'], help => '"certwatch" cron job can send email notices regarding expiring certificates.  See ticket 7822329.' },
+        'bind-chroot'        => { check => ['exists'], help => 'Not supported -- should be removed and excluded in yum.conf. See https://documentation.cpanel.net/display/ALD/Installation+Guide+-+Customize+Your+Installation#InstallationGuide-CustomizeYourInstallation-Excludepackages' },
+        'cpuspeed'           => { check => ['exists'], help => 'May cause yum to crash when updating kernel. Send "cpuspeed detected" predefined response.' },
+        'crypto-utils'       => { check => ['exists'], help => '"certwatch" cron job can send email notices regarding expiring certificates.  See ticket 7822329.' },
+        'letsencrypt-cpanel' => { check => ['exists'], help => 'Third-party FleetSSL Let\'s Encrypt plugin -- no direct support provided, use "3RDP - FleetSSL/LetsEncrypt" predef if relevant.' },
     );
 
     if ($EA4) {
