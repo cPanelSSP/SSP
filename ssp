@@ -7929,7 +7929,7 @@ sub print_generic_hack_predef {
     print_crit( '!! [ ' . $name . ' ] !! ' );
     print_critical('Escalate this ticket to L3 using "ESCALATE - Hacked Server Response for L1/L2->L3 ( All Analysts )"');
     print_critical("\tIf the malware appears to be the direct cause of services being down, please escalate the ticket to Emergency status.");
-
+    print_critical("\tL1/L2: LOG OUT NOW.  Do not execute any other commands unless given explicit directions by an L3 analyst or Supervisor.");
 }
 
 sub print_ebury_cdorked_predef {
