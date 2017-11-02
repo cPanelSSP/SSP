@@ -4523,6 +4523,7 @@ sub check_yum_conf {
     my $exclude_wget;
     my $distroverpkg_cloudlinux;
     my $plugins_enabled;    # Default is disabled, needs to be explicitly enabled.
+    my $assumeyes_enabled;
 
     if ( !-e $yum_conf ) {
         print_warn('YUM: ');
@@ -4552,6 +4553,9 @@ sub check_yum_conf {
             if (m{ \A \s* plugins \s* = \s* 1 \s* \Z }xmsi) {
                 $plugins_enabled = 1;
             }
+            if (m{ \A \s* assumeyes \s* = \s* 1 \s* \Z }xmsi) {
+                $assumeyes_enabled = 1;
+            }
         }
         close $file_fh;
     }
@@ -4560,17 +4564,14 @@ sub check_yum_conf {
         print_warn('YUM: ');
         print_warning( $yum_conf . ' contains multiple "exclude" lines!' );
     }
-
     if ($exclude_kernel) {
         print_warn('YUM: ');
         print_warning( $yum_conf . ' may be excluding kernel updates!' );
     }
-
     if ($exclude_wget) {
         print_warn('YUM: ');
         print_warning( $yum_conf . ' may be excluding wget updates!' );
     }
-
     if ($distroverpkg_cloudlinux) {
         print_warn('YUM: ');
         print_warning( $yum_conf . ' has distroverpkg=cloudlinux-release set! This is known to cause issues with installing EA4, see ticket 7615739.' );
@@ -4578,6 +4579,10 @@ sub check_yum_conf {
     unless ($plugins_enabled) {
         print_warn('YUM: ');
         print_warning( 'plugins=1 not found in ' . $yum_conf . '.  If plugins are disabled it can cause issues with RHEL/CloudLinux and EA4 updates.' );
+    }
+    if ($assumeyes_enabled) {
+        print_crit('YUM: ');
+        print_critical( 'assumeyes=1 found in ' . $yum_conf . '.  Be careful, yum will NOT ask to proceed before performing an action.  Use "--assumeno" option to override.' );
     }
 }
 
