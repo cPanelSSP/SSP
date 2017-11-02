@@ -3764,7 +3764,7 @@ sub check_disk_space {
     for my $line (@df) {
         if ( $line =~ m{ (9[8-9]|100)% \s+ (.*) }xms ) {
             my ( $usage, $partition ) = ( $1, $2 );
-            unless ( $line =~ m{ /virtfs | /(dev|proc) \z }xms ) {
+            unless ( $line =~ m{ / (virtfs|dev|proc|optimumcache) \z }xms ) {
                 print_warn('Disk space: ');
                 print_warning("${usage}% usage on $partition");
             }
@@ -3777,7 +3777,7 @@ sub check_disk_inodes {
     for my $line (@df_i) {
         if ( $line =~ m{ (9[8-9]|100)% \s+ (.*) }xms ) {
             my ( $usage, $partition ) = ( $1, $2 );
-            unless ( $line =~ m{ /virtfs | /(dev|proc) \z }xms ) {
+            unless ( $line =~ m{ / (virtfs|dev|proc|optimumcache) \z }xms ) {
                 print_warn('Disk inodes: ');
                 print_warning("${usage}% inode usage on $partition");
             }
