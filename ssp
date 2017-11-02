@@ -4044,6 +4044,13 @@ sub check_mounts {
             print_warn('mounted noexec: ');
             print_warning($noexec_partition);
         }
+        if ( $mount =~ m{ \s /usr/local/cpanel/cpanel.lisc \s }xms ) {
+            print_generic_hack_predef('C.PRO');
+            print_critical('The following mount entry was found:');
+            print_critical( "\t" . $mount );
+            print_critical("\tL3: See ticket 7790559 for reference.");
+            print_critical();
+        }
     }
 
     if ($has_nfs) {
