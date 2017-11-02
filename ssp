@@ -4517,34 +4517,40 @@ sub check_for_system_mem_below_required {
 }
 
 sub check_yum_conf {
-    my $yum_conf                = '/etc/yum.conf';
-    my $exclude_line_count      = 0;
-    my $exclude_kernel          = 0;
-    my $exclude_wget            = 0;
-    my $distroverpkg_cloudlinux = 0;
+    my $yum_conf           = '/etc/yum.conf';
+    my $exclude_line_count = 0;
+    my $exclude_kernel;
+    my $exclude_wget;
+    my $distroverpkg_cloudlinux;
+    my $plugins_enabled;    # Default is disabled, needs to be explicitly enabled.
 
     if ( !-e $yum_conf ) {
         print_warn('YUM: ');
         print_warning( $yum_conf . ' is missing!' );
+        return;
     }
     elsif ( -z $yum_conf ) {
         print_warn('YUM: ');
         print_warning( $yum_conf . ' is empty!' );
+        return;
     }
 
     if ( open my $file_fh, '<', $yum_conf ) {
         while (<$file_fh>) {
-            if (/^\s*exclude/i) {
-                $exclude_line_count += 1;
+            if (m{ \A \s* exclude }xmsi) {
+                $exclude_line_count++;
             }
-            if (/^\s*exclude.*kernel/) {
+            if (m{ \A  \s* exclude .* kernel }xmsi) {
                 $exclude_kernel = 1;
             }
-            if (/^\s*exclude.*wget/) {
+            if (m{ \A \s* exclude .* wget }xmsi) {
                 $exclude_wget = 1;
             }
-            if (/^\s*distroverpkg=cloudlinux-release/) {
+            if (m{ \A \s* distroverpkg \s* = \s* cloudlinux-release }xmsi) {
                 $distroverpkg_cloudlinux = 1;
+            }
+            if (m{ \A \s* plugins \s* = \s* 1 \s* \Z }xmsi) {
+                $plugins_enabled = 1;
             }
         }
         close $file_fh;
@@ -4552,22 +4558,26 @@ sub check_yum_conf {
 
     if ( $exclude_line_count > 1 ) {
         print_warn('YUM: ');
-        print_warning('yum.conf contains multiple "exclude" lines!');
+        print_warning( $yum_conf . ' contains multiple "exclude" lines!' );
     }
 
     if ($exclude_kernel) {
         print_warn('YUM: ');
-        print_warning('yum.conf may be excluding kernel updates!');
+        print_warning( $yum_conf . ' may be excluding kernel updates!' );
     }
 
     if ($exclude_wget) {
         print_warn('YUM: ');
-        print_warning('yum.conf may be excluding wget updates!');
+        print_warning( $yum_conf . ' may be excluding wget updates!' );
     }
 
     if ($distroverpkg_cloudlinux) {
         print_warn('YUM: ');
-        print_warning('yum.conf has distroverpkg=cloudlinux-release set! This is known to cause issues with installing EA4, see ticket 7615739.');
+        print_warning( $yum_conf . ' has distroverpkg=cloudlinux-release set! This is known to cause issues with installing EA4, see ticket 7615739.' );
+    }
+    unless ($plugins_enabled) {
+        print_warn('YUM: ');
+        print_warning( 'plugins=1 not found in ' . $yum_conf . '.  If plugins are disabled it can cause issues with RHEL/CloudLinux and EA4 updates.' );
     }
 }
 
