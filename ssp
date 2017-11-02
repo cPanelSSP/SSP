@@ -295,7 +295,7 @@ sub run {
     check_for_clustering();
     check_sysinfo();
     check_for_remote_mysql();
-    print_if_using_mydns_or_nsd();
+    print_if_using_other_dns();
     print_mysql_version();
     print_backups_info();
     print_mailserver_info();
@@ -656,6 +656,7 @@ sub dnsonly_checks_only {
     print_uptime();
     check_for_clustering();
     check_sysinfo();
+    print_if_using_other_dns();
 
     ## [WARN]
     check_port_hash();
@@ -2208,14 +2209,21 @@ sub check_for_remote_mysql {
     }
 }
 
-sub print_if_using_mydns_or_nsd {
-    if ( -e '/var/cpanel/usensd' ) {
-        print_info('DNS Service: ');
-        print_normal('NSD ');
+sub print_if_using_other_dns {
+    my %service = (
+        '/var/cpanel/usensd'      => 'NSD',
+        '/var/cpanel/usemydns'    => 'MyDNS',
+        '/var/cpanel/usepowerdns' => 'PowerDNS',
+    );
+    my @found = grep { -e $_ } keys(%service);
+    return unless scalar @found;
+    if ( scalar @found > 1 ) {
+        print_warn('DNS Service: ');
+        print_warning( 'multiple service touchfiles found! [ ' . join( ' ', @found ) . ' ]' );
     }
-    elsif ( -e '/var/cpanel/usemydns' ) {
+    for my $found (@found) {
         print_info('DNS Service: ');
-        print_normal('MyDNS ');
+        print_normal( $service{$found} );
     }
 }
 
