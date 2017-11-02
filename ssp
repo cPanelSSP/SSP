@@ -3305,6 +3305,8 @@ sub check_for_non_default_permissions {
         '/tmp'                                  => { mode => ['1777'] },
         '/usr'                                  => { mode => ['0755'] },
         '/usr/bin'                              => { mode => [ '0755', '0711', '0555' ] },
+        '/usr/bin/crontab'                      => { mode => [ '6755', '4755', '4711', '4555', '4511' ] },
+        '/usr/bin/passwd'                       => { mode => [ '6755', '4755', '4711', '4555', '4511' ] },
         '/usr/bin/screen'                       => { mode => ['2755'], group => 'screen', perms_help => 'Screen doesn\'t work? Run "rpm --setugids screen && rpm --setperms screen" to fix.' },
         '/usr/local'                            => { mode => ['0755'] },
         '/usr/local/apache'                     => { mode => ['0755'], attr_recursive => 1 },
@@ -3321,7 +3323,7 @@ sub check_for_non_default_permissions {
         '/usr/local/cpanel/bin/sendmail'        => { mode => ['0755'] },
         '/usr/local/cpanel/cpanel.lisc'         => { mode => ['0644'] },
         '/usr/local/cpanel/cpsanitycheck.so'    => { mode => ['0754'] },
-        '/usr/local/cpanel/logs/cpdavd_error_log' => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
+        '/usr/local/cpanel/logs/cpdavd_error_log'   => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
         '/usr/local/cpanel/logs/cphulkd.log'        => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
         '/usr/local/cpanel/logs/cphulkd_errors.log' => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
         '/usr/local/cpanel/logs/cpdavd_error_log'   => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
@@ -3422,12 +3424,11 @@ sub check_for_non_default_permissions {
     }
 
     if ( version_compare( $OS_VERSION, qw( < 7 ) ) or $IS_AMAZON ) {
-        $check{'/bin'}             = { mode    => [ '0755', '0711', '0555' ] };
-        $check{'/bin/crontab'}     = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
-        $check{'/sbin'}            = { mode    => [ '0755', '0711', '0555' ] };
-        $check{'/usr/bin/crontab'} = { mode    => [ '6755', '4755', '4711', '4555' ] };
-        $check{'/usr/bin/passwd'}  = { mode    => [ '6755', '4755', '4555', '4511' ] };
-        $check{'/var/run'}         = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
+        $check{'/bin'}         = { mode    => [ '0755', '0711', '0555' ] };
+        $check{'/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
+        $check{'/bin/passwd'}  = { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' };
+        $check{'/sbin'}        = { mode    => [ '0755', '0711', '0555' ] };
+        $check{'/var/run'}     = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
     }
     if ( version_compare( $OS_VERSION, qw( >= 7 ) ) and not $IS_AMAZON ) {    # https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Migration_Planning_Guide/sect-Red_Hat_Enterprise_Linux-Migration_Planning_Guide-File_System_Layout.html
         $check{'/bin'}   = { symlink => '/usr/bin',   check_missing => 1 };
@@ -3436,6 +3437,7 @@ sub check_for_non_default_permissions {
         $check{'/run'} = { mode => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
         $check{'/sbin'}                  = { symlink => '/usr/sbin',                               check_missing => 1 };
         $check{'/usr/local/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab', check_missing => 1 };
+        $check{'/usr/local/bin/passwd'}  = { symlink => '/usr/local/cpanel/bin/jail_safe_passwd',  check_missing => 1 };
         $check{'/var/lock'}              = { symlink => '/run/lock',                               check_missing => 1 };
         $check{'/var/run'}               = { symlink => '/run',                                    check_missing => 1 };
     }
