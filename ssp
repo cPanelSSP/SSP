@@ -756,6 +756,7 @@ sub all_malware_checks {
     check_for_jynx2_rootkit();            # malware
     check_for_cdorked_A();                # malware
     check_for_cdorked_B();                # malware
+    check_for_libkeyutils_symbols();      # malware
     check_for_libkeyutils_filenames();    # malware
                                           #check_for_unowned_libkeyutils_files($LIBKEYUTILS_FILES_REF);    # malware
     check_sha1_sigs_libkeyutils();        # malware
@@ -7921,20 +7922,15 @@ sub check_for_opt_gsi_tools {
 ##############################
 
 sub build_libkeyutils_file_list {
-    my @dirs = qw( /lib /lib64 );
+    my @dirs = qw( /lib /lib/tls /lib64 /lib64/tls );
     my @libkeyutils_files;
 
     for my $dir (@dirs) {
-        next if !-e $dir;
+        next unless -e $dir;
         opendir( my $dir_fh, $dir );
         while ( my $file = readdir($dir_fh) ) {
             if ( $file =~ /^libkeyutils\.so\.(?:[\.\d]+)?$/ ) {
-                if ( $dir eq '/lib' ) {
-                    push @libkeyutils_files, "/lib/$file\n";
-                }
-                elsif ( $dir eq '/lib64' ) {
-                    push @libkeyutils_files, "/lib64/$file\n";
-                }
+                push @libkeyutils_files, "$dir/$file\n";
             }
         }
         closedir $dir_fh;
@@ -8027,6 +8023,18 @@ sub check_for_cdorked_B {
     }
 }
 
+sub check_for_libkeyutils_symbols {
+    local $ENV{'LD_DEBUG'} = 'symbols';
+    my $output = timed_run_trap_stderr( 0, '/bin/true' );
+    return unless $output;
+    if ( $output =~ m{ /lib(keyutils|ns[25]|pw[35]|s[bl]r)\. }xms ) {
+        print_ebury_cdorked_predef('EBURY');
+        print_critical('Ebury libs were found in symbol table.');
+        print_critical('To confirm: LD_DEBUG=symbols /bin/true 2>&1 | egrep \'/lib(keyutils|ns[25]|pw[35]|s[bl]r)\\.\'');
+        print_critical();
+    }
+}
+
 sub check_for_libkeyutils_filenames {
     my $bad_libs;
     my @dirs  = qw( /lib /lib64 );
@@ -8040,6 +8048,8 @@ sub check_for_libkeyutils_filenames {
       libns5.so
       libpw3.so
       libpw5.so
+      libsbr.so
+      libslr.so
       tls/libkeyutils.so.1
       tls/libkeyutils.so.1.5
     );
@@ -8067,17 +8077,26 @@ sub check_sha1_sigs_libkeyutils {
     my $trojaned_lib;
 
     # p67 http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf
+    # https://www.welivesecurity.com/2017/10/30/windigo-ebury-update-2/
     my @checksums = qw(
       09c8af3be4327c83d4a7124a678bbc81e12a1de4
+      17c40a5858a960afd19cc02e07d3a5e47b2ab97a
       1a9aff1c382a3b139b33eeccae954c2d65b64b90
+      1d3aafce8cd33cf51b70558f33ec93c431a982ef
       267d010201c9ff53f8dc3fb0a48145dc49f9de1e
+      27ed035556abeeb98bc305930403a977b3cc2909
       2e571993e30742ee04500fbe4a40ee1b14fa64d7
+      2f382e31f9ef3d418d31653ee124c0831b6c2273
       2fc132440bafdbc72f4d4e8dcb2563cc0a6e096b
       39ec9e03edb25f1c316822605fe4df7a7b1ad94a
       3c5ec2ab2c34ab57cba69bb2dee70c980f26b1bf
+      44b340e90edba5b9f8cf7c2c01cb4d45dd25189e
       471ee431030332dd636b8af24a428556ee72df37
       58f185c3fe9ce0fb7cac9e433fb881effad31421
+      5c796dc566647dd0db74d5934e768f4dfafec0e5
       5d3ec6c11c6b5e241df1cc19aa16d50652d6fac0
+      615c6b022b0fac1ff55c25b0b16eb734aed02734
+      7248e6eada8c70e7a468c0b6df2b50cf8c562bc9
       74aa801c89d07fa5a9692f8b41cb8dd07e77e407
       7adb38bf14e6bf0d5b24fa3f3c9abed78c061ad1
       899b860ef9d23095edb6b941866ea841d64d1b26
@@ -8085,14 +8104,20 @@ sub check_sha1_sigs_libkeyutils {
       8f75993437c7983ac35759fe9c5245295d411d35
       9bb6a2157c6a3df16c8d2ad107f957153cba4236
       9e2af0910676ec2d92a1cad1ab89029bc036f599
+      a559ee8c2662ee8f3c73428eaf07d4359958cae1
       a7b8d06e2c0124e6a0f9021c911b36166a8b62c5
       adfcd3e591330b8d84ab2ab1f7814d36e7b7e89f
+      b58725399531d38ca11d8651213b4483130c98e2
       b8508fc2090ddee19a19659ea794f60f0c2c23ff
       bbce62fb1fc8bbed9b40cfb998822c266b95d148
       bf1466936e3bd882b47210c12bf06cb63f7624c0
+      d4eeada3d10e76a5755c6913267135a925e195c6
       d552cbadee27423772a37c59cb830703b757f35e
       e14da493d70ea4dd43e772117a61f9dbcff2c41c
       e2a204636bda486c43d7929880eba6cb8e9de068
+      e8d392ae654f62c6d44c00da517f6f4f33fe7fed
+      e8d3c369a231552081b14076cf3eaa8901e6a1cd
+      eb352686d1050b4ab289fe8f5b78f39e9c85fb55
       f1ada064941f77929c49c8d773cbad9c15eba322
     );
 
@@ -8110,7 +8135,7 @@ sub check_sha1_sigs_libkeyutils {
         print_ebury_cdorked_predef('EBURY');
         print_critical('The following file(s) were found:');
         print_critical( "\t" . $trojaned_lib );
-        print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/");
+        print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/ and https://www.welivesecurity.com/2017/10/30/windigo-ebury-update-2/");
         print_critical();
     }
 }
