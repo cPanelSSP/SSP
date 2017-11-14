@@ -2511,8 +2511,8 @@ sub print_ftpserver_info {
 
 sub print_exim_info {
     if ( defined $EXIMLOCALOPTS->{acl_delay_unknown_hosts} && $EXIMLOCALOPTS->{acl_delay_unknown_hosts} ) {
-        my $info = '20 second SMTP delay active (by default) for unknown hosts and spam, see DOC-6092.';
-        my $disabled;
+        my $info     = '20 second SMTP delay active (by default) for unknown hosts and spam, see DOC-6092.';
+        my $disabled = '';
         if ( defined $EXIMLOCALOPTS->{acl_dont_delay_greylisting_trusted_hosts} && $EXIMLOCALOPTS->{acl_dont_delay_greylisting_trusted_hosts} ) {
             $disabled .= ' [Greylisting Trusted Hosts]';
         }
