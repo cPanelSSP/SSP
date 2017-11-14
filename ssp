@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.167';
+our $VERSION = '4.99.168';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -48,8 +48,9 @@ our $HTTPD_PATH;
 our $CPANEL_VERSION;    # Current cpanel version of system
 our $HOSTNAME;
 our $OS;
-our $IS_CPANEL     = 0;
-our $IS_KERNELCARE = 0;
+our $IS_CPANEL;
+our $IS_CPANEL_SOLO;
+our $IS_KERNELCARE;
 our ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES, $IS_AMAZON, $IS_CLOUDLINUX );
 our $EXTERNAL_IP_ADDRESS;
 our $EXTERNAL_LICENSE_ADDRESS;
@@ -131,6 +132,7 @@ sub init {
     $MYSQL_DATADIR   = get_mysql_datadir();           # needs $MYSQL_CONF
     $MYSQL_ERROR_LOG = get_mysql_error_log();         # needs $MYSQL_CONF
     $IS_CPANEL       = 1 if -d '/usr/local/cpanel';
+    $IS_CPANEL_SOLO  = is_cpanel_solo();
 
     if ($IS_CPANEL) {
         $CPANEL_VERSION = get_cpanel_version();
@@ -293,7 +295,7 @@ sub run {
     check_for_clustering();
     check_sysinfo();
     check_for_remote_mysql();
-    print_if_using_mydns_or_nsd();
+    print_if_using_other_dns();
     print_mysql_version();
     print_backups_info();
     print_mailserver_info();
@@ -306,6 +308,7 @@ sub run {
 
     ## [WARN]
     check_for_license_error();
+    check_var_cpanel_users();
     check_port_hash();
     check_selinux_status();
     check_runlevel();
@@ -332,7 +335,6 @@ sub run {
     check_for_non_default_file_capabilities();
     check_for_non_default_sysctl();
     check_for_stale_lockfiles();
-    check_var_cpanel_users_files_ownership();
     check_root_suspended();
     check_limitsconf();
     check_disk_space();
@@ -369,7 +371,6 @@ sub run {
     check_for_non_default_modsec_rules();
     check_etc_hosts_sanity();
     check_localhost_resolution();
-    check_for_empty_or_missing_files();
     check_for_apache_listen_host_is_localhost();
     check_roundcube_mysql_pass_mismatch();
     check_for_hooks_from_var_cpanel_hooks_yaml();
@@ -655,6 +656,7 @@ sub dnsonly_checks_only {
     print_uptime();
     check_for_clustering();
     check_sysinfo();
+    print_if_using_other_dns();
 
     ## [WARN]
     check_port_hash();
@@ -754,6 +756,7 @@ sub all_malware_checks {
     check_for_jynx2_rootkit();            # malware
     check_for_cdorked_A();                # malware
     check_for_cdorked_B();                # malware
+    check_for_libkeyutils_symbols();      # malware
     check_for_libkeyutils_filenames();    # malware
                                           #check_for_unowned_libkeyutils_files($LIBKEYUTILS_FILES_REF);    # malware
     check_sha1_sigs_libkeyutils();        # malware
@@ -822,6 +825,22 @@ sub is_ea4 {
 sub is_kernelcare {
     return 1 if -e '/usr/bin/kcarectl';
     return 0;
+}
+
+sub is_cpanel_solo {
+    my $license_file = '/usr/local/cpanel/cpanel.lisc';
+    my $is_cpanel_solo;
+
+    if ( open my $license_fh, '<', $license_file ) {
+        while (<$license_fh>) {
+            if (m{ \A maxusers: \s 1 \Z }xms) {
+                $is_cpanel_solo = 1;
+                last;
+            }
+        }
+        close $license_fh;
+    }
+    return $is_cpanel_solo;
 }
 
 sub get_cpanel_version {
@@ -2191,14 +2210,21 @@ sub check_for_remote_mysql {
     }
 }
 
-sub print_if_using_mydns_or_nsd {
-    if ( -e '/var/cpanel/usensd' ) {
-        print_info('DNS Service: ');
-        print_normal('NSD ');
+sub print_if_using_other_dns {
+    my %service = (
+        '/var/cpanel/usensd'      => 'NSD',
+        '/var/cpanel/usemydns'    => 'MyDNS',
+        '/var/cpanel/usepowerdns' => 'PowerDNS',
+    );
+    my @found = grep { -e $_ } keys(%service);
+    return unless scalar @found;
+    if ( scalar @found > 1 ) {
+        print_warn('DNS Service: ');
+        print_warning( 'multiple service touchfiles found! [ ' . join( ' ', @found ) . ' ]' );
     }
-    elsif ( -e '/var/cpanel/usemydns' ) {
+    for my $found (@found) {
         print_info('DNS Service: ');
-        print_normal('MyDNS ');
+        print_normal( $service{$found} );
     }
 }
 
@@ -2485,8 +2511,8 @@ sub print_ftpserver_info {
 
 sub print_exim_info {
     if ( defined $EXIMLOCALOPTS->{acl_delay_unknown_hosts} && $EXIMLOCALOPTS->{acl_delay_unknown_hosts} ) {
-        my $info = '20 second SMTP delay active (by default) for unknown hosts and spam, see DOC-6092.';
-        my $disabled;
+        my $info     = '20 second SMTP delay active (by default) for unknown hosts and spam, see DOC-6092.';
+        my $disabled = '';
         if ( defined $EXIMLOCALOPTS->{acl_dont_delay_greylisting_trusted_hosts} && $EXIMLOCALOPTS->{acl_dont_delay_greylisting_trusted_hosts} ) {
             $disabled .= ' [Greylisting Trusted Hosts]';
         }
@@ -3288,6 +3314,8 @@ sub check_for_non_default_permissions {
         '/tmp'                                  => { mode => ['1777'] },
         '/usr'                                  => { mode => ['0755'] },
         '/usr/bin'                              => { mode => [ '0755', '0711', '0555' ] },
+        '/usr/bin/crontab'                      => { mode => [ '6755', '4755', '4711', '4555', '4511' ] },
+        '/usr/bin/passwd'                       => { mode => [ '6755', '4755', '4711', '4555', '4511' ] },
         '/usr/bin/screen'                       => { mode => ['2755'], group => 'screen', perms_help => 'Screen doesn\'t work? Run "rpm --setugids screen && rpm --setperms screen" to fix.' },
         '/usr/local'                            => { mode => ['0755'] },
         '/usr/local/apache'                     => { mode => ['0755'], attr_recursive => 1 },
@@ -3304,7 +3332,7 @@ sub check_for_non_default_permissions {
         '/usr/local/cpanel/bin/sendmail'        => { mode => ['0755'] },
         '/usr/local/cpanel/cpanel.lisc'         => { mode => ['0644'] },
         '/usr/local/cpanel/cpsanitycheck.so'    => { mode => ['0754'] },
-        '/usr/local/cpanel/logs/cpdavd_error_log' => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
+        '/usr/local/cpanel/logs/cpdavd_error_log'   => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
         '/usr/local/cpanel/logs/cphulkd.log'        => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
         '/usr/local/cpanel/logs/cphulkd_errors.log' => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
         '/usr/local/cpanel/logs/cpdavd_error_log'   => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
@@ -3405,12 +3433,11 @@ sub check_for_non_default_permissions {
     }
 
     if ( version_compare( $OS_VERSION, qw( < 7 ) ) or $IS_AMAZON ) {
-        $check{'/bin'}             = { mode    => [ '0755', '0711', '0555' ] };
-        $check{'/bin/crontab'}     = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
-        $check{'/sbin'}            = { mode    => [ '0755', '0711', '0555' ] };
-        $check{'/usr/bin/crontab'} = { mode    => [ '6755', '4755', '4711', '4555' ] };
-        $check{'/usr/bin/passwd'}  = { mode    => [ '6755', '4755', '4555', '4511' ] };
-        $check{'/var/run'}         = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
+        $check{'/bin'}         = { mode    => [ '0755', '0711', '0555' ] };
+        $check{'/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
+        $check{'/bin/passwd'}  = { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' };
+        $check{'/sbin'}        = { mode    => [ '0755', '0711', '0555' ] };
+        $check{'/var/run'}     = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
     }
     if ( version_compare( $OS_VERSION, qw( >= 7 ) ) and not $IS_AMAZON ) {    # https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Migration_Planning_Guide/sect-Red_Hat_Enterprise_Linux-Migration_Planning_Guide-File_System_Layout.html
         $check{'/bin'}   = { symlink => '/usr/bin',   check_missing => 1 };
@@ -3419,6 +3446,7 @@ sub check_for_non_default_permissions {
         $check{'/run'} = { mode => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
         $check{'/sbin'}                  = { symlink => '/usr/sbin',                               check_missing => 1 };
         $check{'/usr/local/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab', check_missing => 1 };
+        $check{'/usr/local/bin/passwd'}  = { symlink => '/usr/local/cpanel/bin/jail_safe_passwd',  check_missing => 1 };
         $check{'/var/lock'}              = { symlink => '/run/lock',                               check_missing => 1 };
         $check{'/var/run'}               = { symlink => '/run',                                    check_missing => 1 };
     }
@@ -3675,17 +3703,16 @@ sub check_for_stale_lockfiles {
     }
 }
 
-sub check_var_cpanel_users_files_ownership {
+sub check_var_cpanel_users {
     my $var_cpanel_users = '/var/cpanel/users';
-    return if !-d $var_cpanel_users;
+    return unless -d $var_cpanel_users;
     return unless opendir( my $dir_fh, $var_cpanel_users );
-    my @files = grep { !m/^(?:\.\.?|root|system|nobody)$/ } readdir $dir_fh;
+    my @files = grep { !m/^(?:\.\.?|root|system|nobody|cp[0-9]{7,8}[a-z]{6})$/ } readdir $dir_fh;
     closedir $dir_fh;
 
     my $group_root_files;
     for my $file (@files) {
         next if ( $file !~ /^[a-z0-9]+$/ );
-        next if ( $file =~ /^cp[0-9]{7,8}[a-z]{6}$/ );    # ticket system creates temporary user in cp12345678abcdef format, ignore these
         my $gid = ( stat( '/var/cpanel/users/' . $file ) )[5];
         if ( $gid == 0 ) {
             $group_root_files .= " $file";
@@ -3695,6 +3722,24 @@ sub check_var_cpanel_users_files_ownership {
     if ($group_root_files) {
         print_warn('/v/c/users file(s) owned by group "root": ');
         print_warning($group_root_files);
+    }
+
+    # No need to continue if no users
+    return unless scalar @files;
+
+    my $userdatadomains = '/etc/userdatadomains';
+    if ( !-e $userdatadomains ) {
+        print_warn('Missing file: ');
+        print_warning("$userdatadomains (new server with no accounts, perhaps)");
+    }
+    elsif ( -f $userdatadomains and -z $userdatadomains ) {
+        print_warn('Empty file: ');
+        print_warning("$userdatadomains (generate it with /scripts/updateuserdatacache --force)");
+    }
+
+    if ( $IS_CPANEL_SOLO and scalar @files > 1 ) {
+        print_crit('License: ');
+        print_critical('found more than 1 account (under /var/cpanel/users) but this is licensed for cPanel Solo!');
     }
 }
 
@@ -3728,7 +3773,7 @@ sub check_disk_space {
     for my $line (@df) {
         if ( $line =~ m{ (9[8-9]|100)% \s+ (.*) }xms ) {
             my ( $usage, $partition ) = ( $1, $2 );
-            unless ( $line =~ m{ /virtfs | /(dev|proc) \z }xms ) {
+            unless ( $line =~ m{ / (virtfs|dev|proc|optimumcache) \z }xms ) {
                 print_warn('Disk space: ');
                 print_warning("${usage}% usage on $partition");
             }
@@ -3741,7 +3786,7 @@ sub check_disk_inodes {
     for my $line (@df_i) {
         if ( $line =~ m{ (9[8-9]|100)% \s+ (.*) }xms ) {
             my ( $usage, $partition ) = ( $1, $2 );
-            unless ( $line =~ m{ /virtfs | /(dev|proc) \z }xms ) {
+            unless ( $line =~ m{ / (virtfs|dev|proc|optimumcache) \z }xms ) {
                 print_warn('Disk inodes: ');
                 print_warning("${usage}% inode usage on $partition");
             }
@@ -4009,6 +4054,13 @@ sub check_mounts {
             my $noexec_partition = $1;
             print_warn('mounted noexec: ');
             print_warning($noexec_partition);
+        }
+        if ( $mount =~ m{ \s /usr/local/cpanel/cpanel.lisc \s }xms ) {
+            print_generic_hack_predef('C.PRO');
+            print_critical('The following mount entry was found:');
+            print_critical( "\t" . $mount );
+            print_critical("\tL3: See ticket 7790559 for reference.");
+            print_critical();
         }
     }
 
@@ -4474,34 +4526,44 @@ sub check_for_system_mem_below_required {
 }
 
 sub check_yum_conf {
-    my $yum_conf                = '/etc/yum.conf';
-    my $exclude_line_count      = 0;
-    my $exclude_kernel          = 0;
-    my $exclude_wget            = 0;
-    my $distroverpkg_cloudlinux = 0;
+    my $yum_conf           = '/etc/yum.conf';
+    my $exclude_line_count = 0;
+    my $exclude_kernel;
+    my $exclude_wget;
+    my $distroverpkg_cloudlinux;
+    my $plugins_enabled;    # Default is disabled, needs to be explicitly enabled.
+    my $assumeyes_enabled;
 
     if ( !-e $yum_conf ) {
         print_warn('YUM: ');
         print_warning( $yum_conf . ' is missing!' );
+        return;
     }
     elsif ( -z $yum_conf ) {
         print_warn('YUM: ');
         print_warning( $yum_conf . ' is empty!' );
+        return;
     }
 
     if ( open my $file_fh, '<', $yum_conf ) {
         while (<$file_fh>) {
-            if (/^\s*exclude/i) {
-                $exclude_line_count += 1;
+            if (m{ \A \s* exclude }xmsi) {
+                $exclude_line_count++;
             }
-            if (/^\s*exclude.*kernel/) {
+            if (m{ \A  \s* exclude .* kernel }xmsi) {
                 $exclude_kernel = 1;
             }
-            if (/^\s*exclude.*wget/) {
+            if (m{ \A \s* exclude .* wget }xmsi) {
                 $exclude_wget = 1;
             }
-            if (/^\s*distroverpkg=cloudlinux-release/) {
+            if (m{ \A \s* distroverpkg \s* = \s* cloudlinux-release }xmsi) {
                 $distroverpkg_cloudlinux = 1;
+            }
+            if (m{ \A \s* plugins \s* = \s* 1 \s* \Z }xmsi) {
+                $plugins_enabled = 1;
+            }
+            if (m{ \A \s* assumeyes \s* = \s* 1 \s* \Z }xmsi) {
+                $assumeyes_enabled = 1;
             }
         }
         close $file_fh;
@@ -4509,22 +4571,27 @@ sub check_yum_conf {
 
     if ( $exclude_line_count > 1 ) {
         print_warn('YUM: ');
-        print_warning('yum.conf contains multiple "exclude" lines!');
+        print_warning( $yum_conf . ' contains multiple "exclude" lines!' );
     }
-
     if ($exclude_kernel) {
         print_warn('YUM: ');
-        print_warning('yum.conf may be excluding kernel updates!');
+        print_warning( $yum_conf . ' may be excluding kernel updates!' );
     }
-
     if ($exclude_wget) {
         print_warn('YUM: ');
-        print_warning('yum.conf may be excluding wget updates!');
+        print_warning( $yum_conf . ' may be excluding wget updates!' );
     }
-
     if ($distroverpkg_cloudlinux) {
         print_warn('YUM: ');
-        print_warning('yum.conf has distroverpkg=cloudlinux-release set! This is known to cause issues with installing EA4, see ticket 7615739.');
+        print_warning( $yum_conf . ' has distroverpkg=cloudlinux-release set! This is known to cause issues with installing EA4, see ticket 7615739.' );
+    }
+    unless ($plugins_enabled) {
+        print_warn('YUM: ');
+        print_warning( 'plugins=1 not found in ' . $yum_conf . '.  If plugins are disabled it can cause issues with RHEL/CloudLinux and EA4 updates.' );
+    }
+    if ($assumeyes_enabled) {
+        print_crit('YUM: ');
+        print_critical( 'assumeyes=1 found in ' . $yum_conf . '.  Be careful, yum will NOT ask to proceed before performing an action.  Use "--assumeno" option to override.' );
     }
 }
 
@@ -5003,28 +5070,6 @@ sub _resolve {
     }
     alarm 0;
     return @results;
-}
-
-sub check_for_empty_or_missing_files {
-    my $var_cpanel_users = '/var/cpanel/users';
-    return if !-d $var_cpanel_users;
-    return unless opendir( my $dir_fh, $var_cpanel_users );
-    my @dir_contents = grep { !/^(\.\.?|cp\d+[a-z]+)$/ } readdir $dir_fh;
-    closedir $dir_fh;
-
-    # if there are no users on the box, don't warn about userdatadomains
-    return if scalar @dir_contents == 0;
-
-    my $userdatadomains = '/etc/userdatadomains';
-
-    if ( !-e $userdatadomains ) {
-        print_warn('Missing file: ');
-        print_warning("$userdatadomains (new server with no accounts, perhaps)");
-    }
-    elsif ( -f $userdatadomains and -z $userdatadomains ) {
-        print_warn('Empty file: ');
-        print_warning("$userdatadomains (generate it with /scripts/updateuserdatacache --force)");
-    }
 }
 
 sub check_for_apache_listen_host_is_localhost {
@@ -6124,6 +6169,10 @@ sub check_for_license_info {
     my $helper_url = "http://" . $host;
     my %license;
 
+    if ($IS_CPANEL_SOLO) {
+        print_info('License: ');
+        print_normal('cPanel Solo (limited to 1 account)');
+    }
     if ( defined($EXTERNAL_IP_ADDRESS) ) {
         my $url = '/?ip=' . $EXTERNAL_IP_ADDRESS;
         $helper_url .= $url;
@@ -6382,9 +6431,15 @@ sub check_for_stupid_touchfile {
 }
 
 sub check_for_dev_sandbox {
-    return if !-e '/var/cpanel/dev_sandbox';
-    print_warn('/var/cpanel/dev_sandbox: ');
-    print_warning('exists! Should NEVER exist on production servers.');
+    my @touchfiles = qw{
+      /var/cpanel/align_memory_to_arch
+      /var/cpanel/dev_sandbox
+    };
+    my @found = grep { -e $_ } @touchfiles;
+    for my $touchfile (@found) {
+        print_warn( $touchfile . ': ' );
+        print_warning('Should NEVER exist on production servers.');
+    }
 }
 
 sub check_for_jail_owner {
@@ -7867,20 +7922,15 @@ sub check_for_opt_gsi_tools {
 ##############################
 
 sub build_libkeyutils_file_list {
-    my @dirs = qw( /lib /lib64 );
+    my @dirs = qw( /lib /lib/tls /lib64 /lib64/tls );
     my @libkeyutils_files;
 
     for my $dir (@dirs) {
-        next if !-e $dir;
+        next unless -e $dir;
         opendir( my $dir_fh, $dir );
         while ( my $file = readdir($dir_fh) ) {
             if ( $file =~ /^libkeyutils\.so\.(?:[\.\d]+)?$/ ) {
-                if ( $dir eq '/lib' ) {
-                    push @libkeyutils_files, "/lib/$file\n";
-                }
-                elsif ( $dir eq '/lib64' ) {
-                    push @libkeyutils_files, "/lib64/$file\n";
-                }
+                push @libkeyutils_files, "$dir/$file\n";
             }
         }
         closedir $dir_fh;
@@ -7898,7 +7948,7 @@ sub print_generic_hack_predef {
     print_crit( '!! [ ' . $name . ' ] !! ' );
     print_critical('Escalate this ticket to L3 using "ESCALATE - Hacked Server Response for L1/L2->L3 ( All Analysts )"');
     print_critical("\tIf the malware appears to be the direct cause of services being down, please escalate the ticket to Emergency status.");
-
+    print_critical("\tL1/L2: LOG OUT NOW.  Do not execute any other commands unless given explicit directions by an L3 analyst or Supervisor.");
 }
 
 sub print_ebury_cdorked_predef {
@@ -7973,6 +8023,18 @@ sub check_for_cdorked_B {
     }
 }
 
+sub check_for_libkeyutils_symbols {
+    local $ENV{'LD_DEBUG'} = 'symbols';
+    my $output = timed_run_trap_stderr( 0, '/bin/true' );
+    return unless $output;
+    if ( $output =~ m{ /lib(keyutils|ns[25]|pw[35]|s[bl]r)\. }xms ) {
+        print_ebury_cdorked_predef('EBURY');
+        print_critical('Ebury libs were found in symbol table.');
+        print_critical('To confirm: LD_DEBUG=symbols /bin/true 2>&1 | egrep \'/lib(keyutils|ns[25]|pw[35]|s[bl]r)\\.\'');
+        print_critical();
+    }
+}
+
 sub check_for_libkeyutils_filenames {
     my $bad_libs;
     my @dirs  = qw( /lib /lib64 );
@@ -7986,6 +8048,8 @@ sub check_for_libkeyutils_filenames {
       libns5.so
       libpw3.so
       libpw5.so
+      libsbr.so
+      libslr.so
       tls/libkeyutils.so.1
       tls/libkeyutils.so.1.5
     );
@@ -8013,17 +8077,26 @@ sub check_sha1_sigs_libkeyutils {
     my $trojaned_lib;
 
     # p67 http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf
+    # https://www.welivesecurity.com/2017/10/30/windigo-ebury-update-2/
     my @checksums = qw(
       09c8af3be4327c83d4a7124a678bbc81e12a1de4
+      17c40a5858a960afd19cc02e07d3a5e47b2ab97a
       1a9aff1c382a3b139b33eeccae954c2d65b64b90
+      1d3aafce8cd33cf51b70558f33ec93c431a982ef
       267d010201c9ff53f8dc3fb0a48145dc49f9de1e
+      27ed035556abeeb98bc305930403a977b3cc2909
       2e571993e30742ee04500fbe4a40ee1b14fa64d7
+      2f382e31f9ef3d418d31653ee124c0831b6c2273
       2fc132440bafdbc72f4d4e8dcb2563cc0a6e096b
       39ec9e03edb25f1c316822605fe4df7a7b1ad94a
       3c5ec2ab2c34ab57cba69bb2dee70c980f26b1bf
+      44b340e90edba5b9f8cf7c2c01cb4d45dd25189e
       471ee431030332dd636b8af24a428556ee72df37
       58f185c3fe9ce0fb7cac9e433fb881effad31421
+      5c796dc566647dd0db74d5934e768f4dfafec0e5
       5d3ec6c11c6b5e241df1cc19aa16d50652d6fac0
+      615c6b022b0fac1ff55c25b0b16eb734aed02734
+      7248e6eada8c70e7a468c0b6df2b50cf8c562bc9
       74aa801c89d07fa5a9692f8b41cb8dd07e77e407
       7adb38bf14e6bf0d5b24fa3f3c9abed78c061ad1
       899b860ef9d23095edb6b941866ea841d64d1b26
@@ -8031,14 +8104,20 @@ sub check_sha1_sigs_libkeyutils {
       8f75993437c7983ac35759fe9c5245295d411d35
       9bb6a2157c6a3df16c8d2ad107f957153cba4236
       9e2af0910676ec2d92a1cad1ab89029bc036f599
+      a559ee8c2662ee8f3c73428eaf07d4359958cae1
       a7b8d06e2c0124e6a0f9021c911b36166a8b62c5
       adfcd3e591330b8d84ab2ab1f7814d36e7b7e89f
+      b58725399531d38ca11d8651213b4483130c98e2
       b8508fc2090ddee19a19659ea794f60f0c2c23ff
       bbce62fb1fc8bbed9b40cfb998822c266b95d148
       bf1466936e3bd882b47210c12bf06cb63f7624c0
+      d4eeada3d10e76a5755c6913267135a925e195c6
       d552cbadee27423772a37c59cb830703b757f35e
       e14da493d70ea4dd43e772117a61f9dbcff2c41c
       e2a204636bda486c43d7929880eba6cb8e9de068
+      e8d392ae654f62c6d44c00da517f6f4f33fe7fed
+      e8d3c369a231552081b14076cf3eaa8901e6a1cd
+      eb352686d1050b4ab289fe8f5b78f39e9c85fb55
       f1ada064941f77929c49c8d773cbad9c15eba322
     );
 
@@ -8056,7 +8135,7 @@ sub check_sha1_sigs_libkeyutils {
         print_ebury_cdorked_predef('EBURY');
         print_critical('The following file(s) were found:');
         print_critical( "\t" . $trojaned_lib );
-        print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/");
+        print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/ and https://www.welivesecurity.com/2017/10/30/windigo-ebury-update-2/");
         print_critical();
     }
 }
