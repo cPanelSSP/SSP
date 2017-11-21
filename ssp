@@ -29,7 +29,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.168';
+our $VERSION = '4.99.169';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -1639,7 +1639,7 @@ sub check_for_ea3 {
     return if -l $httpd_path;
     return unless -f $httpd_path;
     print_crit('EasyApache 3: ');
-    print_critical('Support is ending in early 2018.');
+    print_critical('Support is ending in 2018.');
     print_critical('         \_ Send customer this premade: "MIGRATION - EA3 EOL"');
 }
 
@@ -2114,7 +2114,7 @@ sub _get_installed_ea4_php {
             $php->{$pkg}->{handler} = $2;
             $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
             foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
-                if (/PHP\s(\d\.\d+\.\d+)\s\(cli\)\s\(built:\s(\w+\s+\d+\s\d+\s\d+:\d+:\d+)/) {
+                if (m{ PHP \s (\d+\.[^\s]+) \s \(cli\) \s \(built: \s (\w+\s+\d+\s\d+\s\d+:\d+:\d+) }xms) {    # Must accept release version like 7.1.11 or 7.2.0RC5
                     $php->{$pkg}->{release_version} = $1;
                     $php->{$pkg}->{build_time}      = $2;
                     $php->{$pkg}->{build_time} =~ s/  / /;
@@ -3773,10 +3773,9 @@ sub check_disk_space {
     for my $line (@df) {
         if ( $line =~ m{ (9[8-9]|100)% \s+ (.*) }xms ) {
             my ( $usage, $partition ) = ( $1, $2 );
-            unless ( $line =~ m{ / (virtfs|dev|proc|optimumcache) \z }xms ) {
-                print_warn('Disk space: ');
-                print_warning("${usage}% usage on $partition");
-            }
+            next if $partition =~ m{ / ( virtfs | ( dev | proc | optimumcache ) \Z ) }xms;
+            print_warn('Disk space: ');
+            print_warning( $usage . '% usage on ' . $partition );
         }
     }
 }
