@@ -1639,7 +1639,7 @@ sub check_for_ea3 {
     return if -l $httpd_path;
     return unless -f $httpd_path;
     print_crit('EasyApache 3: ');
-    print_critical('Support is ending in early 2018.');
+    print_critical('Support is ending in 2018.');
     print_critical('         \_ Send customer this premade: "MIGRATION - EA3 EOL"');
 }
 
