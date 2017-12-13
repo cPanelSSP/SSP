@@ -5384,7 +5384,7 @@ sub check_for_custom_exim_conf_local {
     if ( open my $file_fh, '<', $exim_conf_local ) {
         while ( my $line = <$file_fh> ) {
             chomp $line;
-            if ( $line !~ m{ \A ( @ | $ ) }xms ) {
+            if ( $line !~ m{ \A ( @ | \Z | chunking_advertise_hosts="" \Z ) }xms ) {
                 $is_customized = 1;
                 last;
             }
