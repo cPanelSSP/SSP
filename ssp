@@ -1735,11 +1735,12 @@ sub print_cpanel_info {
     print_normal($output);
 
     my %eol = (
-        '56' => { expires => 1509408001, text => 'October 31, 2017' },
-        '58' => { expires => 1501459201, text => 'July 31, 2017' },
-        '60' => { expires => 1509408001, text => 'October 31, 2017' },
-        '62' => { expires => 1522454401, text => 'March 31, 2018' },
-        '64' => { expires => 1505952001, text => 'September 21, 2017' },
+        '56' => { expires => 0, text => 'October 31, 2017' },
+        '58' => { expires => 0, text => 'July 31, 2017' },
+        '60' => { expires => 0, text => 'October 31, 2017' },
+        '62' => { expires => 0, text => 'March 31, 2018' },
+        '64' => { expires => 0, text => 'September 21, 2017' },
+        '66' => { expires => 0, text => 'December 4, 2017' },
     );
     my @ver = split( /\./, $CPANEL_VERSION, 4 );
     my $major_ver = ( defined $ver[1] && $ver[1] =~ /^\d+$/ ) ? $ver[1] : undef;
