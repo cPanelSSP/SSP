@@ -2120,18 +2120,17 @@ sub _get_installed_ea4_php {
     (@current_php) = split( /\n/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
     foreach my $line (@current_php) {
         my $pkg;
-        if ( $line =~ /DEFAULT PHP: (ea-php\d{1,2})/ ) {
+        if ( $line =~ m{ DEFAULT \s PHP: \s (\S+) }xms ) {
             $pkg                        = $1;
             $php->{$pkg}->{default_php} = 1;
             $php->{default}             = $pkg;
             next;
         }
-        if ( $line =~ /(ea-php\d{1,2}) SAPI:\s(\w+)/ ) {
-            $pkg                    = $1;
+        if ( $line =~ m{ (\S+) \s SAPI: \s (\S+) }xms ) {
+            $pkg = $1;
             $php->{$pkg}->{handler} = $2;
-            $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
-            foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
-                if (m{ PHP \s (\d+\.[^\s]+) \s \(cli\) \s \(built: \s (\w+\s+\d+\s\d+\s\d+:\d+:\d+) }xms) {    # Must accept release version like 7.1.11 or 7.2.0RC5
+            foreach ( split( /\n/, timed_run( 0, 'scl', 'enable', $pkg, 'php -v' ) ) ) {
+                if (m{ PHP \s (\d+\.\S+) \s \(cli\) \s \(built: \s (\w+\s+\d+\s\d+\s\d+:\d+:\d+) }xms) {    # Must accept release version like 7.1.11 or 7.2.0RC5
                     $php->{$pkg}->{release_version} = $1;
                     $php->{$pkg}->{build_time}      = $2;
                     $php->{$pkg}->{build_time} =~ s/  / /;
@@ -2141,8 +2140,8 @@ sub _get_installed_ea4_php {
                 }
             }
 
-            # Gather a list of modules for this given PHP Binary
-            @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
+            # Gather a list of modules for this given PHP Binary - not used currently, enable when needed.
+            # @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, 'scl', 'enable', $pkg, 'php -m' ) );
         }
     }
     return $php;
