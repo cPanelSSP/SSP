@@ -2086,18 +2086,27 @@ sub print_ea3_php_configuration {
 sub print_ea4_php_configuration {
     return if !$EA4;
     my $info;
-    my $cgi_handler = 0;
-    print_info("PHP Default: ");
+    my $cgi_handler     = 0;
+    my $fpm_jail_toggle = '/var/cpanel/feature_toggles/apachefpmjail';
+    print_info('PHP Default: ');
     if ( defined($EA4_PHP) && defined( $EA4_PHP->{default} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{handler} ) ) {
         $cgi_handler = 1 if $EA4_PHP->{ $EA4_PHP->{default} }->{handler} eq "cgi";
-        $info .= "[ EA4 ]";
-        $info .= " [ " . $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} . " ( " . $EA4_PHP->{default} . " ) ]";
-        $info .= " [ " . $EA4_PHP->{ $EA4_PHP->{default} }->{handler} . " ]";
+        $info .= '[ EA4 ]';
+        $info .= ' [ ' . $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} . ' ( ' . $EA4_PHP->{default} . ' ) ]';
+        $info .= ' [ ' . $EA4_PHP->{ $EA4_PHP->{default} }->{handler} . ' ]';
     }
     else {
-        $info .= "UNKNOWN";
+        $info .= 'UNKNOWN';
     }
     print_normal($info);
+    if ( -e $fpm_jail_toggle ) {
+        print_info('PHP-FPM: ');
+        print_normal( $fpm_jail_toggle . ' exists, PHP-FPM will jail PHP scripts for users that have Jailed or Disabled shells.' );
+        if ( defined $APACHE_MODULES and not( defined $APACHE_MODULES->{'ruid2_module'} and defined $CPCONF{'jailapache'} and $CPCONF{'jailapache'} == 1 ) ) {
+            print_warn('PHP-FPM: ');
+            print_warning('Jail is enabled without mod_ruid2 and/or Jail Apache Virtual Hosts tweak setting enabled, these MUST also be enabled for proper functioning unless EA-5524 is resolved.');
+        }
+    }
 }
 
 sub _get_installed_ea4_php {
