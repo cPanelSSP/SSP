@@ -8543,11 +8543,20 @@ sub check_for_dirtycow_passwd {
 sub check_for_cpro {
     my @bad_paths;
     my @paths = qw(
+      /YasITCSP/
+      /etc/customcspips
       /usr/bin/clnupdate
       /usr/bin/update_cpanelv2
+      /usr/bin/update_cpanelv2.lock
       /usr/bin/yasin
+      /usr/local/cpanel/bin/cspconnector
+      /usr/local/cpanel/bin/sendmail.txt
+      /usr/local/cpanel/bin/update_cpanelv2
+      /usr/local/cpanel/bin/update_cpanelv2.lock
+      /usr/local/cpanel/bin/way2/
       /usr/local/cpanel/license/update_cpanelv2
       /usr/local/cpanel/whostmgr/cgi/check.php
+      /var/log/updatecp/
     );
 
     for my $path (@paths) {
@@ -8558,7 +8567,7 @@ sub check_for_cpro {
     }
     if (@bad_paths) {
         print_generic_hack_predef('C.PRO');
-        print_critical('The following files were found:');
+        print_critical('The following files or directories were found:');
         print_critical( "\t" . join( " ", @bad_paths ) );
         print_critical("\tL3: See ticket 7790559 for reference.");
         print_critical();
