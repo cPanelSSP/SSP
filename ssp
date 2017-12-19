@@ -462,7 +462,7 @@ sub run {
     check_for_cl_unsupported_memory_limits();
     check_for_eblockers();
     check_for_php_selector_incompatibilities();
-    check_for_missing_cloudlinux_files();
+    check_cloudlinux_sanity();
     check_for_modsec2_stage_files();
     check_for_cron_allow();
     check_for_dev_sandbox();
@@ -594,7 +594,7 @@ sub non_cpanel_checks_only {
     check_for_extra_uid_0_user();
     check_for_broken_mysqldump();
     check_for_readonly_filesystems();
-    check_for_missing_cloudlinux_files();
+    check_cloudlinux_sanity();
     check_for_dev_sandbox();
 
     # [3RDP]
@@ -7464,31 +7464,42 @@ sub check_for_php_selector_incompatibilities {
     }
 }
 
-sub check_for_missing_cloudlinux_files {
+sub check_cloudlinux_sanity {
     return unless $IS_CLOUDLINUX;
-    if ( !-x "/usr/sbin/lvectl" ) {
+    if ( !-x '/usr/sbin/lvectl' ) {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/sbin/lvectl - check/repair lve-utils RPM');
     }
-    if ( !-x "/usr/bin/selectorctl" ) {
+    if ( !-x '/usr/bin/selectorctl' ) {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/bin/selectorctl - check/repair lvemanager RPM - This will incorrectly cause cPanel EA4 to be used.');
     }
-    if ( !-x "/usr/sbin/lveinfo" ) {
+    if ( !-x '/usr/sbin/lveinfo' ) {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/sbin/lveinfo - check/repair lve-stats RPM - This will incorrectly cause cPanel EA4 to be used.');
     }
-    if ( !-x "/usr/sbin/spacewalk-channel" ) {
+    if ( !-x '/usr/sbin/spacewalk-channel' ) {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/sbin/spacewalk-channel - check/repair rhn-setup RPM');
     }
-    if ( !-x "/usr/bin/python" ) {
+    if ( !-x '/usr/bin/python' ) {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/bin/python - check/repair python RPM');
     }
-    if ( -e "/var/.cagefs" ) {
+    if ( -e '/var/.cagefs' ) {
         print_warn('CloudLinux: ');
         print_warning('/var/.cagefs - EXISTS! Should never exist outside of CageFS, will break many things.');
+    }
+    if ( -x '/usr/sbin/cagefsctl' ) {
+        my $cagefsctl_help = timed_run_trap_stderr( 0, '/usr/sbin/cagefsctl', '--help' );
+        if ( defined $cagefsctl_help and $cagefsctl_help =~ m{ --sanity-check }xms ) {
+            my $cagefsctl_sanity_check = timed_run( 0, '/usr/sbin/cagefsctl', '--sanity-check' );
+            my $cagefsctl_sanity_check_status = $? >> 8;
+            if ($cagefsctl_sanity_check_status) {
+                print_warn('CloudLinux: ');
+                print_warning('[ /usr/sbin/cagefsctl --sanity-check ] returned non-zero exit status, run it for more information.');
+            }
+        }
     }
 }
 
