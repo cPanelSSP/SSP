@@ -6142,7 +6142,7 @@ sub check_for_disabled_services {
 
     my %touchfiles = (
         '/etc/antirelayddisable'                                 => 'antirelayd',
-        '/var/cpanel/ssl/disable_auto_hostname_certificate'      => 'auto_hostname_certificate',
+        '/var/cpanel/ssl/disable_auto_hostname_certificate'      => '/var/cpanel/ssl/disable_auto_hostname_certificate',
         '/etc/rrdtooldisable'                                    => 'rrdtool',
         '/var/run/chkservd.suspend'                              => 'chksrvd',
         '/etc/checkyumdisable'                                   => 'checkyum',
@@ -6163,6 +6163,7 @@ sub check_for_disabled_services {
         '/etc/disablehackcheck'                                  => 'hackcheck',
         '/etc/ftpddisable'                                       => 'ftpd',
         '/etc/ftpserverdisable'                                  => 'ftpd',
+        '/var/cpanel/ssl/disable_hostname_mismatch_check'        => '/var/cpanel/ssl/disable_hostname_mismatch_check',
         '/etc/apachedisable'                                     => 'httpd',
         '/etc/httpddisable'                                      => 'httpd',
         '/etc/httpdisable'                                       => 'httpd',
@@ -6186,7 +6187,7 @@ sub check_for_disabled_services {
         '/etc/rsyslogdisable'                                    => 'rsyslogd',
         '/etc/securemysqldisable'                                => 'securemysql',
         '/var/cpanel/version/securetmp_disabled'                 => 'securetmp',
-        '/var/cpanel/ssl/disable_service_certificate_management' => 'checkallsslcerts',
+        '/var/cpanel/ssl/disable_service_certificate_management' => '/var/cpanel/ssl/disable_service_certificate_management',
         '/etc/spamddisable'                                      => 'spamd',
         '/etc/spamdisable'                                       => 'spamd',
         '/etc/sshddisable'                                       => 'sshd',
