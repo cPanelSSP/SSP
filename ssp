@@ -481,7 +481,6 @@ sub run {
     check_for_newrelic();
     check_for_multilevel_reseller();
     check_for_cpremote();
-    check_for_els();
     check_for_whmxtra();
     check_for_usr_local_mis();
     check_for_opt_gsi_tools();
@@ -7952,14 +7951,6 @@ sub check_for_cpremote {
         print_3rdp('cpremote: ');
         print_3rdp2('installed. third party backup software (cron job found for root)');
     }
-}
-
-sub check_for_els {
-    my $els = '/usr/local/els/els.sh';
-    return if !-e $els;
-
-    print_3rdp('ELS: ');
-    print_3rdp2("$els found. See http://www.servermonkeys.com/els.php");
 }
 
 sub check_for_whmxtra {
