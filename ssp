@@ -496,7 +496,6 @@ sub run {
     build_openssl_rpm_changelog();
 
     # These require build_rpm_list() to have been run, so that @rpm_list is populated
-    #check_for_ebury_3_digit_rpms();                                 # malware
     check_for_openssl_heartbleed_bug();     # advisory
     check_for_openssl_secadv_20140605();    # advisory
     populate_mysql_rpm_versions_array();
@@ -762,7 +761,6 @@ sub all_malware_checks {
     check_for_cdorked_B();                # malware
     check_for_libkeyutils_symbols();      # malware
     check_for_libkeyutils_filenames();    # malware
-                                          #check_for_unowned_libkeyutils_files($LIBKEYUTILS_FILES_REF);    # malware
     check_sha1_sigs_libkeyutils();        # malware
     check_sha1_sigs_httpd();              # malware
     check_sha1_sigs_named();              # malware
@@ -8200,28 +8198,6 @@ sub check_sha1_sigs_libkeyutils {
     }
 }
 
-sub check_for_unowned_libkeyutils_files {
-    return if !$LIBKEYUTILS_FILES_REF;
-
-    my @unowned_libs;
-
-    for my $lib (@$LIBKEYUTILS_FILES_REF) {
-        chomp( my $rpm_check = timed_run( 0, 'rpm', '-qf', "$lib" ) );
-        if ( $rpm_check =~ /owned/ ) {
-            push @unowned_libs, $lib;
-        }
-    }
-
-    return if !@unowned_libs;
-
-    print_ebury_cdorked_predef('EBURY');
-    print_critical("\tThe following libkeyutils files do not belong to a package (checked via 'rpm -qf'):");
-    for my $file (@unowned_libs) {
-        print_critical( "\t" . $file );
-    }
-    print_critical();
-}
-
 sub check_sha1_sigs_httpd {
     return unless defined $HTTPD_PATH;
     return if !-e $HTTPD_PATH;
@@ -8463,34 +8439,6 @@ sub check_for_ebury_root_file {
         print_ebury_cdorked_predef('EBURY');
         print_critical( "\tFound file: " . $file );
         print_critical("\tReference: p24 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
-        print_critical();
-    }
-}
-
-sub check_for_ebury_3_digit_rpms {
-    #### check for the existence if illegitimate rpms, like these:
-    #
-    #  openssh-4.3p2-721.el5_61.65
-    #  openssh-5.3p1-209.el6_10.41.x86_64
-    #
-    #  openssh-clients-4.3p2-721.el5_61.65
-    #  openssh-clients-5.3p1-209.el6_10.41.x86_64
-    #
-    #  openssh-server-4.3p2-721.el5_61.65
-    #  openssh-server-5.3p1-209.el6_10.41.x86_64
-
-    my $bad_rpms;
-
-    for my $rpm (@RPM_LIST) {
-        if ( $rpm =~ m{ \A openssh-(clients|server|\d)(.*)-(\d){3}\. }xms ) {
-            $bad_rpms .= "\t$rpm\n";
-        }
-    }
-
-    if ($bad_rpms) {
-        print_ebury_cdorked_predef('EBURY');
-        print_critical("The following rpm(s) were found:");
-        print_critical($bad_rpms);
         print_critical();
     }
 }
