@@ -508,7 +508,6 @@ sub run {
     check_for_better_linux();
     check_for_kernel_headers_rpm();
     check_for_frontpage_rpms();
-    check_for_prelink();
     check_for_broken_rpm();
     check_for_ea4_mismatch();
 
@@ -620,7 +619,6 @@ sub non_cpanel_checks_only {
     check_for_duplicate_rpms();
     check_for_better_linux();
     check_for_kernel_headers_rpm();
-    check_for_prelink();
 
     print_info2('Done.');
 
@@ -4716,7 +4714,6 @@ sub check_roots_cron_for_certain_commands {
         '7440999604d3517ca235c7949f803ece' => '/etc/cron.daily/maldet',                  # Default
         'aede9174c0a1b0cf225165e204aa6fd8' => '/etc/cron.hourly/modsecparse.pl',         # Default
         '195ddc2ac97502c2a96cc758cb7c9097' => '/etc/cron.daily/freshclam',               # Default
-        'de7d9c2df94e20af5aa401e708c3119d' => '/etc/cron.daily/prelink',                 # Default
         'c7a32553c9f6d3d16c07281cae8572e9' => '/etc/cron.daily/tmpwatch',                # Default
         '3ffb5926bb7533bb077e2ec37f767851' => '/etc/cron.daily/tmpwatch',                # modified to not remove symlinks
         'ff511360a325783a06f494a05b514689' => '/etc/cron.d/kill_orphaned_php-cron',      # standard CloudLinux script
@@ -4737,7 +4734,6 @@ sub check_roots_cron_for_certain_commands {
             maldet |
             man-db\.cron |
             modsecparse\.pl |
-            prelink |
             rpm
             ) $ }x
           );    # Common false-positives to filter out entirely.
@@ -7421,21 +7417,6 @@ sub check_for_frontpage_rpms {
     if ( !grep { m{frontpage} } @RPM_LIST ) {
         print_warn('FrontPage: ');
         print_warning('RPM not installed, but /usr/local/frontpage/version5.0/bin/owsadm.exe exists -- will prevent upgrade to 11.46');
-    }
-}
-
-sub check_for_prelink {
-    if ( grep { m{prelink} } @RPM_LIST ) {
-        if ( open my $file_fh, '<', '/etc/sysconfig/prelink' ) {
-            while (<$file_fh>) {
-                if (m{ \A PRELINKING= \s* yes }x) {
-                    print_warn('Prelink: ');
-                    print_warning('RPM installed and enabled. Recommend disabling to customer by setting PRELINKING=no in /etc/sysconfig/prelink. See case CPANEL-4332.');
-                    last;
-                }
-            }
-            close $file_fh;
-        }
     }
 }
 
