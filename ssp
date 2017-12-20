@@ -100,6 +100,8 @@ our $EA4_PHP_FPM;               # Boolean flag indicating if easyapache4's php f
 our $ORIGINAL_PATH;
 our %SOCKET;                    # Dispatcher for optional Socket module usage
 
+run(@ARGV) unless caller;
+
 # Initialize application by setting loading all global variables
 # (except the RPM variables).  That's done within run()
 sub init {
@@ -222,9 +224,13 @@ sub init {
 }
 
 sub run {
+    my (@argv) = @_;
+
+    init();
+
     if ( defined &Getopt::Long::GetOptionsFromArray ) {
         Getopt::Long::GetOptionsFromArray(
-            \@ARGV,
+            \@argv,
             'bugreport' => \$OPT_BUGREPORT,
             'csi'       => \$OPT_CSI,
             'timeout=i' => \$OPT_TIMEOUT,
@@ -8841,12 +8847,4 @@ CPU: $cpu w/ $cores core(s)
 END_OF_TEMPLATE
 }
 
-package main;
-
-use strict;
-use warnings;
-
-unless ( caller() ) {
-    SSP::init();
-    SSP::run();
-}
+1;
