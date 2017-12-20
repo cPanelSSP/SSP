@@ -228,18 +228,12 @@ sub run {
 
     init();
 
-    if ( defined &Getopt::Long::GetOptionsFromArray ) {
-        Getopt::Long::GetOptionsFromArray(
-            \@argv,
-            'bugreport' => \$OPT_BUGREPORT,
-            'csi'       => \$OPT_CSI,
-            'timeout=i' => \$OPT_TIMEOUT,
-        );
-    }
-    elsif ( scalar @ARGV ) {
-        print_crit('Perl: ');
-        print_critical('there are one or more command-line options passed in but Getopt::Long::GetOptionsFromArray is not found so SSP is unable to parse them.  Try running SSP with a newer version of Perl or Getopt::Long.');
-    }
+    Getopt::Long::GetOptionsFromArray(
+        \@argv,
+        'bugreport' => \$OPT_BUGREPORT,
+        'csi'       => \$OPT_CSI,
+        'timeout=i' => \$OPT_TIMEOUT,
+    );
 
     if ($OPT_TIMEOUT) {
         $OPT_TIMEOUT = int $OPT_TIMEOUT;
