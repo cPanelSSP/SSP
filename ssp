@@ -37,8 +37,6 @@ use Getopt::Long();
 our $VERSION = '4.99.171';
 
 # Global variables that alter application runtime
-our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
-our $OPT_CSI;          # Flag that ensures only customer-service checks are performed
 our $OPT_TIMEOUT;      # How long to wait for system commands to finish executing
 
 # Global variables updated throughout application
@@ -226,12 +224,14 @@ sub init {
 sub run {
     my (@argv) = @_;
 
+    my ($only_csi, $only_bugreport);
+
     init();
 
     Getopt::Long::GetOptionsFromArray(
         \@argv,
-        'bugreport' => \$OPT_BUGREPORT,
-        'csi'       => \$OPT_CSI,
+        'bugreport' => \$only_csi,
+        'csi'       => \$only_bugreport,
         'timeout=i' => \$OPT_TIMEOUT,
     );
 
@@ -246,15 +246,8 @@ sub run {
     ##  END GLOBALS     ##
     ######################
 
-    if ($OPT_BUGREPORT) {
-        print_bug_report();
-        exit;
-    }
-
-    if ($OPT_CSI) {
-        csi_checks_only();
-        exit;
-    }
+    defined $only_csi && exit csi_checks_only();
+    defined $only_bugreport && exit print_bug_report();
 
     if ( -e '/var/cpanel/dnsonly' ) {
         dnsonly_checks_only();
