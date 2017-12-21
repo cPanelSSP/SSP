@@ -37,66 +37,66 @@ use Getopt::Long();
 our $VERSION = '4.99.171';
 
 # Global variables that alter application runtime
-our $OPT_TIMEOUT;      # How long to wait for system commands to finish executing
+our $opt_timeout;    # How long to wait for system commands to finish executing
 
 # Global variables updated throughout application
-our $CRIT_BUFFER;      # Critical output to be printed at the end
+our $crit_buffer;    # Critical output to be printed at the end
 
 # Global variables initialized at application initialization
-our $LIBKEYUTILS_FILES_REF;
-our @PHPINI;
-our $EA4;              # Boolean to determine if system is running EasyApache 4
-our $EA4_PHP;          # EA4 PHP info
-our $HTTPD_PATH;
-our $CPANEL_VERSION;    # Current cpanel version of system
-our $HOSTNAME;
-our $OS;
-our $IS_CPANEL;
-our $IS_CPANEL_SOLO;
-our $IS_KERNELCARE;
-our ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES, $IS_AMAZON, $IS_CLOUDLINUX );
-our $EXTERNAL_IP_ADDRESS;
-our $EXTERNAL_LICENSE_ADDRESS;
-our $TIERS;
-our @LOCAL_IPADDRS_LIST;
-our @PROCESS_LIST;
-our $PROCESS_REF;       # Hash of processes running on system along with details
-our $PORT_REF;          # Hash of ports being listened on along with user/pid/etc
-our $IPCS_REF;
-our $HOSTINFO;
-our $CPUINFO;
-our $MEMINFO;
-our $SYSCTL;
-our $MYSQL_CONF;
-our $MYSQL_NUMERIC_VERSION;
-our $MYSQL_FULL_VERSION;
-our $MYSQL_DATADIR;
-our $MYSQL_ERROR_LOG;
-our @MYSQL_RPM_VERSIONS;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
-our @CUSTOM_OPT_MODS;           # items in /var/cpanel/easy/apache/custom_opt_mods/
-our @USR_LOCAL_CPANEL_HOOKS;    # items in /usr/local/cpanel/hooks/
-our @EASYAPACHE_TEMPLATES;      # items in /var/cpanel/easy/apache/profile/
-our @EXTENDED_RPM_LIST;         # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n'
-our @RPM_LIST;                  # rpm -qa
-our %CPCONF;                    # cpanel.config
-our $PUREFTPDCONF;              # /etc/pure-ftpd.conf
-our $PROFTPDCONF;               # /etc/proftpd.conf
-our $EXIMLOCALOPTS;             # /etc/exim.conf.localopts
-our $OLD_BACKUP_CONF;           # /etc/cpbackup.conf
-our $NEW_BACKUP_CONF;           # /var/cpanel/backups/config
-our $CPUPDATECONF;              # /etc/cpupdate.conf
-our @APACHE_VERSION_OUTPUT;     # httpd -v
-our $APACHE_VERSION;            # Version string
-our $APACHE_BUILT;              # Build date
-our $APACHE_EA_VERSION;         # EA version which built Apache
-our $APACHE_MODULES;            # Hash of Apache modules
-our ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION );
-our ( $EA3_PHPVERSION, $EA3_PHP5VERSION, $EA3_PHP4VERSION, $EA3_PHP4HANDLER, $EA3_PHP5HANDLER, $EA3_SUEXEC );
-our @LSOF_80;
-our $OPENSSL_RPM_CHANGELOG;
-our $EA4_PHP_FPM;               # Boolean flag indicating if easyapache4's php fpm is running
-our $ORIGINAL_PATH;
-our %SOCKET;                    # Dispatcher for optional Socket module usage
+our $libkeyutils_files_ref;
+our @phpini;
+our $ea4;            # Boolean to determine if system is running EasyApache 4
+our $ea4_php;        # EA4 PHP info
+our $httpd_bin;
+our $cpanel_version;    # Current cpanel version of system
+our $hostname;
+our $os;
+our $is_cpanel;
+our $is_cpanel_solo;
+our $is_kernelcare;
+our ( $os_release, $os_type, $os_version, $os_ises, $is_amazon, $is_cloudlinux );
+our $external_ip_address;
+our $external_license_address;
+our $tiers;
+our @local_ipaddrs_list;
+our @process_list;
+our $process_ref;       # Hash of processes running on system along with details
+our $port_ref;          # Hash of ports being listened on along with user/pid/etc
+our $ipcs_ref;
+our $hostinfo;
+our $cpuinfo;
+our $meminfo;
+our $sysctl;
+our $mysql_conf;
+our $mysql_numeric_version;
+our $mysql_full_version;
+our $mysql_datadir;
+our $mysql_error_log;
+our @mysql_rpm_versions;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
+our @custom_opt_mods;           # items in /var/cpanel/easy/apache/custom_opt_mods/
+our @usr_local_cpanel_hooks;    # items in /usr/local/cpanel/hooks/
+our @easyapache_templates;      # items in /var/cpanel/easy/apache/profile/
+our @extended_rpm_list;         # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n'
+our @rpm_list;                  # rpm -qa
+our %cpconf;                    # cpanel.config
+our $pure_ftpd_conf;            # /etc/pure-ftpd.conf
+our $pro_ftpd_conf;             # /etc/proftpd.conf
+our $exim_local_opts;           # /etc/exim.conf.localopts
+our $old_backup_conf;           # /etc/cpbackup.conf
+our $new_backup_conf;           # /var/cpanel/backups/config
+our $cpupdate_conf;             # /etc/cpupdate.conf
+our @apache_version_output;     # httpd -v
+our $apache_version;            # Version string
+our $apache_built;              # Build date
+our $apache_ea_version;         # EA version which built Apache
+our $apache_modules;            # Hash of Apache modules
+our ( $lsws_full_version, $lsws_numeric_version );
+our ( $ea3_phpversion, $ea3_php5version, $ea3_php4version, $ea3_php4handler, $ea3_php5handler, $ea3_suexec );
+our @lsof_80;
+our $openssl_rpm_changelog;
+our $ea4_php_fpm;               # Boolean flag indicating if easyapache4's php fpm is running
+our $original_path;
+our %socket;                    # Dispatcher for optional Socket module usage
 
 run(@ARGV) unless caller;
 
@@ -110,81 +110,81 @@ sub init {
     if ( $< != 0 ) {
         die "SSP must be run as root\n";
     }
-    $ORIGINAL_PATH = $ENV{'PATH'};
+    $original_path = $ENV{'PATH'};
     ## no critic (LocalizedPunctuationVars)
     $ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
     $| = 1;
     ## use critic
     $Term::ANSIColor::AUTORESET = 1;
-    @LOCAL_IPADDRS_LIST         = get_local_ipaddrs();
-    @PROCESS_LIST               = get_process_list();
-    $PROCESS_REF                = get_process_pid_hash();
-    $PORT_REF                   = get_lsof_port_hash();
-    $IPCS_REF                   = get_ipcs_hash();
-    $HOSTINFO                   = get_hostinfo();
-    $CPUINFO                    = get_cpuinfo();
-    $MEMINFO                    = get_meminfo();
-    $SYSCTL                     = get_sysctl();
-    $EXTERNAL_IP_ADDRESS        = get_external_ip('80');
-    $EXTERNAL_LICENSE_ADDRESS   = get_external_ip('2089');
-    $IS_KERNELCARE              = is_kernelcare();
-    $LIBKEYUTILS_FILES_REF      = build_libkeyutils_file_list();
-    $HOSTNAME                   = hostname();
-    $OS                         = get_os();
-    ( $OS_RELEASE, $OS_TYPE, $OS_VERSION, $OS_ISES, $IS_AMAZON, $IS_CLOUDLINUX ) = get_os_info();
-    $MYSQL_CONF = get_mysql_conf();
-    ( $MYSQL_NUMERIC_VERSION, $MYSQL_FULL_VERSION ) = get_mysql_version();
-    $MYSQL_DATADIR   = get_mysql_datadir();           # needs $MYSQL_CONF
-    $MYSQL_ERROR_LOG = get_mysql_error_log();         # needs $MYSQL_CONF
-    $IS_CPANEL       = 1 if -d '/usr/local/cpanel';
-    $IS_CPANEL_SOLO  = is_cpanel_solo();
+    @local_ipaddrs_list         = get_local_ipaddrs();
+    @process_list               = get_process_list();
+    $process_ref                = get_process_pid_hash();
+    $port_ref                   = get_lsof_port_hash();
+    $ipcs_ref                   = get_ipcs_hash();
+    $hostinfo                   = get_hostinfo();
+    $cpuinfo                    = get_cpuinfo();
+    $meminfo                    = get_meminfo();
+    $sysctl                     = get_sysctl();
+    $external_ip_address        = get_external_ip('80');
+    $external_license_address   = get_external_ip('2089');
+    $is_kernelcare              = is_kernelcare();
+    $libkeyutils_files_ref      = build_libkeyutils_file_list();
+    $hostname                   = hostname();
+    $os                         = get_os();
+    ( $os_release, $os_type, $os_version, $os_ises, $is_amazon, $is_cloudlinux ) = get_os_info();
+    $mysql_conf = get_mysql_conf();
+    ( $mysql_numeric_version, $mysql_full_version ) = get_mysql_version();
+    $mysql_datadir   = get_mysql_datadir();           # needs $mysql_conf
+    $mysql_error_log = get_mysql_error_log();         # needs $mysql_conf
+    $is_cpanel       = 1 if -d '/usr/local/cpanel';
+    $is_cpanel_solo  = is_cpanel_solo();
 
-    if ($IS_CPANEL) {
-        $CPANEL_VERSION = get_cpanel_version();
-        $EA4            = is_ea4();
-        $EA4_PHP        = _get_installed_ea4_php();
-        $HTTPD_PATH     = get_httpd_path();            # location of operative httpd
-        @PHPINI         = get_phpini();
-        $TIERS          = get_tiers_file();
-        $PUREFTPDCONF   = get_pureftpd_conf();
-        $PROFTPDCONF    = get_proftpd_conf();
-        $EXIMLOCALOPTS  = get_exim_localopts();
-        $EA4_PHP_FPM    = get_ea4_php_fpm_status();
-        $APACHE_MODULES = get_apache_modules_hash();
-        ( $OLD_BACKUP_CONF,   $NEW_BACKUP_CONF )      = get_backup_config();
-        ( $LSWS_FULL_VERSION, $LSWS_NUMERIC_VERSION ) = get_lsws_version();
-        $CPUPDATECONF = get_cpupdate_conf();
+    if ($is_cpanel) {
+        $cpanel_version  = get_cpanel_version();
+        $ea4             = is_ea4();
+        $ea4_php         = _get_installed_ea4_php();
+        $httpd_bin       = find_httpd_bin();            # location of operative httpd
+        @phpini          = get_phpini();
+        $tiers           = get_tiers_file();
+        $pure_ftpd_conf  = get_pureftpd_conf();
+        $pro_ftpd_conf   = get_proftpd_conf();
+        $exim_local_opts = get_exim_localopts();
+        $ea4_php_fpm     = get_ea4_php_fpm_status();
+        $apache_modules  = get_apache_modules_hash();
+        ( $old_backup_conf,   $new_backup_conf )      = get_backup_config();
+        ( $lsws_full_version, $lsws_numeric_version ) = get_lsws_version();
+        $cpupdate_conf = get_cpupdate_conf();
 
-        if ($HTTPD_PATH) {
-            @APACHE_VERSION_OUTPUT = split /\n/, timed_run( 0, $HTTPD_PATH, '-v' );
+        if ($httpd_bin) {
+            @apache_version_output = split /\n/, timed_run( 0, $httpd_bin, '-v' );
 
-            for (@APACHE_VERSION_OUTPUT) {
+            for (@apache_version_output) {
                 if (m{ \A Server \s+ version: \s+ Apache/(.*) \s \(.*\)\z }xms) {
-                    $APACHE_VERSION = $1;
+                    $apache_version = $1;
                 }
                 if (m{ \A Server \s+ built: \s+ (.*) \z }xms) {
-                    $APACHE_BUILT = $1;
-                    $APACHE_BUILT =~ s/^\s+//g;
+                    $apache_built = $1;
+                    $apache_built =~ s/^\s+//g;
                 }
-                if ( !$EA4 ) {
+                if ( !$ea4 ) {
                     if (m{ \A Cpanel::Easy::Apache \s+ (.*) \z }xms) {
-                        $APACHE_EA_VERSION = $1;
+                        $apache_ea_version = $1;
                     }
                 }
             }
 
-            if ($EA4) {
-                chomp( $APACHE_EA_VERSION = timed_run( 0, 'rpm', '-qf', $HTTPD_PATH ) );
-                $APACHE_EA_VERSION =~ s/\.\w\d{1,3}\D+\d+\n//;
+            if ($ea4) {
+                chomp( $apache_ea_version = timed_run( 0, 'rpm', '-qf', $httpd_bin ) );
+                $apache_ea_version =~ s/\.\w\d{1,3}\D+\d+\n//;
             }
         }
 
         # TODO: use +c 15 so the entire process name is displayed if >9 chars
-        @LSOF_80 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:80' );
+        @lsof_80 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:80' );
         {
             if ( open( my $cpconf_fh, '<', '/var/cpanel/cpanel.config' ) ) {
                 local $/ = undef;
-                %CPCONF = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($cpconf_fh) );
+                %cpconf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($cpconf_fh) );
                 close $cpconf_fh;
             }
             else {
@@ -197,7 +197,7 @@ sub init {
     eval q(  # Perl 5.14+
         # The import is redundant but guarantees the desirable failure of this eval at run-time if anything is missing.
         Socket->import(qw(getaddrinfo getnameinfo NI_NAMEREQD NI_NUMERICHOST NIx_NOSERV SOCK_RAW));
-        %SOCKET = (
+        %socket = (
             'getaddrinfo'    => \&Socket::getaddrinfo,
             'getnameinfo'    => \&Socket::getnameinfo,
             'NI_NAMEREQD'    => Socket::NI_NAMEREQD,
@@ -211,9 +211,9 @@ sub init {
     $SIG{'INT'} = sub {    ## no critic (LocalizedPunctuationVars)
         print "\n\nJust being impatient, or did SSP actually hang? What if it didn't get a chance to check something really important?\n";
         print "\nIf you really want out of here and it didn't work the first time then you interrupted a child and not the parent process. Keep hitting CTRL+C.\n";
-        if ($CRIT_BUFFER) {
+        if ($crit_buffer) {
             print_magenta("\nThere was critical-level output above, here it is again:");
-            print $CRIT_BUFFER;
+            print $crit_buffer;
         }
         die;
     };
@@ -224,7 +224,7 @@ sub init {
 sub run {
     my (@argv) = @_;
 
-    my ($only_csi, $only_bugreport);
+    my ( $only_csi, $only_bugreport );
 
     init();
 
@@ -232,13 +232,13 @@ sub run {
         \@argv,
         'bugreport' => \$only_csi,
         'csi'       => \$only_bugreport,
-        'timeout=i' => \$OPT_TIMEOUT,
+        'timeout=i' => \$opt_timeout,
     );
 
-    if ($OPT_TIMEOUT) {
-        $OPT_TIMEOUT = int $OPT_TIMEOUT;
-        if ( $OPT_TIMEOUT < 5 ) {
-            $OPT_TIMEOUT = 5;
+    if ($opt_timeout) {
+        $opt_timeout = int $opt_timeout;
+        if ( $opt_timeout < 5 ) {
+            $opt_timeout = 5;
         }
     }
 
@@ -246,7 +246,7 @@ sub run {
     ##  END GLOBALS     ##
     ######################
 
-    defined $only_csi && exit csi_checks_only();
+    defined $only_csi       && exit csi_checks_only();
     defined $only_bugreport && exit print_bug_report();
 
     if ( -e '/var/cpanel/dnsonly' ) {
@@ -254,7 +254,7 @@ sub run {
         exit;
     }
 
-    unless ($IS_CPANEL) {
+    unless ($is_cpanel) {
         non_cpanel_checks_only();
         exit;
     }
@@ -506,9 +506,9 @@ sub run {
 
     print_info2('Done.');
 
-    if ($CRIT_BUFFER) {
+    if ($crit_buffer) {
         print_magenta("\n\nThere was critical-level output above, here it is again:");
-        print $CRIT_BUFFER;
+        print $crit_buffer;
     }
 
     return 0;
@@ -615,9 +615,9 @@ sub non_cpanel_checks_only {
 
     print_info2('Done.');
 
-    if ($CRIT_BUFFER) {
+    if ($crit_buffer) {
         print_magenta("\n\nThere was critical-level output above, here it is again:");
-        print $CRIT_BUFFER;
+        print $crit_buffer;
     }
 }
 
@@ -724,9 +724,9 @@ sub dnsonly_checks_only {
 
     print_info2('Done.');
 
-    if ($CRIT_BUFFER) {
+    if ($crit_buffer) {
         print_magenta("\n\nThere was critical-level output above, here it is again:");
-        print $CRIT_BUFFER;
+        print $crit_buffer;
     }
 }
 
@@ -791,20 +791,20 @@ sub get_phpini {
     return @phpini;
 }
 
-sub get_httpd_path {
-    if ( $EA4 && -x '/usr/sbin/httpd' ) {
+sub find_httpd_bin {
+    if ( $ea4 && -x '/usr/sbin/httpd' ) {
         return '/usr/sbin/httpd';
     }
-    if ( !$EA4 && -x '/usr/local/apache/bin/httpd' ) {
+    if ( !$ea4 && -x '/usr/local/apache/bin/httpd' ) {
         return '/usr/local/apache/bin/httpd';
     }
     return;
 }
 
 sub get_apache_modules_hash {
-    return unless defined $HTTPD_PATH;
-    return unless -x $HTTPD_PATH;
-    my %modules = map { ( split( /\s+/, $_, 3 ) )[1] => 1 } split /\n/, timed_run( 0, $HTTPD_PATH, '-M' );
+    return unless defined $httpd_bin;
+    return unless -x $httpd_bin;
+    my %modules = map { ( split( /\s+/, $_, 3 ) )[1] => 1 } split /\n/, timed_run( 0, $httpd_bin, '-M' );
     return \%modules;
 }
 
@@ -906,16 +906,16 @@ sub version_compare {
 
 sub cpanel_version_is {
     my ( $mode, $ver ) = @_;
-    return if !defined($CPANEL_VERSION);
-    return if $CPANEL_VERSION eq "unknown";
-    return version_compare( $CPANEL_VERSION, $mode, $ver );
+    return if !defined($cpanel_version);
+    return if $cpanel_version eq "unknown";
+    return version_compare( $cpanel_version, $mode, $ver );
 }
 
 sub _timedsaferun {    # Borrowed from WHM 66 Cpanel::SafeRun::Timed and modified
     my ( $timer, $stderr_to_stdout, @PROGA ) = @_;
     return if ( substr( $PROGA[0], 0, 1 ) eq '/' && !-x $PROGA[0] );
     $timer = $timer       ? $timer       : 25;       # A timer value of 0 means use the default, currently 25.
-    $timer = $OPT_TIMEOUT ? $OPT_TIMEOUT : $timer;
+    $timer = $opt_timeout ? $opt_timeout : $timer;
 
     my $output   = "";
     my $complete = 0;
@@ -1339,7 +1339,7 @@ sub get_meminfo {
     my $proc_beancounters = '/proc/user_beancounters';
     my %meminfo;
 
-    if ( defined( $HOSTINFO->{'environment'} ) && $HOSTINFO->{'environment'} eq 'virtuozzo' ) {
+    if ( defined( $hostinfo->{'environment'} ) && $hostinfo->{'environment'} eq 'virtuozzo' ) {
 
         # https://wiki.openvz.org/UBC_primary_parameters#vmguarpages
         # https://wiki.openvz.org/UBC_secondary_parameters#privvmpages
@@ -1403,9 +1403,9 @@ sub format_meminfo {
     return 'none or unknown' if ( !defined($num) );
 
     # The original values are 9223372036854775807 and 2147483647 4-KiB pages
-    if ( defined( $HOSTINFO->{'environment'} ) && $HOSTINFO->{'environment'} eq 'virtuozzo' ) {
+    if ( defined( $hostinfo->{'environment'} ) && $hostinfo->{'environment'} eq 'virtuozzo' ) {
         return $num = 'unlimited' if $num == '36893488147419103228' + 0;    # KiB
-        if ( defined( $HOSTINFO->{'hardware'} ) && $HOSTINFO->{'hardware'} eq 'i386' ) {
+        if ( defined( $hostinfo->{'hardware'} ) && $hostinfo->{'hardware'} eq 'i386' ) {
             return $num = 'unlimited' if $num == '8589934588' + 0;          # KiB
         }
     }
@@ -1428,14 +1428,14 @@ sub print_warn {
 
 sub print_crit {
     my $text = shift;
-    $CRIT_BUFFER .= BOLD MAGENTA ON_BLACK '[CRIT] * ' . $text;
+    $crit_buffer .= BOLD MAGENTA ON_BLACK '[CRIT] * ' . $text;
     print BOLD MAGENTA ON_BLACK '[CRIT] * ' . $text;
 }
 
 sub print_critical {
     my $text = shift;
     $text = $text ? $text : "";
-    $CRIT_BUFFER .= BOLD MAGENTA ON_BLACK $text . "\n";
+    $crit_buffer .= BOLD MAGENTA ON_BLACK $text . "\n";
     print BOLD MAGENTA ON_BLACK $text . "\n";
 }
 
@@ -1507,7 +1507,7 @@ sub check_for_hacked_server_touchfile {
             $cptech = ucfirst $cptech;
             print_critical("\t => $docdir/$touchfile");
             print_critical("\t\t $cptech reported this server at $ipaddr as compromised on $date local server time in ticket $ticket");
-            if ( !grep { /^$ipaddr$/ } @LOCAL_IPADDRS_LIST ) {
+            if ( !grep { /^$ipaddr$/ } @local_ipaddrs_list ) {
                 print_critical("\t\t NOTE: IP addr $ipaddr not found on the server!");
             }
         }
@@ -1575,7 +1575,7 @@ sub check_for_lve_environment {
     # pam_lve 0.3 won't put wheel users in an LVE after su or sudo:
     # http://cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php
 
-    if ( $HOSTINFO->{'kernel'} =~ /\.lve/ and -x '/usr/sbin/lveps' ) {
+    if ( $hostinfo->{'kernel'} =~ /\.lve/ and -x '/usr/sbin/lveps' ) {
         my $lve_check = `/usr/sbin/lveps -p | grep " $$ "`;
         if ($lve_check) {
             print_critical();
@@ -1606,28 +1606,28 @@ sub get_lsws_version {
 }
 
 sub check_for_os_release_5 {
-    return unless version_compare( $OS_VERSION, qw( < 6 ) );
+    return unless version_compare( $os_version, qw( < 6 ) );
     print_crit('CentOS/RHEL/CL 5 (or older): ');
     print_critical('This operating system is not supported in WHM 58 and later (OS version 6+ only).');
     print_critical('         \_ Send customer this premade: "MIGRATION - CentOS/RHEL/CL 5 EOL"');
 }
 
 sub check_for_os_release_7 {
-    return unless version_compare( $OS_VERSION, qw( >= 7 ) );
+    return unless version_compare( $os_version, qw( >= 7 ) );
     print_crit('CentOS/RHEL/CL 7+: ');
     print_critical('Use /scripts/restartsrv to restart services, not /etc/init.d scripts.');
 }
 
 sub check_for_os_release_32bit {
-    return unless ( defined( $HOSTINFO->{'hardware'} ) && $HOSTINFO->{'hardware'} eq 'i386' );
-    return unless version_compare( $OS_VERSION, qw( >= 6 ) );    # There is an unofficial CentOS 7 i386 build.
+    return unless ( defined( $hostinfo->{'hardware'} ) && $hostinfo->{'hardware'} eq 'i386' );
+    return unless version_compare( $os_version, qw( >= 6 ) );    # There is an unofficial CentOS 7 i386 build.
     print_crit('CentOS/RHEL/CL i386 (32-bit): ');
     print_critical('This operating system is not supported in WHM 58 and later (x86_64 only).');
     print_critical('         \_ Send customer this premade: "MIGRATION - 32-bit CentOS/RHEL/CL EOL"');
 }
 
 sub check_for_ea3 {
-    return if $EA4;
+    return if $ea4;
     my $httpd_path = '/usr/local/apache/bin/httpd';
     return if -l $httpd_path;
     return unless -f $httpd_path;
@@ -1644,30 +1644,30 @@ sub print_hostname {
 
     print_info('Hostname: ');
 
-    if ( $HOSTNAME !~ /([\w-]+)\.([\w-]+)\.(\w+)/ ) {
-        print_warning("$HOSTNAME may not be a FQDN ( en.wikipedia.org/wiki/Fully_qualified_domain_name )");
+    if ( $hostname !~ /([\w-]+)\.([\w-]+)\.(\w+)/ ) {
+        print_warning("$hostname may not be a FQDN ( en.wikipedia.org/wiki/Fully_qualified_domain_name )");
     }
     else {
-        print_normal($HOSTNAME);
+        print_normal($hostname);
     }
 }
 
 sub print_os {
-    my $os_info = $OS_RELEASE . " [$HOSTINFO->{'environment'}]";
+    my $os_info = "$os_release [$hostinfo->{'environment'}]";
     print_info('OS: ');
     print_normal($os_info);
 }
 
 sub print_kernel_and_cpu {
     print_info('Kernel/CPU: ');
-    print_normal("$HOSTINFO->{'kernel'} $HOSTINFO->{'hardware'} $HOSTINFO->{'environment'} $CPUINFO->{'model'} w/ $CPUINFO->{'numcores'} core(s)");
-    if ( $HOSTINFO->{'environment'} eq 'virtuozzo' && $HOSTINFO->{'kernel'} eq '2.6.32-042stab113.11' ) {
+    print_normal("$hostinfo->{'kernel'} $hostinfo->{'hardware'} $hostinfo->{'environment'} $cpuinfo->{'model'} w/ $cpuinfo->{'numcores'} core(s)");
+    if ( $hostinfo->{'environment'} eq 'virtuozzo' && $hostinfo->{'kernel'} eq '2.6.32-042stab113.11' ) {
         print_warning('         \\_ This kernel has broken quota support [ https://bugs.openvz.org/browse/OVZ-6661 ]');
     }
 }
 
 sub print_kernelcare_info {
-    return unless $IS_KERNELCARE;
+    return unless $is_kernelcare;
     my $kcarectl_path = '/usr/bin/kcarectl';
     my $kcarectl_info = "Installed";
     my $license_output;
@@ -1707,14 +1707,14 @@ sub print_cpanel_info {
         $birthday = localtime $ctime;
     }
 
-    $cpanel_tier = defined $CPUPDATECONF->{CPANEL} ? $CPUPDATECONF->{CPANEL} : 'Unknown (could not open/read /etc/cpupdate.conf ?)';
+    $cpanel_tier = defined $cpupdate_conf->{CPANEL} ? $cpupdate_conf->{CPANEL} : 'Unknown (could not open/read /etc/cpupdate.conf ?)';
 
     my $ctime       = ( stat('/usr/local/cpanel/version') )[10];
     my $last_update = time() - $ctime;
     $last_update = $last_update / 86400;
     $last_update = sprintf '%.1f', $last_update;
 
-    $output = "${CPANEL_VERSION} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago";
+    $output = "${cpanel_version} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago";
     $output .= " [ Installed $birthday ]" if $birthday;
 
     print_info('cPanel Info: ');
@@ -1728,7 +1728,7 @@ sub print_cpanel_info {
         '64' => { expires => 0,          text => 'September 21, 2017' },
         '66' => { expires => 0,          text => 'December 4, 2017' },
     );
-    my @ver = split( /\./, $CPANEL_VERSION, 4 );
+    my @ver = split( /\./, $cpanel_version, 4 );
     my $major_ver = ( defined $ver[1] && $ver[1] =~ /^\d+$/ ) ? $ver[1] : undef;
     my $expire_info;
     if ($major_ver) {
@@ -1755,21 +1755,21 @@ sub check_for_cpanel_update {
     my $local_tier_name;
     my $match = 0;
 
-    return unless defined $CPUPDATECONF->{CPANEL};
+    return unless defined $cpupdate_conf->{CPANEL};
 
-    if ( $CPANEL_VERSION !~ /(\d+\.\d+\.\d+\.\d+)/ ) {
+    if ( $cpanel_version !~ /(\d+\.\d+\.\d+\.\d+)/ ) {
         print_info('cPanel update check: ');
-        print_warning( 'unknown or old cPanel version ' . $CPANEL_VERSION );
+        print_warning( 'unknown or old cPanel version ' . $cpanel_version );
         return;
     }
 
-    return unless $TIERS;
-    my @tiers = split /\n/, $TIERS;
+    return unless $tiers;
+    my @tiers = split /\n/, $tiers;
 
     for my $line (@tiers) {
         if ( $line =~ m{ \A (.*) : (\d+\.\d+\.\d+\.\d+) \z }xms ) {
             ( $tier, $available_tier_version ) = ( $1, $2 );
-            if ( $tier =~ /^$CPUPDATECONF->{CPANEL}$/i ) {
+            if ( $tier =~ /^$cpupdate_conf->{CPANEL}$/i ) {
                 $match = 1;
                 last;
             }
@@ -1778,13 +1778,13 @@ sub check_for_cpanel_update {
 
     if ( $match == 0 ) {
         print_info('cPanel update check: ');
-        print_warning( "server is configured to use an unknown tier (" . $CPUPDATECONF->{CPANEL} . ")" );
+        print_warning("server is configured to use an unknown tier ($cpupdate_conf->{CPANEL})");
         return;
     }
 
     if ( cpanel_version_is( '<', $available_tier_version ) ) {
         print_info('cPanel update check: ');
-        print_warning( 'UPDATE AVAILABLE (' . $CPANEL_VERSION . ' -> ' . $available_tier_version . ')' );
+        print_warning("UPDATE AVAILABLE ($cpanel_version -> $available_tier_version)");
     }
 }
 
@@ -1798,7 +1798,7 @@ sub check_perl_version_less_than_588 {
 
     if ( version_compare( $perl_version, qw( < 5.8.8 ) ) ) {
         print_warn('Perl Version: ');
-        print_warning( 'less than 5.8.8: [ ' . $perl_version . ' ]' );
+        print_warning("less than 5.8.8: [ $perl_version ]");
     }
     if ( version_compare( $perl_version, qw( < 5.14.0 ) ) ) {
         print_warn('Perl Version: ');
@@ -1877,19 +1877,19 @@ sub check_for_clustering {
 sub print_apache_info {
     my $output;
 
-    $output .= "[ EA4 ] " if $EA4;
+    $output .= "[ EA4 ] " if $ea4;
 
-    if ( not $APACHE_VERSION or not $APACHE_BUILT or not $APACHE_EA_VERSION ) {
+    if ( not $apache_version or not $apache_built or not $apache_ea_version ) {
         $output .= 'could not determine Apache info!';
     }
     else {
-        $output .= "[ $APACHE_VERSION ] [ $APACHE_BUILT w/ $APACHE_EA_VERSION ]";
+        $output .= "[ $apache_version ] [ $apache_built w/ $apache_ea_version ]";
     }
 
     my ( $apache_uptime, $apache_generations );
 
     my $apache_configured_port = 80;
-    my $attempted_port = ( split( ':', $CPCONF{'apache_port'} ) )[1];
+    my $attempted_port = ( split( ':', $cpconf{'apache_port'} ) )[1];
     if ($attempted_port) {
         $apache_configured_port = $attempted_port;
     }
@@ -1919,7 +1919,7 @@ sub print_apache_info {
             $warning = 'Is Apache up/slow to respond? (failed: http://127.0.0.1:' . $apache_configured_port . '/whm-server-status). ';
         }
 
-        if (@LSOF_80) {
+        if (@lsof_80) {
             $warning .= 'Something is listening on port 80.';
         }
         else {
@@ -1937,13 +1937,13 @@ sub print_apache_info {
 
     my %apache_ports;
     my %root_httpd;
-    while ( my ( $portnum, $aref ) = each(%$PORT_REF) ) {
+    while ( my ( $portnum, $aref ) = each(%$port_ref) ) {
         for my $href (@$aref) {
             next unless $href->{USER} eq "root";
             next unless $href->{CMD} eq "httpd";
             my $pid = $href->{PID};
-            if ( defined $PROCESS_REF->{$pid} and $PROCESS_REF->{$pid}{ETIMES} > 60 ) {
-                next if $PROCESS_REF->{$pid}{CMD} =~ m{ \A /apache/bin/httpd }xms;    # Ignore these - see TECH-334
+            if ( defined $process_ref->{$pid} and $process_ref->{$pid}{ETIMES} > 60 ) {
+                next if $process_ref->{$pid}{CMD} =~ m{ \A /apache/bin/httpd }xms;    # Ignore these - see TECH-334
                 $root_httpd{$pid} = 1;
             }
             $apache_ports{$portnum} = 1;
@@ -1963,7 +1963,7 @@ sub print_apache_info {
 }
 
 sub print_ea3_php_configuration {
-    return if $EA4;
+    return if $ea4;
     my $phpconf;
     $phpconf = '/usr/local/apache/conf/php.conf.yaml';
 
@@ -1977,92 +1977,92 @@ sub print_ea3_php_configuration {
     while (<$phpconf_fh>) {
         chomp;
         if (/^phpversion: (\d)/) {
-            $EA3_PHPVERSION = $1;
+            $ea3_phpversion = $1;
         }
         if (/^php4:[ \t]+['"]?([^'"]+)/) {
-            $EA3_PHP4HANDLER = $1;
+            $ea3_php4handler = $1;
         }
         if (/^php5:[ \t]+['"]?([^'"]+)/) {
-            $EA3_PHP5HANDLER = $1;
+            $ea3_php5handler = $1;
         }
         if (/^suexec:[ \t]+['"]?([^'"]+)/) {
-            $EA3_SUEXEC = $1;
+            $ea3_suexec = $1;
         }
     }
     close $phpconf_fh;
     my $has_ea3_suexec;
-    if ( $EA3_SUEXEC && $EA3_SUEXEC eq '1' ) {
+    if ( $ea3_suexec && $ea3_suexec eq '1' ) {
         $has_ea3_suexec = 'with suexec';
     }
     else {
         $has_ea3_suexec = 'without suexec';
     }
 
-    if ( $EA3_PHPVERSION == 5 ) {
+    if ( $ea3_phpversion == 5 ) {
         if ( -x '/usr/bin/php' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/bin/php', '-n', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $EA3_PHP5VERSION = $1;
+                $ea3_php5version = $1;
             }
             else {
-                $EA3_PHP5VERSION = '(version unknown)';
+                $ea3_php5version = '(version unknown)';
             }
 
-            if ($EA3_PHP5HANDLER) {
+            if ($ea3_php5handler) {
                 print_info('PHP Default: ');
-                print_normal("PHP $EA3_PHP5VERSION $EA3_PHP5HANDLER $has_ea3_suexec");
+                print_normal("PHP $ea3_php5version $ea3_php5handler $has_ea3_suexec");
             }
         }
 
-        if ( $EA3_PHP4HANDLER && $EA3_PHP4HANDLER ne 'none' ) {
+        if ( $ea3_php4handler && $ea3_php4handler ne 'none' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/local/php4/bin/php', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $EA3_PHP4VERSION = $1;
+                $ea3_php4version = $1;
             }
             else {
-                $EA3_PHP4VERSION = '(version unknown)';
+                $ea3_php4version = '(version unknown)';
             }
 
             print_info('PHP Secondary: ');
-            print_normal("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $has_ea3_suexec");
+            print_normal("PHP $ea3_php4version $ea3_php4handler $has_ea3_suexec");
         }
     }
 
-    if ( $EA3_PHPVERSION && $EA3_PHPVERSION == 4 ) {
+    if ( $ea3_phpversion && $ea3_phpversion == 4 ) {
         if ( -x '/usr/local/php4/bin/php' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/local/php4/bin/php', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $EA3_PHP4VERSION = $1;
+                $ea3_php4version = $1;
             }
             else {
-                $EA3_PHP4VERSION = '(version unknown)';
+                $ea3_php4version = '(version unknown)';
             }
 
-            if ( $EA3_PHP4HANDLER && $EA3_PHP4HANDLER eq 'fcgi' ) {
+            if ( $ea3_php4handler && $ea3_php4handler eq 'fcgi' ) {
                 print_info('PHP Default: ');
-                print_warning("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $has_ea3_suexec (mod_userdir style URLs don't work with fcgi!)");
+                print_warning("PHP $ea3_php4version $ea3_php4handler $has_ea3_suexec (mod_userdir style URLs don't work with fcgi!)");
             }
             else {
                 print_info('PHP Default: ');
-                print_normal("PHP $EA3_PHP4VERSION $EA3_PHP4HANDLER $has_ea3_suexec");
+                print_normal("PHP $ea3_php4version $ea3_php4handler $has_ea3_suexec");
             }
         }
 
-        if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER ne 'none' ) {
+        if ( $ea3_php5handler && $ea3_php5handler ne 'none' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/bin/php', '-n', '-v' );
             if ( $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
-                $EA3_PHP5VERSION = $1;
+                $ea3_php5version = $1;
             }
             else {
-                $EA3_PHP5VERSION = '(version unknown)';
+                $ea3_php5version = '(version unknown)';
             }
 
             print_info('PHP Secondary: ');
-            print_normal("PHP $EA3_PHP5VERSION $EA3_PHP5HANDLER $has_ea3_suexec");
+            print_normal("PHP $ea3_php5version $ea3_php5handler $has_ea3_suexec");
         }
     }
 
-    if ( ( ( $EA3_PHP4HANDLER && $EA3_PHP5HANDLER ) && ( $EA3_PHP4HANDLER eq 'none' && $EA3_PHP5HANDLER eq 'none' ) ) || !( $EA3_PHP4HANDLER && $EA3_PHP5HANDLER ) ) {
+    if ( ( ( $ea3_php4handler && $ea3_php5handler ) && ( $ea3_php4handler eq 'none' && $ea3_php5handler eq 'none' ) ) || !( $ea3_php4handler && $ea3_php5handler ) ) {
         print "\n";
         print_warn('PHP: ');
         print_warning('no handler defined for PHP4 or PHP5!');
@@ -2070,16 +2070,14 @@ sub print_ea3_php_configuration {
 }
 
 sub print_ea4_php_configuration {
-    return if !$EA4;
+    return if !$ea4;
     my $info;
-    my $cgi_handler     = 0;
     my $fpm_jail_toggle = '/var/cpanel/feature_toggles/apachefpmjail';
     print_info('PHP Default: ');
-    if ( defined($EA4_PHP) && defined( $EA4_PHP->{default} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{handler} ) ) {
-        $cgi_handler = 1 if $EA4_PHP->{ $EA4_PHP->{default} }->{handler} eq "cgi";
+    if ( defined($ea4_php) && defined( $ea4_php->{default} ) && defined( $ea4_php->{ $ea4_php->{default} }->{release_version} ) && defined( $ea4_php->{ $ea4_php->{default} }->{handler} ) ) {
         $info .= '[ EA4 ]';
-        $info .= ' [ ' . $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} . ' ( ' . $EA4_PHP->{default} . ' ) ]';
-        $info .= ' [ ' . $EA4_PHP->{ $EA4_PHP->{default} }->{handler} . ' ]';
+        $info .= " [ $ea4_php->{ $ea4_php->{default} }->{release_version} ( $ea4_php->{default} ) ]";
+        $info .= " [ $ea4_php->{ $ea4_php->{default} }->{handler} ]";
     }
     else {
         $info .= 'UNKNOWN';
@@ -2088,7 +2086,7 @@ sub print_ea4_php_configuration {
     if ( -e $fpm_jail_toggle ) {
         print_info('PHP-FPM: ');
         print_normal( $fpm_jail_toggle . ' exists, PHP-FPM will jail PHP scripts for users that have Jailed or Disabled shells.' );
-        if ( defined $APACHE_MODULES and not( defined $APACHE_MODULES->{'ruid2_module'} and defined $CPCONF{'jailapache'} and $CPCONF{'jailapache'} == 1 ) ) {
+        if ( defined $apache_modules and not( defined $apache_modules->{'ruid2_module'} and defined $cpconf{'jailapache'} and $cpconf{'jailapache'} == 1 ) ) {
             print_warn('PHP-FPM: ');
             print_warning('Jail is enabled without mod_ruid2 and/or Jail Apache Virtual Hosts tweak setting enabled, these MUST also be enabled for proper functioning unless EA-5524 is resolved.');
         }
@@ -2098,7 +2096,7 @@ sub print_ea4_php_configuration {
 sub _get_installed_ea4_php {
 
     # Only supports WHM 54+
-    return if !$EA4;
+    return if !$ea4;
     my $php = {};
     my @available_php;
     my @current_php;
@@ -2150,17 +2148,17 @@ sub check_sysinfo {
         while (<$sysinfo_fh>) {
             chomp;
             if (m{ \A rpm_arch=(.*) }xms) {
-                if ( $HOSTINFO->{'hardware'} ne $1 ) {
+                if ( $hostinfo->{'hardware'} ne $1 ) {
                     $rebuild = 1;
                 }
             }
             if (m{ \A release=(.*) }xms) {
-                if ( $OS_VERSION ne $1 ) {
+                if ( $os_version ne $1 ) {
                     $rebuild = 1;
                 }
             }
             if (m{ \A ises=(.*) }xms) {
-                if ( $OS_ISES ne $1 ) {
+                if ( $os_ises ne $1 ) {
                     $rebuild = 1;
                 }
             }
@@ -2195,7 +2193,7 @@ sub check_for_remote_mysql {
     if ($mysql_host) {
         if ( $mysql_host =~ m{ ( \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3} )  }xms ) {
             return if ( $mysql_host eq '127.0.0.1' );
-            for my $ipaddr (@LOCAL_IPADDRS_LIST) {
+            for my $ipaddr (@local_ipaddrs_list) {
                 if ( $ipaddr eq $mysql_host ) {
                     $mysql_is_local = 1;
                     last;
@@ -2231,25 +2229,25 @@ sub print_if_using_other_dns {
 }
 
 sub print_if_mod_userdir {
-    return unless defined $APACHE_MODULES->{'userdir_module'};
-    if ( $EA4 && cpanel_version_is(qw( >= 11.59.0.0 )) ) {
+    return unless defined $apache_modules->{'userdir_module'};
+    if ( $ea4 && cpanel_version_is(qw( >= 11.59.0.0 )) ) {
         print_info('Mod Userdir: ');
         print_warning("will not execute PHP scripts via PHP-FPM");
     }
-    if ( defined($EA4_PHP) && defined( $EA4_PHP->{default} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{handler} ) && $EA4_PHP->{ $EA4_PHP->{default} }->{handler} eq "cgi" ) {
+    if ( defined($ea4_php) && defined( $ea4_php->{default} ) && defined( $ea4_php->{ $ea4_php->{default} }->{handler} ) && $ea4_php->{ $ea4_php->{default} }->{handler} eq "cgi" ) {
         print_info('Mod Userdir: ');
         print_warning("will not execute PHP scripts via cgi handler");
     }
-    if ( defined $APACHE_MODULES->{'passenger_module'} ) {
+    if ( defined $apache_modules->{'passenger_module'} ) {
         print_info('Mod Userdir: ');
         print_warning('doesn\'t work with Mod Passenger');
     }
-    if ( defined $APACHE_MODULES->{'ruid2_module'} ) {
+    if ( defined $apache_modules->{'ruid2_module'} ) {
         print_info('Mod Userdir: ');
         print_warning('doesn\'t work with Mod Ruid2');
         return;
     }
-    if ( defined $APACHE_MODULES->{'mpm_itk_module'} ) {
+    if ( defined $apache_modules->{'mpm_itk_module'} ) {
         print_info('Mod userdir: ');
         print_warning('doesn\'t work with MPM ITK');
         return;
@@ -2257,13 +2255,13 @@ sub print_if_mod_userdir {
 }
 
 sub print_mysql_version {
-    return unless defined $MYSQL_FULL_VERSION and defined $MYSQL_NUMERIC_VERSION;
+    return unless defined $mysql_full_version and defined $mysql_numeric_version;
     print_info('MySQL Version: ');
-    print_normal($MYSQL_FULL_VERSION);
-    if ( $IS_CPANEL and defined $CPCONF{'mysql-version'} ) {
-        my $test_version = $CPCONF{'mysql-version'} . '.';
-        unless ( index( $MYSQL_NUMERIC_VERSION, $test_version ) == 0 ) {
-            print_warning( "\t \\_ mysql-version=" . $CPCONF{'mysql-version'} . ' in cpanel.config does not match installed version!' );
+    print_normal($mysql_full_version);
+    if ( $is_cpanel and defined $cpconf{'mysql-version'} ) {
+        my $test_version = $cpconf{'mysql-version'} . '.';
+        unless ( index( $mysql_numeric_version, $test_version ) == 0 ) {
+            print_warning( "\t \\_ mysql-version=" . $cpconf{'mysql-version'} . ' in cpanel.config does not match installed version!' );
         }
     }
 }
@@ -2302,7 +2300,7 @@ sub print_backups_info {
 
     my ( $new, $old ) = get_backup_config();
 
-    if ( defined( $NEW_BACKUP_CONF->{'BACKUPENABLE'} ) && $NEW_BACKUP_CONF->{'BACKUPENABLE'} =~ /yes/ ) {
+    if ( defined( $new_backup_conf->{'BACKUPENABLE'} ) && $new_backup_conf->{'BACKUPENABLE'} =~ /yes/ ) {
         my @dir_contents = ();
         if ( opendir( my $dir_fh, $new_backup_dir ) ) {
             @dir_contents = readdir $dir_fh;
@@ -2320,7 +2318,7 @@ sub print_backups_info {
         }
     }
 
-    if ( ( defined( $OLD_BACKUP_CONF->{'BACKUPENABLE'} ) and $OLD_BACKUP_CONF->{'BACKUPENABLE'} eq 'yes' ) or ( defined( $NEW_BACKUP_CONF->{'BACKUPENABLE'} ) and $NEW_BACKUP_CONF->{'BACKUPENABLE'} =~ /yes/ ) ) {
+    if ( ( defined( $old_backup_conf->{'BACKUPENABLE'} ) and $old_backup_conf->{'BACKUPENABLE'} eq 'yes' ) or ( defined( $new_backup_conf->{'BACKUPENABLE'} ) and $new_backup_conf->{'BACKUPENABLE'} =~ /yes/ ) ) {
         if ( open my $file_fh, '<', '/var/spool/cron/root' ) {
             while (<$file_fh>) {
                 if (m{ \A [^#] .+ /usr/local/cpanel/scripts/cpbackup }xms) {
@@ -2334,23 +2332,23 @@ sub print_backups_info {
         }
     }
 
-    if ( defined( $NEW_BACKUP_CONF->{'BACKUPENABLE'} ) ) {
-        if ( $NEW_BACKUP_CONF->{'BACKUPENABLE'} =~ /yes/ ) {
+    if ( defined( $new_backup_conf->{'BACKUPENABLE'} ) ) {
+        if ( $new_backup_conf->{'BACKUPENABLE'} =~ /yes/ ) {
             $new_backups_status = 'Enabled';
-            if ( defined( $NEW_BACKUP_CONF->{'BACKUPACCTS'} ) && $NEW_BACKUP_CONF->{'BACKUPACCTS'} =~ /yes/ ) {
+            if ( defined( $new_backup_conf->{'BACKUPACCTS'} ) && $new_backup_conf->{'BACKUPACCTS'} =~ /yes/ ) {
                 $new_backups_status .= '/WithAccounts';
             }
-            elsif ( defined( $NEW_BACKUP_CONF->{'BACKUPACCTS'} ) && $NEW_BACKUP_CONF->{'BACKUPACCTS'} =~ /no/ ) {
+            elsif ( defined( $new_backup_conf->{'BACKUPACCTS'} ) && $new_backup_conf->{'BACKUPACCTS'} =~ /no/ ) {
                 $new_backups_status .= '/NoAccounts';
             }
 
-            if ( defined( $NEW_BACKUP_CONF->{'BACKUPTYPE'} ) && $NEW_BACKUP_CONF->{'BACKUPTYPE'} =~ /uncompressed/ ) {
+            if ( defined( $new_backup_conf->{'BACKUPTYPE'} ) && $new_backup_conf->{'BACKUPTYPE'} =~ /uncompressed/ ) {
                 $new_backups_status .= '/Uncompressed';
             }
-            elsif ( defined( $NEW_BACKUP_CONF->{'BACKUPTYPE'} ) && $NEW_BACKUP_CONF->{'BACKUPTYPE'} =~ /compressed/ ) {
+            elsif ( defined( $new_backup_conf->{'BACKUPTYPE'} ) && $new_backup_conf->{'BACKUPTYPE'} =~ /compressed/ ) {
                 $new_backups_status .= '/Compressed';
             }
-            elsif ( defined( $NEW_BACKUP_CONF->{'BACKUPTYPE'} ) && $NEW_BACKUP_CONF->{'BACKUPTYPE'} =~ /incremental/ ) {
+            elsif ( defined( $new_backup_conf->{'BACKUPTYPE'} ) && $new_backup_conf->{'BACKUPTYPE'} =~ /incremental/ ) {
                 $new_backups_status .= '/Incremental';
             }
             else {
@@ -2362,31 +2360,31 @@ sub print_backups_info {
                 $warning = 1;
             }
         }
-        elsif ( $NEW_BACKUP_CONF->{'BACKUPENABLE'} =~ /no/ ) {
+        elsif ( $new_backup_conf->{'BACKUPENABLE'} =~ /no/ ) {
             $new_backups_status = 'Disabled';
         }
     }
 
-    if ( defined( $OLD_BACKUP_CONF->{'BACKUPENABLE'} ) ) {
-        if ( $OLD_BACKUP_CONF->{'BACKUPENABLE'} eq 'restoreonly' ) {
+    if ( defined( $old_backup_conf->{'BACKUPENABLE'} ) ) {
+        if ( $old_backup_conf->{'BACKUPENABLE'} eq 'restoreonly' ) {
             $old_backups_status = 'RestoreOnly';
         }
-        elsif ( $OLD_BACKUP_CONF->{'BACKUPENABLE'} eq 'yes' ) {
+        elsif ( $old_backup_conf->{'BACKUPENABLE'} eq 'yes' ) {
             $old_backups_status = 'Enabled';
             if ( defined( $old->{'BACKUPACCTS'} ) && $old->{'BACKUPACCTS'} eq 'yes' ) {
                 $old_backups_status .= '/WithAccounts';
             }
-            elsif ( defined( $OLD_BACKUP_CONF->{'BACKUPACCTS'} ) && $OLD_BACKUP_CONF->{'BACKUPACCTS'} eq 'no' ) {
+            elsif ( defined( $old_backup_conf->{'BACKUPACCTS'} ) && $old_backup_conf->{'BACKUPACCTS'} eq 'no' ) {
                 $old_backups_status .= '/NoAccounts';
             }
 
-            if ( defined( $OLD_BACKUP_CONF->{'BACKUPINC'} ) && $OLD_BACKUP_CONF->{'BACKUPINC'} eq 'yes' ) {
+            if ( defined( $old_backup_conf->{'BACKUPINC'} ) && $old_backup_conf->{'BACKUPINC'} eq 'yes' ) {
                 $old_backups_status .= '/Incremental';
             }
-            elsif ( defined( $OLD_BACKUP_CONF->{'COMPRESSACCTS'} ) && $OLD_BACKUP_CONF->{'COMPRESSACCTS'} eq 'yes' ) {
+            elsif ( defined( $old_backup_conf->{'COMPRESSACCTS'} ) && $old_backup_conf->{'COMPRESSACCTS'} eq 'yes' ) {
                 $old_backups_status .= '/Compressed';
             }
-            elsif ( defined( $OLD_BACKUP_CONF->{'COMPRESSACCTS'} ) && $OLD_BACKUP_CONF->{'COMPRESSACCTS'} eq 'no' ) {
+            elsif ( defined( $old_backup_conf->{'COMPRESSACCTS'} ) && $old_backup_conf->{'COMPRESSACCTS'} eq 'no' ) {
                 $old_backups_status .= '/Uncompressed';
             }
             else {
@@ -2398,13 +2396,13 @@ sub print_backups_info {
                 $warning = 1;
             }
         }
-        elsif ( $OLD_BACKUP_CONF->{'BACKUPENABLE'} eq 'no' ) {
+        elsif ( $old_backup_conf->{'BACKUPENABLE'} eq 'no' ) {
             $old_backups_status = 'Disabled';
         }
     }
 
     if ( keys(%new_dest) ) {
-        if ( defined( $NEW_BACKUP_CONF->{'KEEPLOCAL'} ) && $NEW_BACKUP_CONF->{'KEEPLOCAL'} =~ /1/ ) {
+        if ( defined( $new_backup_conf->{'KEEPLOCAL'} ) && $new_backup_conf->{'KEEPLOCAL'} =~ /1/ ) {
             $new_backups_status .= '/RetainLocal';
         }
         else {
@@ -2445,11 +2443,11 @@ sub print_backups_info {
 }
 
 sub print_mailserver_info {
-    return unless defined $CPCONF{'mailserver'};
+    return unless defined $cpconf{'mailserver'};
     return unless cpanel_version_is(qw( < 11.53.0.0 ));    # 54+ only supports Dovecot
 
     print_info('Mailserver: ');
-    print_normal( $CPCONF{'mailserver'} );
+    print_normal( $cpconf{'mailserver'} );
 }
 
 sub print_ftpserver_info {
@@ -2458,23 +2456,23 @@ sub print_ftpserver_info {
     my $passiveports = "";
     my $passiveip    = "";
 
-    if ( defined( $CPCONF{'ftpserver'} ) ) {
-        if ( $CPCONF{'ftpserver'} eq 'pure-ftpd' ) {
-            if ( defined( $PUREFTPDCONF->{'passiveportrange'} ) && defined( $PUREFTPDCONF->{'passiveportrange'}->{value} ) ) {
-                $passiveports = $PUREFTPDCONF->{'passiveportrange'}->{value};
+    if ( defined( $cpconf{'ftpserver'} ) ) {
+        if ( $cpconf{'ftpserver'} eq 'pure-ftpd' ) {
+            if ( defined( $pure_ftpd_conf->{'passiveportrange'} ) && defined( $pure_ftpd_conf->{'passiveportrange'}->{value} ) ) {
+                $passiveports = $pure_ftpd_conf->{'passiveportrange'}->{value};
             }
 
-            if ( defined( $PUREFTPDCONF->{'forcepassiveip'} ) && defined( $PUREFTPDCONF->{'forcepassiveip'}->{value} ) ) {
-                $passiveip = $PUREFTPDCONF->{'forcepassiveip'}->{value};
+            if ( defined( $pure_ftpd_conf->{'forcepassiveip'} ) && defined( $pure_ftpd_conf->{'forcepassiveip'}->{value} ) ) {
+                $passiveip = $pure_ftpd_conf->{'forcepassiveip'}->{value};
             }
         }
-        if ( $CPCONF{'ftpserver'} eq 'proftpd' ) {
-            if ( defined( $PROFTPDCONF->{'passiveports'} ) && defined( $PROFTPDCONF->{'passiveports'}->{value} ) ) {
-                $passiveports = $PROFTPDCONF->{'passiveports'}->{value};
+        if ( $cpconf{'ftpserver'} eq 'proftpd' ) {
+            if ( defined( $pro_ftpd_conf->{'passiveports'} ) && defined( $pro_ftpd_conf->{'passiveports'}->{value} ) ) {
+                $passiveports = $pro_ftpd_conf->{'passiveports'}->{value};
             }
 
-            if ( defined( $PROFTPDCONF->{'masqueradeaddress'} ) && defined( $PROFTPDCONF->{'masqueradeaddress'}->{value} ) ) {
-                $passiveip = $PROFTPDCONF->{'masqueradeaddress'}->{value};
+            if ( defined( $pro_ftpd_conf->{'masqueradeaddress'} ) && defined( $pro_ftpd_conf->{'masqueradeaddress'}->{value} ) ) {
+                $passiveip = $pro_ftpd_conf->{'masqueradeaddress'}->{value};
             }
         }
     }
@@ -2493,17 +2491,17 @@ sub print_ftpserver_info {
 
     my $passivetext = $passiveports ? "enabled - " . ( $fwppactive ? "allowed in iptables" : "not found in iptables" ) : "not enabled";
 
-    if ( $passiveip ne "" && defined($EXTERNAL_IP_ADDRESS) && $passiveip ne $EXTERNAL_IP_ADDRESS && defined( $CPCONF{'ftpserver'} ) ) {
-        if ( $CPCONF{'ftpserver'} eq 'proftpd' ) {
-            $passivetext .= " - MasqueradeAddress ( " . $passiveip . " ) doesn't match license IP";
+    if ( $passiveip ne "" && defined($external_ip_address) && $passiveip ne $external_ip_address && defined( $cpconf{'ftpserver'} ) ) {
+        if ( $cpconf{'ftpserver'} eq 'proftpd' ) {
+            $passivetext .= " - MasqueradeAddress ( $passiveip ) doesn't match license IP";
         }
-        elsif ( $CPCONF{'ftpserver'} eq 'pure-ftpd' ) {
-            $passivetext .= " - ForcePassiveIP ( " . $passiveip . " ) doesn't match license IP";
+        elsif ( $cpconf{'ftpserver'} eq 'pure-ftpd' ) {
+            $passivetext .= " - ForcePassiveIP ( $passiveip ) doesn't match license IP";
         }
     }
 
-    if ( defined( $CPCONF{'ftpserver'} ) ) {
-        print_normal( $CPCONF{'ftpserver'} . " ( Passive ports " . $passivetext . " )" );
+    if ( defined( $cpconf{'ftpserver'} ) ) {
+        print_normal("$cpconf{ftpserver} ( Passive ports $passivetext )");
     }
     else {
         print_warning('missing ftpserver setting in cpanel.config');
@@ -2512,13 +2510,13 @@ sub print_ftpserver_info {
 }
 
 sub print_exim_info {
-    if ( defined $EXIMLOCALOPTS->{acl_delay_unknown_hosts} && $EXIMLOCALOPTS->{acl_delay_unknown_hosts} ) {
+    if ( defined $exim_local_opts->{acl_delay_unknown_hosts} && $exim_local_opts->{acl_delay_unknown_hosts} ) {
         my $info     = '20 second SMTP delay active (by default) for unknown hosts and spam, see DOC-6092.';
         my $disabled = '';
-        if ( defined $EXIMLOCALOPTS->{acl_dont_delay_greylisting_trusted_hosts} && $EXIMLOCALOPTS->{acl_dont_delay_greylisting_trusted_hosts} ) {
+        if ( defined $exim_local_opts->{acl_dont_delay_greylisting_trusted_hosts} && $exim_local_opts->{acl_dont_delay_greylisting_trusted_hosts} ) {
             $disabled .= ' [Greylisting Trusted Hosts]';
         }
-        if ( defined $EXIMLOCALOPTS->{acl_dont_delay_greylisting_common_mail_providers} && $EXIMLOCALOPTS->{acl_dont_delay_greylisting_common_mail_providers} ) {
+        if ( defined $exim_local_opts->{acl_dont_delay_greylisting_common_mail_providers} && $exim_local_opts->{acl_dont_delay_greylisting_common_mail_providers} ) {
             $disabled .= ' [Greylisting Common Mail Providers]';
         }
         $info .= ' Disabled for:' . $disabled if length $disabled;
@@ -2572,13 +2570,13 @@ sub check_for_custom_zonetemplates {
 }
 
 sub print_lsws_info {
-    return if !$LSWS_FULL_VERSION;
+    return if !$lsws_full_version;
     print_info('LiteSpeed Web Server: ');
-    print_normal( 'version [ ' . $LSWS_FULL_VERSION . ' ]' );
+    print_normal("version [ $lsws_full_version ]");
 
     my %lshttpd_ports = ();
 
-    while ( my ( $portnum, $aref ) = each(%$PORT_REF) ) {
+    while ( my ( $portnum, $aref ) = each(%$port_ref) ) {
         for my $href (@$aref) {
             next if not $href->{USER} eq "root";
             next if not $href->{CMD} eq "litespeed";
@@ -2589,7 +2587,7 @@ sub print_lsws_info {
         print_info('LiteSpeed Web Server: ');
         print_normal( 'is listening on ports [ ' . join( " ", sort( keys(%lshttpd_ports) ) ) . ' ]' );
     }
-    if ( $LSWS_FULL_VERSION =~ /Enterprise/ ) {
+    if ( $lsws_full_version =~ /Enterprise/ ) {
         print_info('LiteSpeed Web Server: ');
         print_normal('is supported, see http://cpanel.wiki/display/LS/LiteSpeed');
     }
@@ -2602,9 +2600,9 @@ sub print_lsws_info {
 }
 
 sub check_for_lsws_update {
-    return unless defined($LSWS_NUMERIC_VERSION);
-    return if $LSWS_NUMERIC_VERSION eq "unknown";
-    return unless $LSWS_FULL_VERSION =~ /Enterprise/;
+    return unless defined($lsws_numeric_version);
+    return if $lsws_numeric_version eq "unknown";
+    return unless $lsws_full_version =~ /Enterprise/;
 
     my $reply = _http_get( Host => 'update.litespeedtech.com', Path => '/ws/latest.php' );
     return unless defined $reply;
@@ -2619,9 +2617,9 @@ sub check_for_lsws_update {
     }
     return unless $available_lsws_version;
 
-    if ( version_compare( $LSWS_NUMERIC_VERSION, '<', $available_lsws_version ) ) {
+    if ( version_compare( $lsws_numeric_version, '<', $available_lsws_version ) ) {
         print_info('LiteSpeed Web Server: ');
-        print_warning("UPDATE AVAILABLE ($LSWS_NUMERIC_VERSION -> $available_lsws_version)");
+        print_warning("UPDATE AVAILABLE ($lsws_numeric_version -> $available_lsws_version)");
     }
 }
 
@@ -2664,7 +2662,7 @@ sub check_for_license_error {
     }
 
     if (
-        $license_error =~ m{ \A 
+        $license_error =~ m{ \A
          \QThe hostname must be a Fully Qualified Domain Name! (\E.+\)
        | \QAbort, Retry, Fail?\E
          \Z }xms
@@ -2676,7 +2674,7 @@ sub check_for_license_error {
     }
 
     if (
-        $license_error =~ m{ \A 
+        $license_error =~ m{ \A
          \QDoes not compute!\E
        | \QReturn without Gosub.\E
        | \QPrinting is not supported on this printer.\E
@@ -2695,7 +2693,7 @@ sub check_for_license_error {
 }
 
 sub check_port_hash {
-    return if ( scalar keys(%$PORT_REF) >= 1 );
+    return if ( scalar keys(%$port_ref) >= 1 );
     print_warn('lsof: ');
     print_warning('Did not return a list of TCP ports in LISTEN state.');
     print_warning('  Either lsof is broken or there are zero listening services.');
@@ -2729,7 +2727,7 @@ sub check_selinux_status {
 }
 
 sub check_runlevel {
-    if ( $OS eq 'linux' ) {
+    if ( $os eq 'linux' ) {
         my $runlevel;
         my $who_r = timed_run( 0, 'who', '-r' );
 
@@ -2768,7 +2766,7 @@ sub check_if_upcp_is_running {
     my $upcp_running   = 0;
     my $upcp_touchfile = 0;
 
-    for my $line (@PROCESS_LIST) {
+    for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) cPanel \s Update \s \(upcp\) }xms ) {
             $upcp_running = 1;
             last;
@@ -2813,10 +2811,10 @@ sub check_valid_upcp {
 }
 
 sub check_cpupdate_conf {
-    return unless defined $CPUPDATECONF;
+    return unless defined $cpupdate_conf;
     my $_is_allowed = sub {
         my ($type) = @_;
-        return 0 if ( defined $CPUPDATECONF->{$type} and ( $CPUPDATECONF->{$type} eq "never" or $CPUPDATECONF->{$type} eq "manual" ) );
+        return 0 if ( defined $cpupdate_conf->{$type} and ( $cpupdate_conf->{$type} eq "never" or $cpupdate_conf->{$type} eq "manual" ) );
         return 1;
     };
     unless ( $_is_allowed->('UPDATES') ) {
@@ -2855,7 +2853,7 @@ sub check_interface_lo {
 }
 
 sub check_loopback_connection {
-    return unless $IS_CPANEL;
+    return unless $is_cpanel;
     my @ports     = qw( 25 80 2086 );
     my $connected = 0;
 
@@ -2952,12 +2950,12 @@ sub check_for_custom_opt_mods {
 
     find( \&find_custom_opt_mods, $dir );
 
-    if ( scalar @CUSTOM_OPT_MODS > 10 ) {
+    if ( scalar @custom_opt_mods > 10 ) {
         print_warn("EA3 $dir: ");
         print_warning('many custom opt mods exist, check manually');
     }
-    elsif (@CUSTOM_OPT_MODS) {
-        for my $custom_opt_mod (@CUSTOM_OPT_MODS) {
+    elsif (@custom_opt_mods) {
+        for my $custom_opt_mod (@custom_opt_mods) {
             $custom_opt_mods .= "$custom_opt_mod ";
         }
 
@@ -2975,7 +2973,7 @@ sub find_custom_opt_mods {
     my $file = $File::Find::name;
     if ( -f $file and $file !~ m{ /ModFastInclude\.pm(.*) }xms ) {
         $file =~ s#/var/cpanel/easy/apache/custom_opt_mods/##;
-        push @CUSTOM_OPT_MODS, $file;
+        push @custom_opt_mods, $file;
     }
 }
 
@@ -3017,7 +3015,7 @@ sub check_for_local_templates {
 }
 
 sub check_for_missing_account_suspensions_conf {
-    return if $EA4;
+    return if $ea4;
     return if !-f '/usr/local/apache/conf/includes/account_suspensions.conf';
     my @templates = qw(
       /var/cpanel/templates/apache2_4/main.local
@@ -3056,7 +3054,7 @@ sub check_for_missing_account_suspensions_conf {
 }
 
 sub check_for_custom_apache_includes {
-    my $include_dir = $EA4 ? '/etc/apache2/conf.d/includes' : '/usr/local/apache/conf/includes';
+    my $include_dir = $ea4 ? '/etc/apache2/conf.d/includes' : '/usr/local/apache/conf/includes';
 
     return if !-d $include_dir;
 
@@ -3118,7 +3116,7 @@ sub check_for_sneaky_htaccess {
 }
 
 sub check_ea4_paths_conf {
-    return unless $EA4;
+    return unless $ea4;
     my $paths_conf = '/etc/cpanel/ea4/paths.conf';
     lstat($paths_conf);    # Can now use _ for file tests.
 
@@ -3165,7 +3163,7 @@ sub check_ea4_paths_conf {
         'file_conf_srm_conf'   => '/etc/apache2/conf.d/srm.conf',
         'file_error_log'       => '/etc/apache2/logs/error_log',
     );
-    if ( version_compare( $OS_VERSION, qw( < 7.0 ) ) or $IS_AMAZON ) {
+    if ( version_compare( $os_version, qw( < 7.0 ) ) or $is_amazon ) {
         $default_conf{'dir_run'} = '/var/run/apache2';
     }
     if ( open my $conf_fh, '<', $paths_conf ) {
@@ -3204,12 +3202,12 @@ sub check_ea4_paths_conf {
 }
 
 sub check_apache_missing_modules {
-    return unless scalar keys %{$APACHE_MODULES};
+    return unless scalar keys %{$apache_modules};
     my %check = (    # 'foo_module' => 'Help text'
         'headers_module' => ' - May cause proxy subdomains to redirect infinitely, see CPANEL-12707.'
     );
     for my $module ( sort keys %check ) {
-        unless ( defined $APACHE_MODULES->{$module} ) {
+        unless ( defined $apache_modules->{$module} ) {
             print_warn('Apache: ');
             print_warning( 'Missing ' . $module . $check{$module} );
         }
@@ -3262,7 +3260,7 @@ sub check_perl_sanity {
 }
 
 sub check_for_non_default_permissions {
-    local $OPT_TIMEOUT = $OPT_TIMEOUT ? $OPT_TIMEOUT : 10;    # This only applies to the recursive loop.
+    local $opt_timeout = $opt_timeout ? $opt_timeout : 10;    # This only applies to the recursive loop.
 
     # Example: '/path' => { mode => ['0755','0555',...], user => 'root', group => 'root', perms_help => 'Additional info if mode/user/group incorrect', attr_check => [ 'IMMUTABLE' ], attr_recursive => 1, attr_help => 'Additional info if immutable/append-only/etc', symlink => '/path', symlink_no_absolute => 1, check_missing => 1 },
     # Attributes are always checked, mode is only checked if specified.
@@ -3421,7 +3419,7 @@ sub check_for_non_default_permissions {
 
     ## If EA4 is running we need to redefine some of the paths from %check as these paths have turned into symlinks.
     ## We also conditionally need to add the new paths that EA4 introduces.
-    if ($EA4) {
+    if ($ea4) {
         $check{'/etc'}                              = { mode    => ['0755'], perms_help => 'Users need execute permission for this directory to use cPanel MultiPHP. See CPANEL-905.' };
         $check{'/etc/apache2'}                      = { mode    => ['0755'] };
         $check{'/etc/apache2/conf'}                 = { mode    => ['0755'] };
@@ -3447,7 +3445,7 @@ sub check_for_non_default_permissions {
         $check{'/usr/sbin/httpd'}                   = { mode    => ['0755'] };
         $check{'/var/log/apache2'}                  = { mode    => ['0711'] };
         $check{'/var/www/html'}                     = { mode    => ['0755'] };
-        if ( defined( $HOSTINFO->{'hardware'} ) && $HOSTINFO->{'hardware'} eq 'i386' ) {
+        if ( defined( $hostinfo->{'hardware'} ) && $hostinfo->{'hardware'} eq 'i386' ) {
             $check{'/etc/apache2/modules'} = { symlink => '/usr/lib/apache2/modules', check_missing => 1 };
         }
         else {
@@ -3479,14 +3477,14 @@ sub check_for_non_default_permissions {
         close $wwwacctconf_fh;
     }
 
-    if ( version_compare( $OS_VERSION, qw( < 7 ) ) or $IS_AMAZON ) {
+    if ( version_compare( $os_version, qw( < 7 ) ) or $is_amazon ) {
         $check{'/bin'}         = { mode    => [ '0755', '0711', '0555' ] };
         $check{'/bin/crontab'} = { symlink => '/usr/local/cpanel/bin/jail_safe_crontab' };
         $check{'/bin/passwd'}  = { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' };
         $check{'/sbin'}        = { mode    => [ '0755', '0711', '0555' ] };
         $check{'/var/run'}     = { mode    => ['0755'], perms_help => 'Exim auth can fail if this is too restrictive. See ticket 7455551.' };
     }
-    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) and not $IS_AMAZON ) {    # https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Migration_Planning_Guide/sect-Red_Hat_Enterprise_Linux-Migration_Planning_Guide-File_System_Layout.html
+    if ( version_compare( $os_version, qw( >= 7 ) ) and not $is_amazon ) {    # https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Migration_Planning_Guide/sect-Red_Hat_Enterprise_Linux-Migration_Planning_Guide-File_System_Layout.html
         $check{'/bin'}   = { symlink => '/usr/bin',   check_missing => 1 };
         $check{'/lib'}   = { symlink => '/usr/lib',   check_missing => 1 };
         $check{'/lib64'} = { symlink => '/usr/lib64', check_missing => 1 };
@@ -3497,14 +3495,14 @@ sub check_for_non_default_permissions {
         $check{'/var/lock'}              = { symlink => '/run/lock',                               check_missing => 1 };
         $check{'/var/run'}               = { symlink => '/run',                                    check_missing => 1 };
     }
-    if ( defined $CPCONF{'skipawstats'} && $CPCONF{'skipawstats'} == 0 ) {
+    if ( defined $cpconf{'skipawstats'} && $cpconf{'skipawstats'} == 0 ) {
         $check{'/usr/local/cpanel/3rdparty/bin/awstats.pl'} = { mode => ['0755'] };
     }
-    if ( defined $CPCONF{'skipwebalizer'} && $CPCONF{'skipwebalizer'} == 0 ) {
+    if ( defined $cpconf{'skipwebalizer'} && $cpconf{'skipwebalizer'} == 0 ) {
         $check{'/usr/local/cpanel/3rdparty/bin/webalizer_lang/english'} = { mode => ['0755'], user => 'bin', group => 'bin' };
     }
-    if ($IS_CLOUDLINUX) {
-        if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {
+    if ($is_cloudlinux) {
+        if ( version_compare( $os_version, qw( >= 7 ) ) ) {
             $check{'/usr/bin/python'} = { symlink => '/usr/bin/python2.7', check_missing => 1, perms_help => 'If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' };
             $check{'/usr/bin/python2.7'} = { mode => ['0755'], perms_help => 'If the Python binary is not executable by non-root users it can break CloudLinux functions in cPanel UI' };
         }
@@ -3513,7 +3511,7 @@ sub check_for_non_default_permissions {
         }
     }
 
-    foreach my $backup_path ( $NEW_BACKUP_CONF->{BACKUPDIR}, $OLD_BACKUP_CONF->{BACKUPDIR} ) {
+    foreach my $backup_path ( $new_backup_conf->{BACKUPDIR}, $old_backup_conf->{BACKUPDIR} ) {
         if ( defined $backup_path ) {
             my @backup_path_parts = split( '/', $backup_path );
 
@@ -3616,10 +3614,10 @@ sub check_for_non_default_permissions {
                 eval {
                     local $SIG{'ALRM'} = sub {
                         print_warn('Non-default Perms: ');
-                        print_warning( 'recursive check of ' . $path . ' timed out after ' . $OPT_TIMEOUT . ' seconds.' );
+                        print_warning( 'recursive check of ' . $path . ' timed out after ' . $opt_timeout . ' seconds.' );
                         die;
                     };
-                    alarm $OPT_TIMEOUT;
+                    alarm $opt_timeout;
                     find( { wanted => $test_ref, no_chdir => 1 }, $path );
                     alarm 0;
                 };
@@ -3641,7 +3639,7 @@ sub check_for_non_default_file_capabilities {
     );
     # tidyon
 
-    if ( $EA4 && !$IS_CLOUDLINUX ) {
+    if ( $ea4 && !$is_cloudlinux ) {
         $check{'/usr/sbin/suexec'} = { cap => [ 'cap_setgid', 'cap_setuid', '+ep' ], help => 'Will break cpanel/webmail redirects and other suexec usage, \'yum reinstall ea-apache24\' to fix' };
     }
 
@@ -3711,20 +3709,20 @@ sub check_for_non_default_sysctl {
         'net.ipv4.tcp_tw_reuse'         => [ ['0'], ' - This should generally never be enabled. Clients behind NAT or Proxy can have problems connecting to this server.' ],
         'vm.overcommit_memory' => [ [ '0', '1' ], ' - Seeing "Out of memory" but there is free memory and no limits?  This might be why.' ],
     );
-    if ( defined( $SYSCTL->{'fs.enforce_symlinksifowner'} && $SYSCTL->{'fs.enforce_symlinksifowner'} ) ) {
+    if ( defined( $sysctl->{'fs.enforce_symlinksifowner'} && $sysctl->{'fs.enforce_symlinksifowner'} ) ) {
         $check{'fs.symlinkown_gid'} = [ ['99'], ' - Incorrect GID - https://docs.cloudlinux.com/index.html?symlink_owner_match_protection.html' ];
     }
     for my $key ( sort keys %check ) {
-        if ( exists $SYSCTL->{$key} ) {
+        if ( exists $sysctl->{$key} ) {
             my $default = 0;
             for my $checksysctl ( @{ $check{$key}[0] } ) {
-                if ( $SYSCTL->{$key} eq $checksysctl ) {
+                if ( $sysctl->{$key} eq $checksysctl ) {
                     $default = 1;
                 }
             }
             if ( !$default == 1 ) {
                 print_warn('Non-default sysctl: ');
-                print_warning( $key . ' = ' . $SYSCTL->{$key} . ' (default: ' . join( ' or ', @{ $check{$key}[0] } ) . ')' . $check{$key}[1] );
+                print_warning( "$key = $sysctl->{$key} (default: " . join( ' or ', @{ $check{$key}[0] } ) . ")$check{$key}[1]" );
             }
         }
     }
@@ -3783,7 +3781,7 @@ sub check_var_cpanel_users {
         print_warning("$userdatadomains (generate it with /scripts/updateuserdatacache --force)");
     }
 
-    if ( $IS_CPANEL_SOLO and scalar @files > 1 ) {
+    if ( $is_cpanel_solo and scalar @files > 1 ) {
         print_crit('License: ');
         print_critical('found more than 1 account (under /var/cpanel/users) but this is licensed for cPanel Solo!');
     }
@@ -3966,7 +3964,7 @@ sub check_pkgacct_override {
 sub check_for_gdm {
     my $gdm = 0;
 
-    for my $line (@PROCESS_LIST) {
+    for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) gdm }xms ) {
             $gdm = 1;
             last;
@@ -3995,7 +3993,7 @@ sub check_easyapache {
     my $ea_is_running            = 0;
 
     if ( -e $ea_is_running_file ) {
-        for my $process (@PROCESS_LIST) {
+        for my $process (@process_list) {
             if ( $process =~ m{ \A root (?:.*) easyapache }xms ) {
                 $ea_in_process_list = 1;
                 last;
@@ -4069,16 +4067,16 @@ sub check_mounts {
     my $new_backups_dir;
     my $new_backups_dir_nfs;
 
-    if (    defined $OLD_BACKUP_CONF->{'BACKUPDIR'}
-        and defined $OLD_BACKUP_CONF->{'BACKUPENABLE'}
-        and $OLD_BACKUP_CONF->{'BACKUPENABLE'} =~ /yes/i ) {
-        $old_backups_dir = $OLD_BACKUP_CONF->{'BACKUPDIR'};
+    if (    defined $old_backup_conf->{'BACKUPDIR'}
+        and defined $old_backup_conf->{'BACKUPENABLE'}
+        and $old_backup_conf->{'BACKUPENABLE'} =~ /yes/i ) {
+        $old_backups_dir = $old_backup_conf->{'BACKUPDIR'};
         $old_backups_dir .= '/' unless substr( $old_backups_dir, -1 ) eq '/';
     }
-    if (    defined $NEW_BACKUP_CONF->{'BACKUPDIR'}
-        and defined $NEW_BACKUP_CONF->{'BACKUPENABLE'}
-        and $NEW_BACKUP_CONF->{'BACKUPENABLE'} =~ /yes/i ) {
-        $new_backups_dir = $NEW_BACKUP_CONF->{'BACKUPDIR'};
+    if (    defined $new_backup_conf->{'BACKUPDIR'}
+        and defined $new_backup_conf->{'BACKUPENABLE'}
+        and $new_backup_conf->{'BACKUPENABLE'} =~ /yes/i ) {
+        $new_backups_dir = $new_backup_conf->{'BACKUPDIR'};
         $new_backups_dir .= '/' unless substr( $new_backups_dir, -1 ) eq '/';
     }
 
@@ -4130,14 +4128,14 @@ sub check_for_unsupported_nat {
     my @external_ipaddrs;
     return if -e '/var/cpanel/cpnat';
 
-    if ( defined($EXTERNAL_IP_ADDRESS) ) {
-        if ( !grep { /$EXTERNAL_IP_ADDRESS/ } @LOCAL_IPADDRS_LIST ) {
+    if ( defined($external_ip_address) ) {
+        if ( !grep { /$external_ip_address/ } @local_ipaddrs_list ) {
             print_warn('NAT: ');
-            print_warning("external IP address $EXTERNAL_IP_ADDRESS is not bound to server");
+            print_warning("external IP address $external_ip_address is not bound to server");
         }
     }
     else {
-        for my $ipaddr (@LOCAL_IPADDRS_LIST) {
+        for my $ipaddr (@local_ipaddrs_list) {
 
             # Matches any local IP (127.0.0.0/8) or RFC-1918 IP (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
             if ( $ipaddr !~ /(?:10\.|127\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/ ) {
@@ -4180,8 +4178,8 @@ sub check_for_usr_local_cpanel_hooks {
       289b2b4c8b5293103def4557d3538060    /usr/local/cpanel/hooks/mysql/deluser
     );
 
-    if (@USR_LOCAL_CPANEL_HOOKS) {
-        for my $hook (@USR_LOCAL_CPANEL_HOOKS) {
+    if (@usr_local_cpanel_hooks) {
+        for my $hook (@usr_local_cpanel_hooks) {
             my $tmp_hook = '/usr/local/cpanel/hooks/' . $hook;
             if ( -f $tmp_hook and not -z $tmp_hook ) {
                 chomp( my $checksum = timed_run( 0, 'md5sum', $tmp_hook ) );
@@ -4202,12 +4200,12 @@ sub find_usr_local_cpanel_hooks {
     my $file = $File::Find::name;
     if ( -f $file and $file !~ m{ ( README | \.example ) \z }xms ) {
         $file =~ s#/usr/local/cpanel/hooks/##;
-        push @USR_LOCAL_CPANEL_HOOKS, $file;
+        push @usr_local_cpanel_hooks, $file;
     }
 }
 
 sub check_for_sql_safe_mode {
-    if ( grep { m# \A (?:[ \t]+)? sql\.safe_mode \s* = \s* on #ixms } @PHPINI ) {
+    if ( grep { m# \A (?:[ \t]+)? sql\.safe_mode \s* = \s* on #ixms } @phpini ) {
         print_warn('/usr/local/lib/php.ini: ');
         print_warning('sql.safe_mode is enabled! This may break PHP SQL authentication.');
     }
@@ -4225,8 +4223,8 @@ sub get_mysql_version {
 
 sub get_mysql_datadir {
     my $datadir = '/var/lib/mysql/';
-    if ( $MYSQL_CONF->{'LINES'} && $MYSQL_CONF->{'mysqld'}{'datadir'} ) {
-        $datadir = $MYSQL_CONF->{'mysqld'}{'datadir'}[1];
+    if ( $mysql_conf->{'LINES'} && $mysql_conf->{'mysqld'}{'datadir'} ) {
+        $datadir = $mysql_conf->{'mysqld'}{'datadir'}[1];
         if ( $datadir !~ m{ / \z }xms ) {
             $datadir .= '/';
         }
@@ -4251,9 +4249,9 @@ sub check_for_domain_forwarding {
 }
 
 sub check_for_empty_apache_templates {
-    return unless defined $APACHE_VERSION;
+    return unless defined $apache_version;
     my $apache2_template_dir = '/var/cpanel/templates/apache2';
-    if ( version_compare( $APACHE_VERSION, qw( >= 2.4.0 ) ) ) {
+    if ( version_compare( $apache_version, qw( >= 2.4.0 ) ) ) {
         $apache2_template_dir = '/var/cpanel/templates/apache2_4';
     }
 
@@ -4293,14 +4291,14 @@ sub check_for_empty_postgres_config {
 }
 
 sub check_for_empty_easyapache_profiles {
-    return if $EA4;
+    return if $ea4;
     my $templates;
     my $dir = '/var/cpanel/easy/apache/profile';
     return unless -d $dir;
     find( \&find_easyapache_templates, $dir );
 
-    if (@EASYAPACHE_TEMPLATES) {
-        for my $template (@EASYAPACHE_TEMPLATES) {
+    if (@easyapache_templates) {
+        for my $template (@easyapache_templates) {
             $templates .= "$template ";
         }
 
@@ -4313,14 +4311,14 @@ sub find_easyapache_templates {
     my $file = $File::Find::name;
     if ( -f $file and -z $file ) {
         $file =~ s#/var/cpanel/easy/apache/profile/##g;
-        push @EASYAPACHE_TEMPLATES, $file;
+        push @easyapache_templates, $file;
     }
 }
 
 sub check_for_missing_timezone_from_phpini {
     my $timezone;
 
-    for my $line (@PHPINI) {
+    for my $line (@phpini) {
         if ( $line =~ m{ \A date\.timezone (?:\s+)? = (?:\s+)? (?:["'])? ([^/"']+) / ([^/"']+) (?:["'])? (?:\s+)? \z }xms ) {
             $timezone = $1 . '/' . $2;
             last;
@@ -4374,21 +4372,21 @@ sub check_usr_local_cpanel_path_for_symlinks {
 }
 
 sub populate_mysql_rpm_versions_array {
-    return if !@RPM_LIST;
+    return if !@rpm_list;
 
-    my @tmp = grep { /^MySQL(?:55)?-(server|shared|devel|client|test|embedded)-(.*)$/ } @RPM_LIST;
+    my @tmp = grep { /^MySQL(?:55)?-(server|shared|devel|client|test|embedded)-(.*)$/ } @rpm_list;
     for my $rpm (@tmp) {
         $rpm =~ s/.*-(server|shared|devel|client|test|embedded)-//g;
-        push @MYSQL_RPM_VERSIONS, $rpm;
+        push @mysql_rpm_versions, $rpm;
     }
 }
 
 sub check_for_mysql_4 {
-    return if !@MYSQL_RPM_VERSIONS;
+    return if !@mysql_rpm_versions;
 
     my $mysql_4 = 0;
 
-    for my $rpm (@MYSQL_RPM_VERSIONS) {
+    for my $rpm (@mysql_rpm_versions) {
         if ( $rpm =~ m{ \A 4 }xms ) {
             $mysql_4 = 1;
             last;
@@ -4402,9 +4400,9 @@ sub check_for_mysql_4 {
 }
 
 sub check_for_additional_rpms {
-    return if !@RPM_LIST;
+    return if !@rpm_list;
 
-    my @additional_rpms = grep { /^(php-|kde-|psa-|clamav|clamd|rrdtool-)|(http|apache|pear|sendmail)/ } @RPM_LIST;
+    my @additional_rpms = grep { /^(php-|kde-|psa-|clamav|clamd|rrdtool-)|(http|apache|pear|sendmail)/ } @rpm_list;
     @additional_rpms = grep { !/httpd-tools|cpanel-|alt-php|apache-tomcat-apis|^ea-/ } @additional_rpms;
     if (@additional_rpms) {
         print "\n";
@@ -4418,11 +4416,11 @@ sub check_for_additional_rpms {
 }
 
 sub check_mysql_rpm_mismatch {
-    return if !@RPM_LIST;
+    return if !@rpm_list;
 
-    my $first_rpm = pop @MYSQL_RPM_VERSIONS;
-    for ( 1 .. scalar @MYSQL_RPM_VERSIONS ) {
-        my $next_rpm = pop @MYSQL_RPM_VERSIONS;
+    my $first_rpm = pop @mysql_rpm_versions;
+    for ( 1 .. scalar @mysql_rpm_versions ) {
+        my $next_rpm = pop @mysql_rpm_versions;
         if ( $first_rpm ne $next_rpm ) {
             print_warn('MySQL RPMs: ');
             print_warning('version mismatch!');
@@ -4432,7 +4430,7 @@ sub check_mysql_rpm_mismatch {
 }
 
 sub check_php_libmysqlclient_mismatch {
-    return if !@RPM_LIST;
+    return if !@rpm_list;
 
     my ( @php4_ldd,                    @php5_ldd );
     my ( $php4_libmysqlclient_version, $php5_libmysqlclient_version );
@@ -4447,7 +4445,7 @@ sub check_php_libmysqlclient_mismatch {
     my $mysql_shared_rpm_version;
 
     ## Get the MySQL-shared rpm major and minor version.
-    for my $rpm (@RPM_LIST) {
+    for my $rpm (@rpm_list) {
         if ( $rpm =~ /MySQL-shared-(\d)\.(\d)/ ) {
             $mysql_shared_rpm_version_orig = $rpm;
             $mysql_shared_rpm_version      = $1 . $2;
@@ -4543,30 +4541,30 @@ sub check_php_libmysqlclient_mismatch {
 sub check_for_system_mem_below_required {
 
     # Calculations have a 64-96MB fudge factor for overhead
-    return unless defined( $MEMINFO->{installed} ) && $MEMINFO->{installed} =~ /[0-9]+/;
-    my $memtotal   = int( $MEMINFO->{installed} / 1024 );
+    return unless defined( $meminfo->{installed} ) && $meminfo->{installed} =~ /[0-9]+/;
+    my $memtotal   = int( $meminfo->{installed} / 1024 );
     my $memmin     = 704;                                   # 768 - 64
     my $memmintext = "768MB";
 
-    if ( version_compare( $OS_VERSION, qw( >= 7 ) ) ) {
+    if ( version_compare( $os_version, qw( >= 7 ) ) ) {
         $memmin     = 928;                                  # 1024 - 96
         $memmintext = "1024MB";
     }
 
     if ( $memtotal < $memmin ) {
         print_warn('Memory: ');
-        print_warning( "Server has less than ${memmintext} installed memory! [ " . format_meminfo( $MEMINFO->{installed} ) . " ]" );
+        print_warning( "Server has less than ${memmintext} installed memory! [ " . format_meminfo( $meminfo->{installed} ) . " ]" );
     }
 
     #TECH-74 recommends >= 1024MB swap on systems with <= 1024MB RAM
     return if $memtotal > 928;
     my $swaptotal = 0;
-    $swaptotal = int( $MEMINFO->{swapinstalled} / 1024 ) if defined( $MEMINFO->{swapinstalled} ) && $MEMINFO->{swapinstalled} =~ /[0-9]+/;
+    $swaptotal = int( $meminfo->{swapinstalled} / 1024 ) if defined( $meminfo->{swapinstalled} ) && $meminfo->{swapinstalled} =~ /[0-9]+/;
     my $swapmin     = 928;
     my $swapmintext = "1024MB";
     if ( $swaptotal < $swapmin ) {
         print_warn('Memory: ');
-        print_warning( "Server has less than ${swapmintext} swap! [ " . format_meminfo( $MEMINFO->{swapinstalled} ) . " ]" );
+        print_warning( "Server has less than ${swapmintext} swap! [ " . format_meminfo( $meminfo->{swapinstalled} ) . " ]" );
     }
 }
 
@@ -4752,7 +4750,7 @@ sub check_roots_cron_for_certain_commands {
 }
 
 sub check_for_missing_or_commented_customlog {
-    return if not defined $APACHE_VERSION;
+    return if not defined $apache_version;
     my $commented_templates;
     my $missing_customlog_templates;
     my $httpdconf = '/usr/local/apache/conf/httpd.conf';
@@ -4760,7 +4758,7 @@ sub check_for_missing_or_commented_customlog {
     my $httpdconf_customlog_exists;
 
     my $templates_dir = '/var/cpanel/templates/apache2';
-    if ( version_compare( $APACHE_VERSION, qw( >= 2.4.0 ) ) ) {
+    if ( version_compare( $apache_version, qw( >= 2.4.0 ) ) ) {
         $templates_dir = '/var/cpanel/templates/apache2_4';
     }
 
@@ -4912,7 +4910,7 @@ sub check_for_usr_local_lib_libz_so {
 }
 
 sub check_for_non_default_modsec_rules {
-    return unless defined( $APACHE_MODULES->{'security_module'} || $APACHE_MODULES->{'security2_module'} );
+    return unless defined( $apache_modules->{'security_module'} || $apache_modules->{'security2_module'} );
 
     my $modsec2_conf      = '/usr/local/apache/conf/modsec2.conf';
     my $modsec2_user_conf = '/usr/local/apache/conf/modsec2.user.conf';
@@ -4969,7 +4967,7 @@ sub check_etc_hosts_sanity {
             if ( $line =~ m{ httpupdate\.cpanel\.net }xmsi ) {
                 $httpupdate = 1;
             }
-            if ( $line =~ m{ $HOSTNAME }xmsi ) {
+            if ( $line =~ m{ $hostname }xmsi ) {
                 $hostname_entry = 1;
             }
         }
@@ -4993,7 +4991,7 @@ sub check_etc_hosts_sanity {
 
     if ( $hostname_entry == 0 ) {
         print_warn('/etc/hosts: ');
-        print_warning("no entry found for the server's hostname! [$HOSTNAME] (Can break EA or Apache when mod_unique_id is enabled)");
+        print_warning("no entry found for the server's hostname! [$hostname] (Can break EA or Apache when mod_unique_id is enabled)");
     }
 }
 
@@ -5062,18 +5060,18 @@ sub _resolve {
     };
     alarm $timeout;
 
-    if (%SOCKET) {
-        my $getnameinfo_flags = ( $addr =~ /^\d+\.\d+\.\d+\.\d+$/ ) ? $SOCKET{'NI_NAMEREQD'} : $SOCKET{'NI_NUMERICHOST'};    # If looking up IP address we require name resolution, otherwise we want the IP address returned.
-        my ( $err, @socks ) = $SOCKET{'getaddrinfo'}->( $addr, "", { socktype => $SOCKET{'SOCK_RAW'} } );
+    if (%socket) {
+        my $getnameinfo_flags = ( $addr =~ /^\d+\.\d+\.\d+\.\d+$/ ) ? $socket{'NI_NAMEREQD'} : $socket{'NI_NUMERICHOST'};    # If looking up IP address we require name resolution, otherwise we want the IP address returned.
+        my ( $err, @socks ) = $socket{'getaddrinfo'}->( $addr, "", { socktype => $socket{'SOCK_RAW'} } );
         if ( $report_errors && $err ) {
             print_warn('Resolver: ');
-            print_warning( 'getaddrinfo() failed to resolve "' . $addr . '": ' . $err );
+            print_warning(qq{getaddrinfo() failed to resolve "$addr": $err});
         }
         foreach my $sock (@socks) {
-            my ( $err, $result ) = $SOCKET{'getnameinfo'}->( $sock->{addr}, $getnameinfo_flags, $SOCKET{'NIx_NOSERV'} );
+            my ( $err, $result ) = $socket{'getnameinfo'}->( $sock->{addr}, $getnameinfo_flags, $socket{'NIx_NOSERV'} );
             if ( $report_errors && $err ) {
                 print_warn('Resolver: ');
-                print_warning( 'getnameinfo() failed to resolve "' . $addr . '": ' . $err );
+                print_warning(qq{getnameinfo() failed to resolve "$addr": $err});
                 next;
             }
             push @results, $result;
@@ -5116,9 +5114,9 @@ sub _resolve {
 }
 
 sub check_for_apache_listen_host_is_localhost {
-    return if not defined $CPCONF{'apache_port'};
+    return if not defined $cpconf{'apache_port'};
 
-    my $apache_setting = $CPCONF{'apache_port'};
+    my $apache_setting = $cpconf{'apache_port'};
     $apache_setting =~ s/:.*//g;
 
     if ( $apache_setting eq '127.0.0.1' ) {
@@ -5128,7 +5126,7 @@ sub check_for_apache_listen_host_is_localhost {
 }
 
 sub check_roundcube_mysql_pass_mismatch {
-    return if ( defined $CPCONF{'roundcube_db'} and $CPCONF{'roundcube_db'} ne 'mysql' );
+    return if ( defined $cpconf{'roundcube_db'} and $cpconf{'roundcube_db'} ne 'mysql' );
 
     my $roundcubepass;
     my $rc_mysql_pass;
@@ -5205,16 +5203,16 @@ sub check_for_hooks_from_var_cpanel_hooks_yaml {
 }
 
 sub get_mysql_error_log {
-    if ( $MYSQL_CONF->{'LINES'} && $MYSQL_CONF->{'mysqld'}{'logerror'} ) {
-        return $MYSQL_CONF->{'mysqld'}{'logerror'}[1];
+    if ( $mysql_conf->{'LINES'} && $mysql_conf->{'mysqld'}{'logerror'} ) {
+        return $mysql_conf->{'mysqld'}{'logerror'}[1];
     }
     else {
-        return '/var/lib/mysql/' . $HOSTNAME . '.err';
+        return "/var/lib/mysql/$hostname.err";
     }
 }
 
 sub check_mysql_config {
-    return if !$MYSQL_CONF->{'LINES'};
+    return if !$mysql_conf->{'LINES'};
 
     # Example: 'optionwithoutdashesorunderscores' => { default => 'defaultvalue', check_missing => 1, orig_name => 'option_with_underscores-or-dashes', help => '- Help text' },
     # default, check_missing, and help are optional, but orig_name should be defined if check_missing is used so that its name can be properly printed
@@ -5223,7 +5221,7 @@ sub check_mysql_config {
     my %mysqld_checks = (
         'datadir'             => { default => '/var/lib/mysql' },
         'innodbforcerecovery' => { default => '0', help => 'Makes all InnoDB databases read-only, will break MySQL upgrades.' },
-        'logerror'            => { default => '/var/lib/mysql/' . $HOSTNAME . '.err' },
+        'logerror'            => { default => "/var/lib/mysql/$hostname.err" },
         'lowercasetablenames' => { default => '0', help => 'Will break space usage reporting of databases with mixed-case names. See CPANEL-8453.' },
         'oldpasswords'        => { default => '0', help => 'Not recommended, non-native passwords are incompatible with MySQL 5.6+ and some MySQL clients. See also CPANEL-10047, 10826, 10940, 10954, 11018, and 11019.' },
         'skipnameresolve'     => { help    => 'Seeing "Can\'t find any matching row"? That may be why.' },
@@ -5231,11 +5229,11 @@ sub check_mysql_config {
         'sqlmode'             => { help    => 'Seeing "Field \'ssl_cipher\' doesn\'t have a default value"? That may be why.' }
     );
 
-    if ( defined( $MEMINFO->{memtotal} ) ) {
-        my $mem_mb = int( $MEMINFO->{memtotal} / 1024 );
+    if ( defined( $meminfo->{memtotal} ) ) {
+        my $mem_mb = int( $meminfo->{memtotal} / 1024 );
 
         # Systems w/2GB RAM report around 1800MB total after overhead, so 1700 should be a good tipping point
-        if ( $mem_mb < 1700 && version_compare( $CPCONF{'mysql-version'}, qw( >= 5.6 ) ) ) {
+        if ( $mem_mb < 1700 && version_compare( $cpconf{'mysql-version'}, qw( >= 5.6 ) ) ) {
             $mysqld_checks{'performanceschema'} = { default => '0', check_missing => 1, orig_name => "performance_schema", help => 'performance_schema is enabled by default in MySQL 5.6+ and could use a significant amount of memory, recommend "performance_schema = 0" with less than 2GB RAM [detected ' . $mem_mb . 'MB].' };
         }
     }
@@ -5245,28 +5243,28 @@ sub check_mysql_config {
         $mysqld_checks{$check}->{check_missing} = 0  unless defined( $mysqld_checks{$check}->{check_missing} );
         $mysqld_checks{$check}->{help}          = "" unless defined( $mysqld_checks{$check}->{help} );
         my $help = $mysqld_checks{$check}->{help} ? ' - ' . $mysqld_checks{$check}->{help} : '';
-        if ( defined( $MYSQL_CONF->{'mysqld'}{$check} ) && !( $MYSQL_CONF->{'mysqld'}{$check}[1] eq $mysqld_checks{$check}->{default} ) ) {
+        if ( defined( $mysql_conf->{'mysqld'}{$check} ) && !( $mysql_conf->{'mysqld'}{$check}[1] eq $mysqld_checks{$check}->{default} ) ) {
             print_warn('MySQL /etc/my.cnf: ');
-            if ( $MYSQL_CONF->{'mysqld'}{$check}[1] eq "enabled" ) {
-                print_warning( '[ ' . $MYSQL_CONF->{'mysqld'}{$check}[0] . ' ] found ' . $help );
+            if ( $mysql_conf->{'mysqld'}{$check}[1] eq "enabled" ) {
+                print_warning("[ $mysql_conf->{'mysqld'}{$check}[0] ] found $help");
             }
             else {
-                print_warning( '[ ' . $MYSQL_CONF->{'mysqld'}{$check}[0] . ' = ' . $MYSQL_CONF->{'mysqld'}{$check}[1] . ' ] ' . $help );
+                print_warning("[ $mysql_conf->{'mysqld'}{$check}[0] = $mysql_conf->{'mysqld'}{$check}[1] ] $help");
             }
         }
-        elsif ( $mysqld_checks{$check}->{check_missing} && !defined( $MYSQL_CONF->{'mysqld'}{$check} ) ) {
+        elsif ( $mysqld_checks{$check}->{check_missing} && !defined( $mysql_conf->{'mysqld'}{$check} ) ) {
             my $optname = defined( $mysqld_checks{$check}->{orig_name} ) ? $mysqld_checks{$check}->{orig_name} : $check;
             print_warn('MySQL /etc/my.cnf: ');
-            print_warning( '[ ' . $optname . ' ] not found ' . $help );
+            print_warning("[ $optname ] not found. $help");
         }
     }
 }
 
 sub check_mysql_datadir {
-    return unless defined $OS_VERSION            and version_compare( $OS_VERSION,            qw( >= 7 ) );
-    return unless defined $MYSQL_NUMERIC_VERSION and version_compare( $MYSQL_NUMERIC_VERSION, qw( >= 10.1.16 ) );
+    return unless defined $os_version            and version_compare( $os_version,            qw( >= 7 ) );
+    return unless defined $mysql_numeric_version and version_compare( $mysql_numeric_version, qw( >= 10.1.16 ) );
     my $bad_path_regex = '^\/(home|usr|etc|boot)(\/|\s*$)';
-    if ( defined $MYSQL_CONF->{'mysqld'}{'datadir'}[1] and $MYSQL_CONF->{'mysqld'}{'datadir'}[1] =~ m/$bad_path_regex/ ) {
+    if ( defined $mysql_conf->{'mysqld'}{'datadir'}[1] and $mysql_conf->{'mysqld'}{'datadir'}[1] =~ m/$bad_path_regex/ ) {
         print_warn('MySQL: ');
         print_warning('/etc/my.cnf datadir points to a systemd protected directory which can prevent MariaDB 10.1.16+ from starting. See CPANEL-15633.');
     }
@@ -5300,7 +5298,7 @@ sub check_for_extra_mysql_config_files {
 }
 
 sub check_cpanel_config {
-    return if !keys(%CPCONF);
+    return if !keys(%cpconf);
 
     # Example: 'exact_option_name' => { default => 'defaultvalue', check_missing => 1, help => '- Help text' },
     # default, check_missing, and help are optional
@@ -5316,7 +5314,7 @@ sub check_cpanel_config {
         'skipparentcheck'             => { default       => '0', help => 'Allows other applications to run the cPanel and admin binaries' },
     );
 
-    if ( defined $CPCONF{'maxmem'} && $CPCONF{'maxmem'} < 512 ) {
+    if ( defined $cpconf{'maxmem'} && $cpconf{'maxmem'} < 512 ) {
         $cpanel_checks{'maxmem'} = { default => '512', help => '< 512M, phpmyadmin may fail' };
     }
 
@@ -5324,13 +5322,13 @@ sub check_cpanel_config {
         $cpanel_checks{$check}->{check_missing} = 0  unless defined( $cpanel_checks{$check}->{check_missing} );
         $cpanel_checks{$check}->{help}          = "" unless defined( $cpanel_checks{$check}->{help} );
         my $help = $cpanel_checks{$check}->{help} ? ' - ' . $cpanel_checks{$check}->{help} : '';
-        if ( defined( $CPCONF{$check} ) && defined( $cpanel_checks{$check}->{default} ) && !( $CPCONF{$check} eq $cpanel_checks{$check}->{default} ) ) {
+        if ( defined( $cpconf{$check} ) && defined( $cpanel_checks{$check}->{default} ) && !( $cpconf{$check} eq $cpanel_checks{$check}->{default} ) ) {
             print_warn('cpanel.config: ');
-            print_warning( '[ ' . $check . '=' . $CPCONF{$check} . ' ]' . $help );
+            print_warning("[ $check = $cpconf{$check} ] $help");
         }
-        elsif ( $cpanel_checks{$check}->{check_missing} && ( !defined( $CPCONF{$check} ) || ( defined( $CPCONF{$check} ) && $CPCONF{$check} eq "" ) ) ) {
+        elsif ( $cpanel_checks{$check}->{check_missing} && ( !defined( $cpconf{$check} ) || ( defined( $cpconf{$check} ) && $cpconf{$check} eq "" ) ) ) {
             print_warn('cpanel.config: ');
-            print_warning( '[ ' . $check . ' ] not found or has empty value' . $help );
+            print_warning("[ $check ] not found or has empty value. $help");
         }
     }
 }
@@ -5390,7 +5388,7 @@ sub check_for_custom_exim_conf_local {
 }
 
 sub check_for_maxclients_or_maxrequestworkers_reached {
-    return if !$APACHE_VERSION;
+    return if !$apache_version;
     my $log            = '/usr/local/apache/logs/error_log';
     my $size           = ( stat($log) )[7];
     my $bytes_to_check = 20_971_520 / 2;                       # 10M limit of logs to check, may need adjusting, depending how much time it adds to SSP
@@ -5415,7 +5413,7 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
         undef $log_data;
         @logs = reverse @logs;
         for my $log_line (@logs) {
-            if ( version_compare( $APACHE_VERSION, qw( < 2.3.0 ) ) ) {
+            if ( version_compare( $apache_version, qw( < 2.3.0 ) ) ) {
 
                 # [Wed Nov 14 05:55:04 2012] [error] server reached MaxClients setting, consider raising the MaxClients setting
                 if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s+ \[error\] \s+ server \s+ reached \s+ MaxClients }xms ) {
@@ -5423,7 +5421,7 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
                     last;
                 }
             }
-            elsif ( version_compare( $APACHE_VERSION, qw( >= 2.4.0 ) ) ) {
+            elsif ( version_compare( $apache_version, qw( >= 2.4.0 ) ) ) {
 
                 # [Fri Feb 08 09:58:45.875187 2013] [mpm_prefork:error] [pid 23220] AH00161: server reached MaxRequestWorkers
                 if ( $log_line =~ m{ \A \[ (\S+ \s+ \S+ \s+ \S+ \s+ \S+ \s+ \S+ ) \] \s (.*) server \s reached \s MaxRequestWorkers }xms ) {
@@ -5435,10 +5433,10 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
     }
 
     if ($limit_last_hit_date) {
-        if ( version_compare( $APACHE_VERSION, qw( < 2.3.0 ) ) ) {
+        if ( version_compare( $apache_version, qw( < 2.3.0 ) ) ) {
             print_warn('Apache MaxClients: ');
         }
-        elsif ( version_compare( $APACHE_VERSION, qw( >= 2.4.0 ) ) ) {
+        elsif ( version_compare( $apache_version, qw( >= 2.4.0 ) ) ) {
             print_warn('Apache MaxRequestWorkers: ');
         }
 
@@ -5482,7 +5480,7 @@ sub check_for_kernel_headers_rpm {
 }
 
 sub check_for_broken_rpm {
-    return unless @RPM_LIST;
+    return unless @rpm_list;
     my %rpms = (    # 'rpm name' => { check => ['check1', 'check2', ...], help => 'Additional info' } # Check types should be ordered by dependency, first failure skips other checks for that RPM.
         'bind-chroot'        => { check => ['exists'], help => 'Not supported -- should be removed and excluded in yum.conf. See https://documentation.cpanel.net/display/ALD/Installation+Guide+-+Customize+Your+Installation#InstallationGuide-CustomizeYourInstallation-Excludepackages' },
         'cpuspeed'           => { check => ['exists'], help => 'May cause yum to crash when updating kernel. Send "cpuspeed detected" predefined response.' },
@@ -5490,7 +5488,7 @@ sub check_for_broken_rpm {
         'letsencrypt-cpanel' => { check => ['exists'], help => 'Third-party FleetSSL Let\'s Encrypt plugin -- no direct support provided, use "3RDP - FleetSSL/LetsEncrypt" predef if relevant.' },
     );
 
-    if ($EA4) {
+    if ($ea4) {
         $rpms{'ea-apache24-mod_lua'} = { check => ['exists'], help => 'Experimental. Potential security issues in shared hosting environments.' };
         $rpms{'httpd-tools'}         = { check => ['exists'], help => 'Conflicts with ea-apache24-tools, will break EA4.' };
     }
@@ -5503,7 +5501,7 @@ sub check_for_broken_rpm {
             help => 'RPM exists',
             run  => sub {           # Only care that the RPM exists.
                 my $rpm = shift;
-                return 1 if grep { /^${rpm}-/ } @RPM_LIST;
+                return 1 if grep { /^${rpm}-/ } @rpm_list;
                 return 0;
             }
         },
@@ -5511,7 +5509,7 @@ sub check_for_broken_rpm {
             help => 'Missing RPM',
             run  => sub {            # Only care that the RPM is missing.
                 my $rpm = shift;
-                return 0 if grep { /^${rpm}-/ } @RPM_LIST;
+                return 0 if grep { /^${rpm}-/ } @rpm_list;
                 return 1;
             }
         },
@@ -5519,7 +5517,7 @@ sub check_for_broken_rpm {
             help => 'Verify Failed',
             run  => sub {              # Only performs check if the RPM exists.
                 my $rpm = shift;
-                return 0 if !grep { /^${rpm}-/ } @RPM_LIST;
+                return 0 if !grep { /^${rpm}-/ } @rpm_list;
                 my $output = timed_run( 0, 'rpm', '-V', $rpm );
                 return 0 if $output eq "";
                 return 1 if $output =~ m{ \A missing }xms;
@@ -5532,9 +5530,9 @@ sub check_for_broken_rpm {
     for my $rpm ( sort keys %rpms ) {
         for my $check ( @{ $rpms{$rpm}{check} } ) {
             if ( $rpm_checks{$check}{run}->($rpm) ) {
-                my $additional_info = $rpms{$rpm}{help} ? ( "( " . $rpms{$rpm}{help} . " )" ) : '';
+                my $additional_info = $rpms{$rpm}{help} ? ("( $rpms{$rpm}{help} )") : '';
                 print_warn('RPM check: ');
-                print_warning( $rpm_checks{$check}{help} . " - [ " . $rpm . " ] " . $additional_info );
+                print_warning("$rpm_checks{$check}{help} - [ $rpm ] $additional_info");
                 last;
             }
         }
@@ -5542,29 +5540,29 @@ sub check_for_broken_rpm {
 }
 
 sub check_for_ea4_mismatch {
-    return unless $EA4;
+    return unless $ea4;
     my $cp_count = 0;
     my $cl_count = 0;
-    foreach (@RPM_LIST) {
+    foreach (@rpm_list) {
         $cp_count++ if /^ea-.*\.cpanel/;
         $cl_count++ if /^ea-.*\.cloudlinux/;
     }
-    if ($IS_CLOUDLINUX) {
+    if ($is_cloudlinux) {
         return unless $cp_count;
         print_warn('EA4 RPMs: ');
-        print_warning( 'Found ' . $cp_count . ' "ea-*.cpanel" RPMs on a CloudLinux system!  Using wrong EA4 repo?' );
+        print_warning(qq{Found $cp_count "ea-*.cpanel" RPMs on a CloudLinux system!  Using wrong EA4 repo?});
     }
     else {
         return unless $cl_count;
         print_warn('EA4 RPMs: ');
-        print_warning( 'Found ' . $cl_count . ' "ea-*.cloudlinux" RPMs on a non-CloudLinux system!  Using wrong EA4 repo?' );
+        print_warning(qq{Found $cl_count "ea-*.cloudlinux" RPMs on a non-CloudLinux system!  Using wrong EA4 repo?});
     }
 }
 
 sub check_eximstats_size {
-    return if !-d $MYSQL_DATADIR;
+    return if !-d $mysql_datadir;
 
-    my $eximstats_dir = $MYSQL_DATADIR . 'eximstats/';
+    my $eximstats_dir = $mysql_datadir . 'eximstats/';
     my @dir_contents;
     my $size;
 
@@ -5595,7 +5593,7 @@ sub check_for_broken_mysql_tables {
     push @schemas, 'modsec'    if cpanel_version_is(qw ( < 11.61.0.0 ));
     push @schemas, 'eximstats' if cpanel_version_is(qw ( < 11.63.0.0 ));
     push @schemas, 'cphulkd'   if cpanel_version_is(qw ( < 11.65.0.0 ));
-    push @schemas, 'roundcube' if defined $CPCONF{roundcube_db} && $CPCONF{roundcube_db} eq 'mysql';
+    push @schemas, 'roundcube' if defined $cpconf{roundcube_db} && $cpconf{roundcube_db} eq 'mysql';
 
     return unless scalar @schemas;
 
@@ -5657,7 +5655,7 @@ sub check_for_clock_skew {
     $clock_skew = abs $clock_skew;                # convert negative numbers to positive
 
     my $max_skew = 120;
-    if ( defined $CPCONF{'SecurityPolicy::TwoFactorAuth'} && $CPCONF{'SecurityPolicy::TwoFactorAuth'} == 1 ) {
+    if ( defined $cpconf{'SecurityPolicy::TwoFactorAuth'} && $cpconf{'SecurityPolicy::TwoFactorAuth'} == 1 ) {
         $max_skew = 25;
     }
 
@@ -5696,9 +5694,9 @@ sub check_for_zlib_h {
 }
 
 sub check_for_better_linux {
-    return if ( !$#EXTENDED_RPM_LIST );
+    return if ( !$#extended_rpm_list );
 
-    foreach my $rpm_ref ( grep { $_->{'name'} =~ m/^kernel/ } @EXTENDED_RPM_LIST ) {
+    foreach my $rpm_ref ( grep { $_->{'name'} =~ m/^kernel/ } @extended_rpm_list ) {
         if ( $rpm_ref->{'release'} =~ m/\.bl/ ) {
             print_warn("BetterLinux detected:\n");
             print_magenta("\t \\_ Branding problems? Possible CloakFS involvement. See FB-64368, ticket 4582511");
@@ -5709,11 +5707,11 @@ sub check_for_better_linux {
 }
 
 sub check_for_duplicate_rpms {
-    return if ( !$#EXTENDED_RPM_LIST );
+    return if ( !$#extended_rpm_list );
 
     my %SEEN_RPMS;
     my %DUP_RPMS;
-    foreach my $rpm_ref (@EXTENDED_RPM_LIST) {
+    foreach my $rpm_ref (@extended_rpm_list) {
         push @{ $SEEN_RPMS{ $rpm_ref->{'name'} . '-' . $rpm_ref->{'arch'} } }, $rpm_ref->{'version'} . '-' . $rpm_ref->{'release'};
         if ( scalar @{ $SEEN_RPMS{ $rpm_ref->{'name'} . '-' . $rpm_ref->{'arch'} } } > 1 ) {
             $DUP_RPMS{ $rpm_ref->{'name'} . '-' . $rpm_ref->{'arch'} } = 1;
@@ -5731,11 +5729,11 @@ sub check_for_duplicate_rpms {
 }
 
 sub check_for_percona_rpms {
-    return if !@RPM_LIST;
+    return if !@rpm_list;
 
     my $has_percona = 0;
 
-    for my $rpm (@RPM_LIST) {
+    for my $rpm (@rpm_list) {
         next if $rpm =~ /^percona-toolkit/i;    # Can be used with MariaDB/MySQL
         if ( $rpm =~ /^Percona-/i ) {
             $has_percona = 1;
@@ -5775,7 +5773,7 @@ sub check_if_httpdconf_ipaddrs_exist {
 
     for my $vhost_ipaddr (@vhost_ipaddrs) {
         my $is_bound = 0;
-        for my $local_ipaddr (@LOCAL_IPADDRS_LIST) {
+        for my $local_ipaddr (@local_ipaddrs_list) {
             if ( $vhost_ipaddr eq $local_ipaddr ) {
                 $is_bound = 1;
                 last;
@@ -5797,7 +5795,7 @@ sub check_if_httpdconf_ipaddrs_exist {
 }
 
 sub check_distcache_and_libapr {
-    return if $EA4;
+    return if $ea4;
     my $last_success_profile           = '/var/cpanel/easy/apache/profile/_last_success.yaml';
     my $has_distcache                  = 0;
     my $httpd_not_linked_to_system_apr = 0;
@@ -5813,7 +5811,7 @@ sub check_distcache_and_libapr {
     }
 
     if ( $has_distcache == 1 ) {
-        my @ldd = split /\n/, timed_run( 0, 'ldd', $HTTPD_PATH );
+        my @ldd = split /\n/, timed_run( 0, 'ldd', $httpd_bin );
         for my $line (@ldd) {
             if ( $line =~ m{ libapr(?:.*) \s+ => \s+ (\S+) }xms ) {
                 if ( $1 !~ m{ \A /usr/local/apache/lib/libapr }xms ) {
@@ -6034,10 +6032,10 @@ sub check_for_rpm_dist_ver_unknown {
 }
 
 sub check_for_homeloader_php_extension {
-    return if $EA4;
-    return if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER ne 'dso' );
+    return if $ea4;
+    return if ( $ea3_php5handler && $ea3_php5handler ne 'dso' );
 
-    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? homeloader\.so ['"]? #xms } @PHPINI ) {
+    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? homeloader\.so ['"]? #xms } @phpini ) {
         print_warn('/usr/local/lib/php.ini: ');
         print_warning("homeloader.so extension found. This can cause errors. See FB-4471 and FB-63838");
     }
@@ -6048,7 +6046,7 @@ sub check_for_networkmanager {
     my $using_ipaliases        = 0;
     my $ipaliases              = '/etc/ips';
 
-    for my $line (@PROCESS_LIST) {
+    for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) NetworkManager }xms ) {
             $networkmanager_running = 1;
             last;
@@ -6066,7 +6064,7 @@ sub check_for_networkmanager {
 sub check_for_dhclient {
     my $dhclient_running;
 
-    for my $line (@PROCESS_LIST) {
+    for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) dhclient }xms ) {
             $dhclient_running = 1;
             last;
@@ -6113,7 +6111,7 @@ sub check_for_perl_env_var {
         print_warn('PERL_MM_OPT env var: ');
         print_warning('exists! This can break cPanel\'s perl or EA3.');
     }
-    if ( grep { /\/perl5?\// } $ORIGINAL_PATH ) {
+    if ( grep { /\/perl5?\// } $original_path ) {
         print_warn('Custom perl in PATH env var: ');
         print_warning('exists! This can break EA3 or cause other unexpected system-perl behavior.');
     }
@@ -6197,7 +6195,7 @@ sub check_for_disabled_services {
     }
 
     while ( my ( $skip, $service ) = each(%cpconfcheck) ) {
-        if ( $CPCONF{$skip} ) {
+        if ( $cpconf{$skip} ) {
             $disabled_services{$service} = 1;
         }
     }
@@ -6213,12 +6211,12 @@ sub check_for_license_info {
     my $helper_url = "http://" . $host;
     my %license;
 
-    if ($IS_CPANEL_SOLO) {
+    if ($is_cpanel_solo) {
         print_info('License: ');
         print_normal('cPanel Solo (limited to 1 account)');
     }
-    if ( defined($EXTERNAL_IP_ADDRESS) ) {
-        my $url = '/?ip=' . $EXTERNAL_IP_ADDRESS;
+    if ( defined($external_ip_address) ) {
+        my $url = '/?ip=' . $external_ip_address;
         $helper_url .= $url;
         if ( my $reply = _http_get( Host => $host, Path => $url ) ) {
             if ( $reply =~ /alt="cPanel\/WHM"/ ) {
@@ -6237,9 +6235,9 @@ sub check_for_license_info {
                 $license{'onetime'} = "One-Time";
             }
         }
-        if ( my $licenses = join " ", map { "[" . $license{$_} . "]" } sort keys %license ) {
+        if ( my $licenses = join " ", map { "[$license{$_}]" } sort keys %license ) {
             print_info('License: ');
-            print_normal( $EXTERNAL_IP_ADDRESS . ' has ' . $licenses );
+            print_normal("$external_ip_address has $licenses");
         }
         else {
             print_info('License: ');
@@ -6251,19 +6249,19 @@ sub check_for_license_info {
         }
     }
 
-    if ( ( defined($EXTERNAL_IP_ADDRESS) && defined($EXTERNAL_LICENSE_ADDRESS) ) && !( $EXTERNAL_IP_ADDRESS eq $EXTERNAL_LICENSE_ADDRESS ) ) {
+    if ( ( defined($external_ip_address) && defined($external_license_address) ) && !( $external_ip_address eq $external_license_address ) ) {
         print_crit('License: ');
-        print_critical("external IP detected via port 80 [ ${EXTERNAL_IP_ADDRESS} ] does not match IP detected via port 2089 [ ${EXTERNAL_LICENSE_ADDRESS} ] which can result in unexpected cPanel license update behavior.");
+        print_critical("external IP detected via port 80 [ $external_ip_address ] does not match IP detected via port 2089 [ $external_license_address ] which can result in unexpected cPanel license update behavior.");
     }
 
-    if ( $IS_CLOUDLINUX && !exists( $license{'cloudlinux'} ) ) {
+    if ( $is_cloudlinux && !exists( $license{'cloudlinux'} ) ) {
         print_warn('CloudLinux: ');
-        print_warning("MAY NOT BE LICENSED! - verify at ${helper_url} - use \"LICENSE - CloudLinux Not Licensed through cPanel\" if relevant");
+        print_warning(qq{MAY NOT BE LICENSED! - verify at $helper_url - use "LICENSE - CloudLinux Not Licensed through cPanel" if relevant});
     }
 
-    if ( $IS_KERNELCARE && !exists( $license{'kernelcare'} ) ) {
+    if ( $is_kernelcare && !exists( $license{'kernelcare'} ) ) {
         print_warn('KernelCare: ');
-        print_warning("MAY NOT BE LICENSED! - verify at ${helper_url} - use \"LICENSE - CloudLinux Not Licensed through cPanel\" if relevant");
+        print_warning(qq{MAY NOT BE LICENSED! - verify at $helper_url - use "LICENSE - CloudLinux Not Licensed through cPanel" if relevant});
     }
 }
 
@@ -6301,9 +6299,9 @@ sub check_for_usr_local_include_jpeglib_h {
 sub check_for_bw_module_and_more_than_1024_vhosts {
 
     # Remove on EA3 deprecation
-    my $httpdconf = $EA4 ? '/etc/apache2/conf/httpd.conf' : '/usr/local/apache/conf/httpd.conf';
+    my $httpdconf = $ea4 ? '/etc/apache2/conf/httpd.conf' : '/usr/local/apache/conf/httpd.conf';
     return if !-f $httpdconf;
-    return unless defined $APACHE_MODULES->{'bw_module'};
+    return unless defined $apache_modules->{'bw_module'};
 
     my $num_vhosts = 0;
 
@@ -6322,7 +6320,7 @@ sub check_for_bw_module_and_more_than_1024_vhosts {
 }
 
 sub check_for_uppercase_chars_in_hostname {
-    if ( $HOSTNAME =~ /[A-Z]/ ) {
+    if ( $hostname =~ /[A-Z]/ ) {
         print_warn('Hostname: ');
         print_warning('contains UPPERCASE characters. Seeing incorrect info at cPanel >> Configure Email Client? See ticket 4231465');
     }
@@ -6378,7 +6376,7 @@ sub check_for_bad_permissions_on_named_ca {
 }
 
 sub check_for_use_compiled_dnsadmin {
-    return if ( defined $CPCONF{'disable_compiled_dnsadmin'} and $CPCONF{'disable_compiled_dnsadmin'} == 1 );
+    return if ( defined $cpconf{'disable_compiled_dnsadmin'} and $cpconf{'disable_compiled_dnsadmin'} == 1 );
 
     my $has_custom_dnsadmin_modules;
     my ( @setup_modules, @remote_modules );
@@ -6493,18 +6491,18 @@ sub check_for_jail_owner {
 }
 
 sub check_for_phphandler_and_opcode_caching_incompatibility {
-    return if $EA4;
-    return if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER ne 'suphp' );
+    return if $ea4;
+    return if ( $ea3_php5handler && $ea3_php5handler ne 'suphp' );
 
     my $message;
 
-    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? eaccelerator\.so ['"]? #xms } @PHPINI ) {
+    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? eaccelerator\.so ['"]? #xms } @phpini ) {
         $message .= '[eAccelerator] ';
     }
-    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? xcache\.so ['"]? #xms } @PHPINI ) {
+    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? xcache\.so ['"]? #xms } @phpini ) {
         $message .= '[XCache] ';
     }
-    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? apc\.so ['"]? #xms } @PHPINI ) {
+    if ( grep { m# \A ([\s\t]+)? extension ([\s\t]+)? = ([\s\t]+)? ["']? apc\.so ['"]? #xms } @phpini ) {
         $message .= '[APC] ';
     }
 
@@ -6544,10 +6542,10 @@ sub check_for_invalid_HOMEDIR {
 }
 
 sub check_for_unsupported_options_in_phpini {    # FB-75397
-    return if $EA4;
-    return if !$EA3_PHP5VERSION;
+    return if $ea4;
+    return if !$ea3_php5version;
 
-    my ( undef, $php5minor ) = split /\./, $EA3_PHP5VERSION;
+    my ( undef, $php5minor ) = split /\./, $ea3_php5version;
     return if ( !$php5minor || $php5minor <= 3 );
 
     my $unsupported_options;
@@ -6555,24 +6553,24 @@ sub check_for_unsupported_options_in_phpini {    # FB-75397
     ## http://www.php.net/manual/en/migration54.ini.php
     ## apparently "safe_mode = off" won't trigger 75397, but "safe_mode = on" will.
     ## some items like "y2k_compliance = On" don't appear to trigger the issue
-    if ( grep { m# \A (?:[\s\t]+)? register_globals (?:[\s\t]+)? = (?:[\s\t]+)? ["']? on ['"]? #ixms } @PHPINI ) {
+    if ( grep { m# \A (?:[\s\t]+)? register_globals (?:[\s\t]+)? = (?:[\s\t]+)? ["']? on ['"]? #ixms } @phpini ) {
         $unsupported_options .= "[register_globals] ";
     }
 
-    if ( grep { m# \A (?:[\s\t]+)? safe_mode (?:[\s\t]+)? = (?:[\s\t]+)? ["']? on ['"]? #ixms } @PHPINI ) {
+    if ( grep { m# \A (?:[\s\t]+)? safe_mode (?:[\s\t]+)? = (?:[\s\t]+)? ["']? on ['"]? #ixms } @phpini ) {
         $unsupported_options .= "[safe_mode] ";
     }
 
     if ($unsupported_options) {
         $unsupported_options =~ s/\s$//g;
         print_warn('/usr/local/lib/php.ini: ');
-        print_warning("PHP $EA3_PHP5VERSION does not support $unsupported_options, but found enabled in php.ini. See FB-75397");
+        print_warning("PHP $ea3_php5version does not support $unsupported_options, but found enabled in php.ini. See FB-75397");
     }
 }
 
 sub check_for_suphp_but_no_fileprotect {
-    return if $EA4;
-    if ( $EA3_PHP5HANDLER and $EA3_PHP5HANDLER eq 'suphp' ) {
+    return if $ea4;
+    if ( $ea3_php5handler and $ea3_php5handler eq 'suphp' ) {
         if ( !-e '/var/cpanel/fileprotect' ) {
             print_warn('suPHP: ');
             print_warning("enabled, but /var/cpanel/fileprotect not found. New users' public_htmls will be user:user");
@@ -6585,7 +6583,7 @@ sub check_if_hostname_missing_from_localdomains {
 
     if ( open my $localdomains_fh, '<', '/etc/localdomains' ) {
         while (<$localdomains_fh>) {
-            if (/^${HOSTNAME}$/) {
+            if (/^${hostname}$/) {
                 $hostname_check = 1;
                 last;
             }
@@ -6838,7 +6836,7 @@ sub check_for_nat_plus_mod_evasive {
     return if !-e $cpnat;
     return if ( stat($cpnat) )[7] == 0;
 
-    if ( defined $APACHE_MODULES->{'evasive20_module'} || defined $APACHE_MODULES->{'evasive24_module'} ) {
+    if ( defined $apache_modules->{'evasive20_module'} || defined $apache_modules->{'evasive24_module'} ) {
         print_warn('mod_evasive: ');
         print_warning('this 3rd party Apache module is loaded, and the server is using NAT. May cause random 403s. See ticket 4416847');
     }
@@ -6856,10 +6854,10 @@ sub check_for_port_80_not_apache {
     my ( $filename, $pid, $cmdline );
     my $unknown_httpd = 0;
 
-    return if !@LSOF_80;
-    return if scalar @LSOF_80 < 2;
+    return if !@lsof_80;
+    return if scalar @lsof_80 < 2;
 
-    for my $line (@LSOF_80) {
+    for my $line (@lsof_80) {
         if ( $line =~ m{ \A (\S+) \s+ (\d+) (?:.*) \(LISTEN\) }xms ) {
             ( $filename, $pid ) = ( $1, $2 );
             last;
@@ -6945,27 +6943,27 @@ sub check_for_noquotafs {
 }
 
 sub check_for_mod_rpaf {
-    return unless defined $APACHE_MODULES->{'rpaf_module'};
+    return unless defined $apache_modules->{'rpaf_module'};
     print_warn('mod_rpaf: ');
     print_warning('loaded. May prevent mod_http2 from working -- see 8772327. May prevent .htaccess from denying access -- see 4422297');
 }
 
 sub check_for_mod_spdy {
-    return unless defined $APACHE_MODULES->{'spdy_module'};
+    return unless defined $apache_modules->{'spdy_module'};
     print_warn('mod_spdy: ');
     print_warning('loaded. May break proxy subdomains. See 4973361');
 }
 
 sub check_for_mod_http2 {
-    if ( version_compare( $APACHE_VERSION, qw ( == 2.4.25 ) ) && defined $APACHE_MODULES->{'http2_module'} ) {
+    if ( version_compare( $apache_version, qw ( == 2.4.25 ) ) && defined $apache_modules->{'http2_module'} ) {
         print_warn('mod_http2: ');
         print_warning('is loaded and causes segfaults in Apache 2.4.25, see EAL-3153.');
     }
 }
 
 sub check_for_mod_fcgid {
-    return unless $EA4;
-    return unless defined $APACHE_MODULES->{'fcgid_module'};
+    return unless $ea4;
+    return unless defined $apache_modules->{'fcgid_module'};
     print_warn('mod_fcgid: ');
     print_warning('loaded, and has many caveats.  See https://documentation.cpanel.net/display/EA4/Apache+Module%3A+FCGId');
 }
@@ -6985,7 +6983,7 @@ sub check_for_roundcube_overlay {
 }
 
 sub check_for_hostname_park_zoneexists {
-    if ( -f "/var/named/${HOSTNAME}.db" and ( not defined $CPCONF{'allowparkonothers'} or $CPCONF{'allowparkonothers'} != 1 ) ) {
+    if ( -f "/var/named/$hostname.db" and ( not defined $cpconf{'allowparkonothers'} or $cpconf{'allowparkonothers'} != 1 ) ) {
         print_warn('Parking: ');
         print_warning('since zone of hostname exists, "Allow domain parking across accounts" must be ON to park on the hostname');
     }
@@ -7048,8 +7046,8 @@ sub check_for_extra_uid_0_user {
             $info .= ' [' . $user . ']';
         }
         $info .= ' (limit of 5, there may be more!)' if scalar @uid_0_users >= 5;
-        for my $pid ( keys(%$PROCESS_REF) ) {
-            if ( $PROCESS_REF->{$pid}->{CMD} =~ m{bin/nscd(\s|$)} ) {
+        for my $pid ( keys(%$process_ref) ) {
+            if ( $process_ref->{$pid}->{CMD} =~ m{bin/nscd(\s|$)} ) {
                 $info .= ' -- and nscd is running! This can break things. See CPANEL-2360.';
                 last;
             }
@@ -7092,28 +7090,28 @@ sub check_for_allow_update_in_named_conf {
 }
 
 sub check_for_mpm_itk {
-    return unless defined $APACHE_MODULES->{'mpm_itk_module'};
-    if ( defined $APACHE_MODULES->{'security_module'} || defined $APACHE_MODULES->{'security2_module'} ) {
+    return unless defined $apache_modules->{'mpm_itk_module'};
+    if ( defined $apache_modules->{'security_module'} || defined $apache_modules->{'security2_module'} ) {
         print_warn('MPM ITK: ');
         print_warning('is incompatible with ModSecurity SecDataDir (collections) until EA-4093 is resolved.');
     }
 }
 
 sub check_for_mod_ruid2 {
-    return unless defined $APACHE_MODULES->{'ruid2_module'};
-    if ( defined $CPCONF{'jailapache'} && $CPCONF{'jailapache'} == 1 ) {
+    return unless defined $apache_modules->{'ruid2_module'};
+    if ( defined $cpconf{'jailapache'} && $cpconf{'jailapache'} == 1 ) {
         print_warn('Mod Ruid2: ');
         print_warning('is enabled with Jail Apache Virtual Hosts tweak, this might break Mailman, see FB-84393, FB-104017, and tickets 5015613, 5227891');
-        if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq 'suphp' ) {
+        if ( $ea3_php5handler && $ea3_php5handler eq 'suphp' ) {
             print_warn('Mod Ruid2: ');
             print_warning('is enabled with Jail Apache Virtual Hosts tweak and suPHP handler, these are NOT COMPATIBLE, see FB-70561, FB-105901');
         }
     }
-    if ($LSWS_FULL_VERSION) {
+    if ($lsws_full_version) {
         print_warn('Mod Ruid2: ');
         print_warning('could cause file permission problems when using LiteSpeed Web Server (see ticket 5154193)');
     }
-    if ( defined $APACHE_MODULES->{'security_module'} || defined $APACHE_MODULES->{'security2_module'} ) {
+    if ( defined $apache_modules->{'security_module'} || defined $apache_modules->{'security2_module'} ) {
         print_warn('Mod Ruid2: ');
         print_warning('is incompatible with ModSecurity SecDataDir (collections) until EA-4093 is resolved.');
     }
@@ -7149,7 +7147,7 @@ sub check_for_cron_allow {
 }
 
 sub check_for_openssl_heartbleed_bug {
-    return if !$OPENSSL_RPM_CHANGELOG;
+    return if !$openssl_rpm_changelog;
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
     return if !-f $sysinfo_config;
 
@@ -7181,7 +7179,7 @@ sub check_for_openssl_heartbleed_bug {
         return;
     }
 
-    return if $OPENSSL_RPM_CHANGELOG =~ m{ \sCVE-2014-0160\s }xms;
+    return if $openssl_rpm_changelog =~ m{ \sCVE-2014-0160\s }xms;
 
     print_critical();
     print_crit('Heartbleed: ');
@@ -7193,7 +7191,7 @@ sub check_for_openssl_heartbleed_bug {
 }
 
 sub check_for_openssl_secadv_20140605 {
-    return if !$OPENSSL_RPM_CHANGELOG;
+    return if !$openssl_rpm_changelog;
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
     return if !-f $sysinfo_config;
 
@@ -7229,7 +7227,7 @@ sub check_for_openssl_secadv_20140605 {
         return if ( version_compare( $ver, qw( < 0.9.9.0 ) ) && version_compare( $ver, qw( >= 0.9.8.27 ) ) );    # If < 0.9.9 and >= 0.9.8za we're done.
     }
 
-    return if ( $OPENSSL_RPM_CHANGELOG =~ m{ \sCVE-2014-0224\s }xms );
+    return if ( $openssl_rpm_changelog =~ m{ \sCVE-2014-0224\s }xms );
 
     print_critical();
     print_crit('OpenSSL RPM missing secadv_20140605 patches: ');
@@ -7330,7 +7328,7 @@ sub check_for_readonly_filesystems {
     while (<$fh>) {
         if ( my @fs = split(' ') ) {
             next if grep { m{ / (virtfs|cagefs-skeleton|machine-id) / }x } $fs[1];
-            next if "/sys/fs/cgroup" eq $fs[1] and version_compare( $OS_VERSION, qw( >= 7 ) );
+            next if "/sys/fs/cgroup" eq $fs[1] and version_compare( $os_version, qw( >= 7 ) );
             if ( grep { m{ (^|,) ro (,|$) }x } $fs[3] ) {
                 push( @read_only_fs, $fs[1] );
             }
@@ -7344,50 +7342,50 @@ sub check_for_readonly_filesystems {
 }
 
 sub check_for_unsupported_php {
-    return if $EA4;
-    return if !$EA3_PHPVERSION;
-    return if $EA3_PHPVERSION >= 6;
+    return if $ea4;
+    return if !$ea3_phpversion;
+    return if $ea3_phpversion >= 6;
     my $min_php5 = '5.3.0';
-    if ( $EA3_PHPVERSION == 4 ) {
-        return if !$EA3_PHP4VERSION;
+    if ( $ea3_phpversion == 4 ) {
+        return if !$ea3_php4version;
     }
-    if ( $EA3_PHPVERSION == 5 ) {
-        return if !$EA3_PHP5VERSION;
-        return if !version_compare( $EA3_PHP5VERSION, '<', $min_php5 );
+    if ( $ea3_phpversion == 5 ) {
+        return if !$ea3_php5version;
+        return if !version_compare( $ea3_php5version, '<', $min_php5 );
     }
     print_critical();
     print_crit('!! RUNNING A VERSION OF PHP THAT IS NO LONGER SUPPORTED BY EASYAPACHE !! ');
     print_critical();
     print_critical('Do not run EasyApache without confirmation that this will replace PHP with a supported PHP version!');
-    if ($EA3_PHP4VERSION) {
-        print_critical( 'PHP4: ' . $EA3_PHP4VERSION );
+    if ($ea3_php4version) {
+        print_critical( 'PHP4: ' . $ea3_php4version );
     }
-    if ( $EA3_PHP5VERSION && version_compare( $EA3_PHP5VERSION, '<', $min_php5 ) ) {
-        print_critical( 'PHP5: ' . $EA3_PHP5VERSION );
+    if ( $ea3_php5version && version_compare( $ea3_php5version, '<', $min_php5 ) ) {
+        print_critical( 'PHP5: ' . $ea3_php5version );
     }
     print_critical();
 }
 
 sub check_for_cl_unsupported_memory_limits {
-    return unless $IS_CLOUDLINUX;
+    return unless $is_cloudlinux;
 
     # See ticket # 5557825 - Several memory limits are not imposed: URL: https://helpdesk.cloudlinux.com/index.php?/Knowledgebase/Article/View/69/3/memory-limits-are-not-working
     # Per Igor:
     # CL 5 - doesn't support memory limits for: mod_php, mod_ruid2, MPM ITK & LiteSpeed.
     # CL 6 - doesn't support memory limits for: mod_php & mod_ruid2
-    if ( $LSWS_FULL_VERSION && version_compare( $OS_VERSION, qw( < 6 ) ) ) {
+    if ( $lsws_full_version && version_compare( $os_version, qw( < 6 ) ) ) {
         print_warn('LiteSpeed: ');
         print_warning('in use on CL5 or earlier. CloudLinux memory limits not imposed on Apache processes.');
     }
-    if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq "dso" && version_compare( $OS_VERSION, qw( < 6 ) ) ) {
+    if ( $ea3_php5handler && $ea3_php5handler eq "dso" && version_compare( $os_version, qw( < 6 ) ) ) {
         print_warn('PHP DSO: ');
         print_warning('in use on CL 5 or earlier. CloudLinux memory limits not imposed on Apache processes.');
     }
-    if ( defined $APACHE_MODULES->{'ruid2_module'} ) {
+    if ( defined $apache_modules->{'ruid2_module'} ) {
         print_warn('Mod Ruid2: ');
         print_warning('in use. CloudLinux memory limits not imposed on Apache processes.');
     }
-    if ( defined $APACHE_MODULES->{'mpm_itk_module'} ) {
+    if ( defined $apache_modules->{'mpm_itk_module'} ) {
         print_warn('MPM ITK: ');
         print_warning('in use. CloudLinux memory limits not imposed on Apache processes.');
     }
@@ -7407,34 +7405,34 @@ sub check_for_eblockers {
 
 sub check_for_frontpage_rpms {
     return unless -e '/usr/local/frontpage/version5.0/bin/owsadm.exe';
-    if ( !grep { m{frontpage} } @RPM_LIST ) {
+    if ( !grep { m{frontpage} } @rpm_list ) {
         print_warn('FrontPage: ');
         print_warning('RPM not installed, but /usr/local/frontpage/version5.0/bin/owsadm.exe exists -- will prevent upgrade to 11.46');
     }
 }
 
 sub check_for_php_selector_incompatibilities {
-    return unless $IS_CLOUDLINUX;
+    return unless $is_cloudlinux;
 
-    if ( defined $APACHE_MODULES->{'mpm_itk_module'} ) {
+    if ( defined $apache_modules->{'mpm_itk_module'} ) {
         print_warn('MPM ITK: ');
         print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/index.html?php_selector.html');
     }
 
-    if ( defined $APACHE_MODULES->{'ruid2_module'} ) {
+    if ( defined $apache_modules->{'ruid2_module'} ) {
         print_warn('Mod Ruid2: ');
         print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/index.html?php_selector.html');
     }
 
-    if ( $EA3_PHP5HANDLER && $EA3_PHP5HANDLER eq 'dso' ) {
+    if ( $ea3_php5handler && $ea3_php5handler eq 'dso' ) {
         print_warn('DSO PHP handler: ');
         print_warning('is enabled but not compatible with PHP Selector - http://docs.cloudlinux.com/index.html?php_selector.html');
     }
 }
 
 sub check_cloudlinux_sanity {
-    return unless $IS_CLOUDLINUX;
-    if ( !-x '/usr/sbin/lvectl' ) {
+    return unless $is_cloudlinux;
+    if ( !-x "/usr/sbin/lvectl" ) {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/sbin/lvectl - check/repair lve-utils RPM');
     }
@@ -7686,17 +7684,17 @@ sub check_updatelog {
 sub check_smtp_processes {
     my $assp_running = 0;
 
-    return if scalar keys(%$PORT_REF) == 0;
-    if ( !defined( $PORT_REF->{"25"} ) && !-f '/etc/eximdisable' ) {
+    return if scalar keys(%$port_ref) == 0;
+    if ( !defined( $port_ref->{"25"} ) && !-f '/etc/eximdisable' ) {
         print_warn('Exim: ');
         print_warning('not disabled and does not appear to be up -- nothing listening on port 25');
     }
 
-    return if !defined( $PORT_REF->{"25"} );
+    return if !defined( $port_ref->{"25"} );
 
-    for my $href ( @{ $PORT_REF->{"25"} } ) {
+    for my $href ( @{ $port_ref->{"25"} } ) {
         my $pid = $href->{PID};
-        my $cmd = $PROCESS_REF->{$pid}{CMD};
+        my $cmd = $process_ref->{$pid}{CMD};
         if ( $href->{PROTO} eq "TCP" && !( $cmd =~ m{ \A /usr/sbin/exim \b }xms ) ) {
             print_3rdp('SMTP: ');
             print_3rdp2( 'a process other than exim is listening on port 25 [' . $href->{IPV} . ' ' . $href->{IP} . '] [USER: ' . $href->{USER} . '] [CMD: ' . $cmd . '] [PID: ' . $pid . ']' );
@@ -7716,9 +7714,9 @@ sub check_smtp_processes {
 sub check_for_varnish {
     my @port_80_processes;
 
-    return if !@LSOF_80;
+    return if !@lsof_80;
 
-    for my $line (@LSOF_80) {
+    for my $line (@lsof_80) {
         if ( $line =~ m{ (\S+) \s+ (?:.*) \s TCP (?:.*):http \s \(LISTEN\) }xms ) {
             push( @port_80_processes, $1 );
         }
@@ -7733,7 +7731,7 @@ sub check_for_varnish {
 sub check_for_nginx {
     my $nginx = 0;
 
-    for my $line (@PROCESS_LIST) {
+    for my $line (@process_list) {
         if ( $line =~ m{ \A (root|nobody) (?:.*) nginx(:?) }xms ) {
             $nginx = 1;
             last;
@@ -7749,7 +7747,7 @@ sub check_for_nginx {
 sub check_for_mailscanner {
     my $mailscanner = 0;
 
-    for my $line (@PROCESS_LIST) {
+    for my $line (@process_list) {
         if ( $line =~ m{ \A mailnull (?:.*) MailScanner }xms ) {
             $mailscanner = 1;
             last;
@@ -7783,7 +7781,7 @@ sub check_for_csf {
         return;
     }
 
-    for my $line (@PROCESS_LIST) {
+    for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) lfd }xms ) {
             $lfd = 1;
             last;
@@ -7815,10 +7813,10 @@ sub check_for_les {
 sub check_for_1h {
     return unless -d '/usr/local/1h';
     my $guardian;
-    my $hive_module = scalar keys %{$APACHE_MODULES} ? ( defined $APACHE_MODULES->{'hive_module'} ? 'loaded' : 'not active' ) : 'unknown';
+    my $hive_module = scalar keys %{$apache_modules} ? ( defined $apache_modules->{'hive_module'} ? 'loaded' : 'not active' ) : 'unknown';
 
     if ( -x '/usr/local/1h/sbin/guardian' ) {
-        for my $line (@PROCESS_LIST) {
+        for my $line (@process_list) {
             if ( $line =~ /Guardian/ ) {
                 $guardian = 'running';
             }
@@ -7847,7 +7845,7 @@ sub check_for_webmin {
 sub check_for_symantec {
     my $symantec = 0;
 
-    for my $process (@PROCESS_LIST) {
+    for my $process (@process_list) {
         if ( $process =~ m{ \A root (?:.*) /opt/Symantec/symantec_antivirus }xms ) {
             $symantec = 1;
             last;
@@ -7863,7 +7861,7 @@ sub check_for_symantec {
 sub check_for_haproxy {
     my $haproxy = 0;
 
-    for my $process (@PROCESS_LIST) {
+    for my $process (@process_list) {
         if ( $process =~ m{ \A haproxy (?:.*) haproxy }xms ) {
             $haproxy = 1;
             last;
@@ -7879,7 +7877,7 @@ sub check_for_haproxy {
 sub check_for_newrelic {
     my $has_newrelic = 0;
 
-    for my $process (@PROCESS_LIST) {
+    for my $process (@process_list) {
         if ( $process =~ /newrelic-daemon/ ) {
             $has_newrelic = 1;
             last;
@@ -7990,18 +7988,18 @@ sub print_ebury_cdorked_predef {
 }
 
 sub check_for_cdorked_A {
-    return unless defined $HTTPD_PATH;
-    return unless -f $HTTPD_PATH;
+    return unless defined $httpd_bin;
+    return unless -f $httpd_bin;
     my $max_bin_size = 10_485_760;    # avoid slurping too much mem
-    return if ( ( stat($HTTPD_PATH) )[7] > $max_bin_size );
+    return if ( ( stat($httpd_bin) )[7] > $max_bin_size );
 
     my $has_cdorked = 0;
     my $signature;
     my @apache_bins = ();
-    push @apache_bins, $HTTPD_PATH;
+    push @apache_bins, $httpd_bin;
 
-    for my $process (@PROCESS_LIST) {
-        if ( $process =~ m{ \A root \s+ (\d+) [^\d]+ $HTTPD_PATH }xms ) {
+    for my $process (@process_list) {
+        if ( $process =~ m{ \A root \s+ (\d+) [^\d]+ $httpd_bin }xms ) {
             my $pid          = $1;
             my $proc_pid_exe = "/proc/" . $pid . "/exe";
             if ( -l $proc_pid_exe && readlink($proc_pid_exe) =~ m{ \(deleted\) }xms ) {
@@ -8104,7 +8102,7 @@ sub check_for_libkeyutils_filenames {
 }
 
 sub check_sha1_sigs_libkeyutils {
-    return if !$LIBKEYUTILS_FILES_REF;
+    return if !$libkeyutils_files_ref;
 
     my $trojaned_lib;
 
@@ -8153,7 +8151,7 @@ sub check_sha1_sigs_libkeyutils {
       f1ada064941f77929c49c8d773cbad9c15eba322
     );
 
-    for my $lib (@$LIBKEYUTILS_FILES_REF) {
+    for my $lib (@$libkeyutils_files_ref) {
         next unless my $checksum = timed_run( 0, 'sha1sum', "$lib" );
         chomp $checksum;
         $checksum =~ s/\s.*//g;
@@ -8173,10 +8171,10 @@ sub check_sha1_sigs_libkeyutils {
 }
 
 sub check_sha1_sigs_httpd {
-    return unless defined $HTTPD_PATH;
-    return if !-e $HTTPD_PATH;
+    return unless defined $httpd_bin;
+    return if !-e $httpd_bin;
     my $infected = 0;
-    return unless my $sha1sum = timed_run( 0, 'sha1sum', $HTTPD_PATH );
+    return unless my $sha1sum = timed_run( 0, 'sha1sum', $httpd_bin );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
     }
@@ -8214,7 +8212,7 @@ sub check_sha1_sigs_httpd {
 
     if ( $infected == 1 ) {
         print_ebury_cdorked_predef('CDORKED');
-        print_critical( "\t" . $HTTPD_PATH . " has a SHA-1 signature of " . $sha1sum );
+        print_critical( "\t" . $httpd_bin . " has a SHA-1 signature of " . $sha1sum );
         print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
         print_critical();
     }
@@ -8389,12 +8387,12 @@ sub check_for_ebury_ssh_banner {
 sub check_for_ebury_ssh_shmem {
 
     # As far as we know, sshd sholudn't be using shared memory at all, so any usage is a strong sign of ebury.
-    return if !defined( $IPCS_REF->{root}{mp} );
+    return if !defined( $ipcs_ref->{root}{mp} );
 
-    for my $href ( @{ $IPCS_REF->{root}{mp} } ) {
+    for my $href ( @{ $ipcs_ref->{root}{mp} } ) {
         my $shmid = $href->{shmid};
         my $cpid  = $href->{cpid};
-        if ( $PROCESS_REF->{$cpid}{CMD} && $PROCESS_REF->{$cpid}{CMD} =~ m{ \A /usr/sbin/sshd \b }x ) {
+        if ( $process_ref->{$cpid}{CMD} && $process_ref->{$cpid}{CMD} =~ m{ \A /usr/sbin/sshd \b }x ) {
             print_ebury_cdorked_predef('EBURY');
             print_critical("\tShared memory segment created by sshd process exists:");
             print_critical( "\t\tsshd PID: " . $cpid );
@@ -8559,16 +8557,16 @@ sub check_for_cgls {
 ## END malware checks
 
 sub build_rpm_list {
-    return if @EXTENDED_RPM_LIST;    # already did this, don't do it again
+    return if @extended_rpm_list;    # already did this, don't do it again
 
-    local $OPT_TIMEOUT = $OPT_TIMEOUT ? $OPT_TIMEOUT : 25;
+    local $opt_timeout = $opt_timeout ? $opt_timeout : 25;
 
-    print_info2("RPM check (running \"rpm -qa ...\"). This will timeout after $OPT_TIMEOUT seconds.");
+    print_info2("RPM check (running \"rpm -qa ...\"). This will timeout after $opt_timeout seconds.");
 
-    my $rpm_list = timed_run( $OPT_TIMEOUT, 'rpm', '-qa', '--queryformat', q{%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n} );
+    my $rpm_list = timed_run( $opt_timeout, 'rpm', '-qa', '--queryformat', q{%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n} );
     return if !$rpm_list;
 
-    @EXTENDED_RPM_LIST = map {
+    @extended_rpm_list = map {
         my ( $arch, $name, $version, $release ) = split( /\t/, $_ );
         {
             'name'    => $name,
@@ -8578,31 +8576,31 @@ sub build_rpm_list {
         }
     } split( /\n/, $rpm_list );
 
-    if ( $#EXTENDED_RPM_LIST > 1 ) {
-        @RPM_LIST = map { $_->{'name'} . '-' . $_->{'version'} . '-' . $_->{'release'} } @EXTENDED_RPM_LIST;
+    if ( $#extended_rpm_list > 1 ) {
+        @rpm_list = map { "$_->{name}-$_->{version}-$_->{release}" } @extended_rpm_list;
     }
 }
 
 sub build_openssl_rpm_changelog {
-    return if $OPENSSL_RPM_CHANGELOG;    # don't do it again if it's already done
+    return if $openssl_rpm_changelog;    # don't do it again if it's already done
 
-    local $OPT_TIMEOUT = $OPT_TIMEOUT ? $OPT_TIMEOUT : 15;
+    local $opt_timeout = $opt_timeout ? $opt_timeout : 15;
 
-    print_info2("RPM query OpenSSL changelog (running \"rpm -q ...\"). This will timeout after $OPT_TIMEOUT seconds.");
+    print_info2("RPM query OpenSSL changelog (running \"rpm -q ...\"). This will timeout after $opt_timeout seconds.");
 
-    $OPENSSL_RPM_CHANGELOG = timed_run( $OPT_TIMEOUT, qw( rpm -q --changelog openssl ) );
+    $openssl_rpm_changelog = timed_run( $opt_timeout, qw( rpm -q --changelog openssl ) );
 }
 
 sub check_for_cloudlinux_mysql_gov {
-    if ( my @cl_mysql_rpms = grep { m{^cl-MySQL-} } @RPM_LIST ) {
+    if ( my @cl_mysql_rpms = grep { m{^cl-MySQL-} } @rpm_list ) {
         print_warn("CloudLinux MySQL (see FB-64017): ");
         print_warning( join( " ", @cl_mysql_rpms ) );
     }
 }
 
 sub check_pure_ftpd_conf_for_upload_script_and_dead {
-    return unless defined( $CPCONF{'ftpserver'} ) && $CPCONF{'ftpserver'} eq 'pure-ftpd';
-    if ( defined( $PUREFTPDCONF->{'calluploadscript'} ) && $PUREFTPDCONF->{'calluploadscript'}->{value} eq 'yes' ) {
+    return unless defined( $cpconf{'ftpserver'} ) && $cpconf{'ftpserver'} eq 'pure-ftpd';
+    if ( defined( $pure_ftpd_conf->{'calluploadscript'} ) && $pure_ftpd_conf->{'calluploadscript'}->{value} eq 'yes' ) {
         if ( !-e '/var/run/pure-ftpd.upload.pipe' ) {
             print_warn("/etc/pure-ftpd.conf: ");
             print_warning("CallUploadScript set to yes, /var/run/pure-ftpd.upload.pipe is missing [might be broken ConfigServer's cxs ( http://configserver.com/cp/cxs.html )]");
@@ -8618,26 +8616,26 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
 }
 
 sub check_cpanel_config_for_bad_root {    # Separate from check_cpanel_config because those don't apply to DNSONLY
-    if ( defined $CPCONF{'root'} && $CPCONF{'root'} ne '/usr/local/cpanel' ) {    # The default is used if it is missing, so only need to check if it is set
+    if ( defined $cpconf{'root'} && $cpconf{'root'} ne '/usr/local/cpanel' ) {    # The default is used if it is missing, so only need to check if it is set
         print_warn("/var/cpanel/cpanel.config: ");
-        print_warning( "root set to \"" . $CPCONF{'root'} . "\"" );
+        print_warning(qq{root set to "$cpconf{root}"});
         print_warning("\t \\_ Default is \"/usr/local/cpanel\"");
         print_warning("\t \\_ An invalid root setting can cause WHM to fail to start.  See ticket 5463121.");
     }
 }
 
 sub get_ea4_php_fpm_status {
-    return 0 unless $EA4;
+    return 0 unless $ea4;
     my $running = 0;
 
-    while ( my ( $pid, $ref ) = each(%$PROCESS_REF) ) {
+    while ( my ( $pid, $ref ) = each(%$process_ref) ) {
         if ( $ref->{COMM} =~ /php\-fpm/ ) {
             $running = 1;
             last;
         }
     }
 
-    keys %$PROCESS_REF;    # reset iterator
+    keys %$process_ref;    # reset iterator
 
     return $running;
 }
@@ -8648,12 +8646,12 @@ sub get_ea4_php_fpm_status {
 #   2. Only UNIX sockets are in-use (as opposed to net socket)
 #   3. UNIX sockets have correct perms
 sub check_ea4_php_fpm {
-    return unless $EA4;
-    return unless $EA4_PHP_FPM;
+    return unless $ea4;
+    return unless $ea4_php_fpm;
     my @running;
 
     # gather up a list of running php-fpm process
-    while ( my ( $pid, $ref ) = each(%$PROCESS_REF) ) {
+    while ( my ( $pid, $ref ) = each(%$process_ref) ) {
         next unless $ref->{COMM} =~ /php\-fpm/;
         push @running, { PID => $pid, %$ref };
     }
@@ -8784,13 +8782,13 @@ sub _http_get {
 }
 
 sub print_bug_report {
-    my $version     = $CPANEL_VERSION            ? $CPANEL_VERSION            : 'Unknown';
-    my $os          = $OS_RELEASE                ? $OS_RELEASE                : 'Unknown';
-    my $kernel      = $HOSTINFO->{'kernel'}      ? $HOSTINFO->{'kernel'}      : 'Unknown';
-    my $arch        = $HOSTINFO->{'hardware'}    ? $HOSTINFO->{'hardware'}    : 'Unknown';
-    my $environment = $HOSTINFO->{'environment'} ? $HOSTINFO->{'environment'} : 'Unknown';
-    my $cpu         = $CPUINFO->{'model'}        ? $CPUINFO->{'model'}        : 'Unknown';
-    my $cores       = $CPUINFO->{'numcores'}     ? $CPUINFO->{'numcores'}     : 'Unknown';
+    my $version     = $cpanel_version            ? $cpanel_version            : 'Unknown';
+    my $os          = $os_release                ? $os_release                : 'Unknown';
+    my $kernel      = $hostinfo->{'kernel'}      ? $hostinfo->{'kernel'}      : 'Unknown';
+    my $arch        = $hostinfo->{'hardware'}    ? $hostinfo->{'hardware'}    : 'Unknown';
+    my $environment = $hostinfo->{'environment'} ? $hostinfo->{'environment'} : 'Unknown';
+    my $cpu         = $cpuinfo->{'model'}        ? $cpuinfo->{'model'}        : 'Unknown';
+    my $cores       = $cpuinfo->{'numcores'}     ? $cpuinfo->{'numcores'}     : 'Unknown';
     my $ticket      = "";
     if ( $ENV{HISTFILE} =~ /ticket.(\d+)$/ ) {
         $ticket = $1;
