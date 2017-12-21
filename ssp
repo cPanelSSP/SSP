@@ -1,17 +1,24 @@
 #!/usr/bin/perl
-
-package SSP;
-
 # SSP - System Status Probe
 # Find and print useful troubleshooting info on cPanel servers
 
 =head1 COPYRIGHT
 
-This software is Copyright 2015 by cPanel, Inc.
+This software is Copyright 2017 by cPanel, Inc.
 
-THE SOFTWARE LICENSED HEREUNDER IS PROVIDED "AS IS" AND CPANEL HEREBY DISCLAIMS ALL WARRANTIES OF ANY KIND, WHETHER EXPRESS OR IMPLIED, RELATING TO THE SOFTWARE, ITS THIRD PARTY COMPONENTS, AND ANY DATA ACCESSED THEREFROM, OR THE ACCURACY, TIMELINESS, COMPLETENESS, OR ADEQUACY OF THE SOFTWARE, ITS THIRD PARTY COMPONENTS, AND ANY DATA ACCESSED THEREFROM, INCLUDING THE IMPLIED WARRANTIES OF TITLE, MERCHANTABILITY, SATISFACTORY QUALITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.  CPANEL DOES NOT WARRANT THAT THE SOFTWARE OR ITS THIRD PARTY COMPONENTS ARE ERROR-FREE OR WILL OPERATE WITHOUT INTERRUPTION.  IF THE SOFTWARE, ITS THIRD PARTY COMPONENTS, OR ANY DATA ACCESSED THEREFROM IS DEFECTIVE, YOU ASSUME THE SOLE RESPONSIBILITY FOR THE ENTIRE COST OF ALL REPAIR OR INJURY OF ANY KIND, EVEN IF CPANEL HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DEFECTS OR DAMAGES.  NO ORAL OR WRITTEN INFORMATION OR ADVICE GIVEN BY CPANEL, ITS AFFILIATES, LICENSEES, DEALERS, SUB-LICENSORS, AGENTS OR EMPLOYEES SHALL CREATE A WARRANTY OR IN ANY WAY. 
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THE SOFTWARE LICENSED HEREUNDER IS PROVIDED "AS IS" AND CPANEL HEREBY DISCLAIMS ALL WARRANTIES OF ANY KIND, WHETHER EXPRESS OR IMPLIED, RELATING TO THE SOFTWARE, ITS THIRD PARTY COMPONENTS, AND ANY DATA ACCESSED THEREFROM, OR THE ACCURACY, TIMELINESS, COMPLETENESS, OR ADEQUACY OF THE SOFTWARE, ITS THIRD PARTY COMPONENTS, AND ANY DATA ACCESSED THEREFROM, INCLUDING THE IMPLIED WARRANTIES OF TITLE, MERCHANTABILITY, SATISFACTORY QUALITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. CPANEL DOES NOT WARRANT THAT THE SOFTWARE OR ITS THIRD PARTY COMPONENTS ARE ERROR-FREE OR WILL OPERATE WITHOUT INTERRUPTION. IF THE SOFTWARE, ITS THIRD PARTY COMPONENTS, OR ANY DATA ACCESSED THEREFROM IS DEFECTIVE, YOU ASSUME THE SOLE RESPONSIBILITY FOR THE ENTIRE COST OF ALL REPAIR OR INJURY OF ANY KIND, EVEN IF CPANEL HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DEFECTS OR DAMAGES. NO ORAL OR WRITTEN INFORMATION OR ADVICE GIVEN BY CPANEL, ITS AFFILIATES, LICENSEES, DEALERS, SUB-LICENSORS, AGENTS OR EMPLOYEES SHALL CREATE A WARRANTY OR IN ANY WAY INCREASE THE SCOPE OF ANY WARRANTY.
 
 =cut
+
+package SSP;
 
 use strict;
 use warnings;
@@ -29,7 +36,7 @@ use Cwd qw(abs_path);
 use Getopt::Long;
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.169';
+our $VERSION = '4.99.170';
 
 # Global variables that alter application runtime
 our $OPT_BUGREPORT;    # Flag that allows caller to file a bug report
@@ -455,7 +462,7 @@ sub run {
     check_for_cl_unsupported_memory_limits();
     check_for_eblockers();
     check_for_php_selector_incompatibilities();
-    check_for_missing_cloudlinux_files();
+    check_cloudlinux_sanity();
     check_for_modsec2_stage_files();
     check_for_cron_allow();
     check_for_dev_sandbox();
@@ -587,7 +594,7 @@ sub non_cpanel_checks_only {
     check_for_extra_uid_0_user();
     check_for_broken_mysqldump();
     check_for_readonly_filesystems();
-    check_for_missing_cloudlinux_files();
+    check_cloudlinux_sanity();
     check_for_dev_sandbox();
 
     # [3RDP]
@@ -1728,11 +1735,12 @@ sub print_cpanel_info {
     print_normal($output);
 
     my %eol = (
-        '56' => { expires => 1509408001, text => 'October 31, 2017' },
-        '58' => { expires => 1501459201, text => 'July 31, 2017' },
-        '60' => { expires => 1509408001, text => 'October 31, 2017' },
+        '56' => { expires => 0,          text => 'October 31, 2017' },
+        '58' => { expires => 0,          text => 'July 31, 2017' },
+        '60' => { expires => 0,          text => 'October 31, 2017' },
         '62' => { expires => 1522454401, text => 'March 31, 2018' },
-        '64' => { expires => 1505952001, text => 'September 21, 2017' },
+        '64' => { expires => 0,          text => 'September 21, 2017' },
+        '66' => { expires => 0,          text => 'December 4, 2017' },
     );
     my @ver = split( /\./, $CPANEL_VERSION, 4 );
     my $major_ver = ( defined $ver[1] && $ver[1] =~ /^\d+$/ ) ? $ver[1] : undef;
@@ -2078,18 +2086,27 @@ sub print_ea3_php_configuration {
 sub print_ea4_php_configuration {
     return if !$EA4;
     my $info;
-    my $cgi_handler = 0;
-    print_info("PHP Default: ");
+    my $cgi_handler     = 0;
+    my $fpm_jail_toggle = '/var/cpanel/feature_toggles/apachefpmjail';
+    print_info('PHP Default: ');
     if ( defined($EA4_PHP) && defined( $EA4_PHP->{default} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} ) && defined( $EA4_PHP->{ $EA4_PHP->{default} }->{handler} ) ) {
         $cgi_handler = 1 if $EA4_PHP->{ $EA4_PHP->{default} }->{handler} eq "cgi";
-        $info .= "[ EA4 ]";
-        $info .= " [ " . $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} . " ( " . $EA4_PHP->{default} . " ) ]";
-        $info .= " [ " . $EA4_PHP->{ $EA4_PHP->{default} }->{handler} . " ]";
+        $info .= '[ EA4 ]';
+        $info .= ' [ ' . $EA4_PHP->{ $EA4_PHP->{default} }->{release_version} . ' ( ' . $EA4_PHP->{default} . ' ) ]';
+        $info .= ' [ ' . $EA4_PHP->{ $EA4_PHP->{default} }->{handler} . ' ]';
     }
     else {
-        $info .= "UNKNOWN";
+        $info .= 'UNKNOWN';
     }
     print_normal($info);
+    if ( -e $fpm_jail_toggle ) {
+        print_info('PHP-FPM: ');
+        print_normal( $fpm_jail_toggle . ' exists, PHP-FPM will jail PHP scripts for users that have Jailed or Disabled shells.' );
+        if ( defined $APACHE_MODULES and not( defined $APACHE_MODULES->{'ruid2_module'} and defined $CPCONF{'jailapache'} and $CPCONF{'jailapache'} == 1 ) ) {
+            print_warn('PHP-FPM: ');
+            print_warning('Jail is enabled without mod_ruid2 and/or Jail Apache Virtual Hosts tweak setting enabled, these MUST also be enabled for proper functioning unless EA-5524 is resolved.');
+        }
+    }
 }
 
 sub _get_installed_ea4_php {
@@ -2103,18 +2120,17 @@ sub _get_installed_ea4_php {
     (@current_php) = split( /\n/, timed_run( 0, '/usr/local/cpanel/bin/rebuild_phpconf', '--current' ) );
     foreach my $line (@current_php) {
         my $pkg;
-        if ( $line =~ /DEFAULT PHP: (ea-php\d{1,2})/ ) {
+        if ( $line =~ m{ DEFAULT \s PHP: \s (\S+) }xms ) {
             $pkg                        = $1;
             $php->{$pkg}->{default_php} = 1;
             $php->{default}             = $pkg;
             next;
         }
-        if ( $line =~ /(ea-php\d{1,2}) SAPI:\s(\w+)/ ) {
-            $pkg                    = $1;
+        if ( $line =~ m{ (\S+) \s SAPI: \s (\S+) }xms ) {
+            $pkg = $1;
             $php->{$pkg}->{handler} = $2;
-            $php->{$pkg}->{path}    = "/opt/cpanel/$1/root/usr/bin/php";
-            foreach ( split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-v' ) ) ) {
-                if (m{ PHP \s (\d+\.[^\s]+) \s \(cli\) \s \(built: \s (\w+\s+\d+\s\d+\s\d+:\d+:\d+) }xms) {    # Must accept release version like 7.1.11 or 7.2.0RC5
+            foreach ( split( /\n/, timed_run( 0, 'scl', 'enable', $pkg, 'php -v' ) ) ) {
+                if (m{ PHP \s (\d+\.\S+) \s \(cli\) \s \(built: \s (\w+\s+\d+\s\d+\s\d+:\d+:\d+) }xms) {    # Must accept release version like 7.1.11 or 7.2.0RC5
                     $php->{$pkg}->{release_version} = $1;
                     $php->{$pkg}->{build_time}      = $2;
                     $php->{$pkg}->{build_time} =~ s/  / /;
@@ -2124,8 +2140,8 @@ sub _get_installed_ea4_php {
                 }
             }
 
-            # Gather a list of modules for this given PHP Binary
-            @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, $php->{$pkg}->{path}, '-m' ) );
+            # Gather a list of modules for this given PHP Binary - not used currently, enable when needed.
+            # @{ $php->{$pkg}->{module_list} } = grep { !/\[PHP\sModules\]/ && /\w/ && !/Zend/ } split( /\n/, timed_run( 0, 'scl', 'enable', $pkg, 'php -m' ) );
         }
     }
     return $php;
@@ -3291,16 +3307,53 @@ sub check_for_non_default_permissions {
         '/dev/stdout'                           => { symlink => '/proc/self/fd/1', symlink_no_absolute => 1, check_missing => 1 },
         '/dev/urandom'                          => { mode => [ '0666', '0664', '0644', '0444' ], perms_help => 'Breaks many things if non-root users can\'t read this.' },
         '/etc'                                  => { mode => ['0755'] },
+        '/etc/aliases'                          => { mode => ['0644'] },
+        '/etc/backupmxhosts'                    => { mode => ['0640'], group => 'mail'},
         '/etc/cpbackup.conf'                    => { mode => ['0644'] },
+        '/etc/dbowners'                         => { mode => ['0640'], group => 'mail'},
+        '/etc/demodomains'                      => { mode => ['0640'], group => 'mail'},
+        '/etc/demouids'                         => { mode => ['0640'], group => 'mail'},
+        '/etc/demousers'                        => { mode => ['0640'], group => 'mail'},
+        '/etc/domainusers'                      => { mode => ['0640'], group => 'mail'},
+        '/etc/email_send_limits'                => { mode => ['0640'], group => 'mail'},
         '/etc/exim.conf'                        => { mode => ['0644'] },
+        '/etc/eximmailtrap'                     => { mode => ['0644'] },
+        '/etc/eximrejects'                      => { mode => ['0644'] },
         '/etc/fstab'                            => { mode => ['0644'], check_missing => 1, perms_help => 'Missing fstab can break /scripts/fixquotas (CPANEL-6082), and bad perms can break cPanel UI (CPANEL-11201).' },
+        '/etc/global_spamassassin_enable'       => { mode => ['0644'] },
         '/etc/group'                            => { mode => ['0644'] },
+        '/etc/greylist_common_mail_providers'   => { mode => ['0644'] },
+        '/etc/greylist_trusted_netblocks'       => { mode => ['0640'], group => 'mail'},
         '/etc/hosts'                            => { mode => ['0644'] },
+        '/etc/localaliases'                     => { mode => ['0644'] },
         '/etc/localdomains'                     => { mode => ['0640'], group => 'mail', perms_help => 'Failing to properly create an email forwarder? See ticket 5234627.' },
+        '/etc/mailbox_formats'                  => { mode => ['0640'], group => 'mail'},
+        '/etc/mailhelo'                         => { mode => ['0640'], group => 'mail'},
+        '/etc/mailips'                          => { mode => ['0640'], group => 'mail'},
+        '/etc/neighbor_netblocks'               => { mode => ['0640', '0644'], group => '*'}, # 644 root:root before first account created, 640 root:mail after.
         '/etc/nsswitch.conf'                    => { mode => ['0644'] },
+        '/etc/outgoing_mail_hold_users'         => { mode => ['0640'], group => 'mail'},
+        '/etc/outgoing_mail_suspended_users'    => { mode => ['0640'], group => 'mail'},
         '/etc/passwd'                           => { mode => ['0644'] },
+        '/etc/recent_authed_mail_ips'           => { mode => ['0644'] },
+        '/etc/recent_authed_mail_ips_users'     => { mode => ['0644'] },
+        '/etc/recent_recipient_mail_server_ips' => { mode => ['0640'], group => 'mail'},
+        '/etc/remotedomains'                    => { mode => ['0644'], group => 'mail'},
+        '/etc/secondarymx'                      => { mode => ['0640'], group => 'mail'},
+        '/etc/senderverifybypasshosts'          => { mode => ['0640'], group => 'mail'},
         '/etc/shadow'                           => { mode => [ '0600', '0400', '0200', '0000' ] },
+        '/etc/skipsmtpcheckhosts'               => { mode => ['0640'], group => 'mail'},
+        '/etc/spammeripblocks'                  => { mode => ['0640'], group => 'mail'},
+        '/etc/spammers'                         => { mode => ['0644'] },
         '/etc/stats.conf'                       => { mode => ['0644'] },
+        '/etc/trueuserdomains'                  => { mode => ['0640'], group => 'mail'},
+        '/etc/trusted_mail_users'               => { mode => ['0640'], group => 'mail'},
+        '/etc/trustedmailhosts'                 => { mode => ['0640'], group => 'mail'},
+        '/etc/userdomains'                      => { mode => ['0640'], group => 'mail'},
+        '/etc/valiases'                         => { mode => ['0755'] },
+        '/etc/vdomainaliases'                   => { mode => ['0711'] },
+        '/etc/vfilters'                         => { mode => ['0755'] },
+        '/etc/webspam'                          => { mode => ['0644'] },
         '/home'                                 => { mode => [ '0755', '0711' ] },
         '/home1'                                => { mode => [ '0755', '0711' ] },
         '/home2'                                => { mode => [ '0755', '0711' ] },
@@ -3353,15 +3406,23 @@ sub check_for_non_default_permissions {
         '/var/cpanel/backups'                   => { mode => [ '0755', '0750' ] },
         '/var/cpanel/backups/config'            => { mode => ['0644'] },
         '/var/cpanel/bandwidth.cache'           => { mode => ['0711'] },
+        '/var/cpanel/config'                    => { mode => ['0755'] },
+        '/var/cpanel/config/apache'             => { mode => ['0755'] },
+        '/var/cpanel/config/apache/port'        => { mode => ['0644'] },
+        '/var/cpanel/config/email'              => { mode => ['0755'] },
+        '/var/cpanel/config/email/query_apache_for_nobody_senders' => { mode => ['0644'] },
+        '/var/cpanel/config/email/trust_x_php_script'              => { mode => ['0644'] },
         '/var/cpanel/cpanel.config'             => { mode => ['0644'] },
-        '/var/cpanel/datastore'                 => { mode => ['0755'] },
+        '/var/cpanel/datastore'                 => { mode => ['0755'], perms_help => 'Users must be able to read some of the datastore contents for cPanel UI usage stats.' },
         '/var/cpanel/domain_keys_private'       => { mode => ['0640'], group => 'wheel' },
+        '/var/cpanel/email_send_limits'         => { mode => [ '0750', '0751' ] }, # 0750 before, 0751 after first account
         '/var/cpanel/features'                  => { mode => ['0755'] },
         '/var/cpanel/locale'                    => { mode => ['0755'] },
         '/var/cpanel/locale/themes'             => { mode => ['0755'] },
         '/var/cpanel/resellers'                 => { mode => ['0644'] },
         '/var/cpanel/userhomes'                 => { mode => [ '0755', '0711' ] },
         '/var/cpanel/userhomes/cpanelroundcube' => { mode => ['0711'], user => 'cpanelroundcube', group => 'cpanelroundcube' },
+        '/var/cpanel/users'                     => { mode => ['0711'] },
         '/var/lib'                              => { mode => ['0755'] },
         '/var/lib/mysql'                        => { mode => ['0751'], user => 'mysql', group => 'mysql' },
         '/var/lib/mysql/mysql.sock'             => { mode => ['0777'], user => 'mysql', group => 'mysql' },
@@ -5331,7 +5392,7 @@ sub check_for_custom_exim_conf_local {
     if ( open my $file_fh, '<', $exim_conf_local ) {
         while ( my $line = <$file_fh> ) {
             chomp $line;
-            if ( $line !~ m{ \A ( @ | $ ) }xms ) {
+            if ( $line !~ m{ \A ( @ | \Z | chunking_advertise_hosts="" \Z ) }xms ) {
                 $is_customized = 1;
                 last;
             }
@@ -6081,7 +6142,7 @@ sub check_for_disabled_services {
 
     my %touchfiles = (
         '/etc/antirelayddisable'                                 => 'antirelayd',
-        '/var/cpanel/ssl/disable_auto_hostname_certificate'      => 'auto_hostname_certificate',
+        '/var/cpanel/ssl/disable_auto_hostname_certificate'      => '/var/cpanel/ssl/disable_auto_hostname_certificate',
         '/etc/rrdtooldisable'                                    => 'rrdtool',
         '/var/run/chkservd.suspend'                              => 'chksrvd',
         '/etc/checkyumdisable'                                   => 'checkyum',
@@ -6102,6 +6163,7 @@ sub check_for_disabled_services {
         '/etc/disablehackcheck'                                  => 'hackcheck',
         '/etc/ftpddisable'                                       => 'ftpd',
         '/etc/ftpserverdisable'                                  => 'ftpd',
+        '/var/cpanel/ssl/disable_hostname_mismatch_check'        => '/var/cpanel/ssl/disable_hostname_mismatch_check',
         '/etc/apachedisable'                                     => 'httpd',
         '/etc/httpddisable'                                      => 'httpd',
         '/etc/httpdisable'                                       => 'httpd',
@@ -6125,7 +6187,7 @@ sub check_for_disabled_services {
         '/etc/rsyslogdisable'                                    => 'rsyslogd',
         '/etc/securemysqldisable'                                => 'securemysql',
         '/var/cpanel/version/securetmp_disabled'                 => 'securetmp',
-        '/var/cpanel/ssl/disable_service_certificate_management' => 'checkallsslcerts',
+        '/var/cpanel/ssl/disable_service_certificate_management' => '/var/cpanel/ssl/disable_service_certificate_management',
         '/etc/spamddisable'                                      => 'spamd',
         '/etc/spamdisable'                                       => 'spamd',
         '/etc/sshddisable'                                       => 'sshd',
@@ -7402,31 +7464,42 @@ sub check_for_php_selector_incompatibilities {
     }
 }
 
-sub check_for_missing_cloudlinux_files {
+sub check_cloudlinux_sanity {
     return unless $IS_CLOUDLINUX;
-    if ( !-x "/usr/sbin/lvectl" ) {
+    if ( !-x '/usr/sbin/lvectl' ) {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/sbin/lvectl - check/repair lve-utils RPM');
     }
-    if ( !-x "/usr/bin/selectorctl" ) {
+    if ( !-x '/usr/bin/selectorctl' ) {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/bin/selectorctl - check/repair lvemanager RPM - This will incorrectly cause cPanel EA4 to be used.');
     }
-    if ( !-x "/usr/sbin/lveinfo" ) {
+    if ( !-x '/usr/sbin/lveinfo' ) {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/sbin/lveinfo - check/repair lve-stats RPM - This will incorrectly cause cPanel EA4 to be used.');
     }
-    if ( !-x "/usr/sbin/spacewalk-channel" ) {
+    if ( !-x '/usr/sbin/spacewalk-channel' ) {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/sbin/spacewalk-channel - check/repair rhn-setup RPM');
     }
-    if ( !-x "/usr/bin/python" ) {
+    if ( !-x '/usr/bin/python' ) {
         print_warn('CloudLinux: ');
         print_warning('missing or non-executable /usr/bin/python - check/repair python RPM');
     }
-    if ( -e "/var/.cagefs" ) {
+    if ( -e '/var/.cagefs' ) {
         print_warn('CloudLinux: ');
         print_warning('/var/.cagefs - EXISTS! Should never exist outside of CageFS, will break many things.');
+    }
+    if ( -x '/usr/sbin/cagefsctl' ) {
+        my $cagefsctl_help = timed_run_trap_stderr( 0, '/usr/sbin/cagefsctl', '--help' );
+        if ( defined $cagefsctl_help and $cagefsctl_help =~ m{ --sanity-check }xms ) {
+            my $cagefsctl_sanity_check = timed_run( 0, '/usr/sbin/cagefsctl', '--sanity-check' );
+            my $cagefsctl_sanity_check_status = $? >> 8;
+            if ($cagefsctl_sanity_check_status) {
+                print_warn('CloudLinux: ');
+                print_warning('[ /usr/sbin/cagefsctl --sanity-check ] returned non-zero exit status, run it for more information.');
+            }
+        }
     }
 }
 
@@ -8490,11 +8563,20 @@ sub check_for_dirtycow_passwd {
 sub check_for_cpro {
     my @bad_paths;
     my @paths = qw(
+      /YasITCSP/
+      /etc/customcspips
       /usr/bin/clnupdate
       /usr/bin/update_cpanelv2
+      /usr/bin/update_cpanelv2.lock
       /usr/bin/yasin
+      /usr/local/cpanel/bin/cspconnector
+      /usr/local/cpanel/bin/sendmail.txt
+      /usr/local/cpanel/bin/update_cpanelv2
+      /usr/local/cpanel/bin/update_cpanelv2.lock
+      /usr/local/cpanel/bin/way2/
       /usr/local/cpanel/license/update_cpanelv2
       /usr/local/cpanel/whostmgr/cgi/check.php
+      /var/log/updatecp/
     );
 
     for my $path (@paths) {
@@ -8505,7 +8587,7 @@ sub check_for_cpro {
     }
     if (@bad_paths) {
         print_generic_hack_predef('C.PRO');
-        print_critical('The following files were found:');
+        print_critical('The following files or directories were found:');
         print_critical( "\t" . join( " ", @bad_paths ) );
         print_critical("\tL3: See ticket 7790559 for reference.");
         print_critical();
