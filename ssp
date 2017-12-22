@@ -1563,7 +1563,7 @@ sub check_for_multiple_tech_logins {
     return if $num_logins <= 1;
 
     print_critical();
-    print_crit('Multiple tech SSH sessions are active (run "who -H -u" for complete list):');
+    print_crit('Multiple tech SSH sessions are active (run "ls /var/cpanel/users/ |grep cp[0-9]" for complete list):');
     print_critical("\n");
     print_critical($header) if $header;
     print_critical( join( "\n", @tech_logins ) );
