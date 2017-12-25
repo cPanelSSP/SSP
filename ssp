@@ -298,7 +298,6 @@ sub run {
     check_for_custom_webtemplates();
     check_for_custom_zonetemplates();
     check_for_license_info();
-    print_news();
 
     ## [WARN]
     check_for_license_error();
@@ -2613,9 +2612,6 @@ sub check_for_lsws_update {
         print_info('LiteSpeed Web Server: ');
         print_warning("UPDATE AVAILABLE ($lsws_numeric_version -> $available_lsws_version)");
     }
-}
-
-sub print_news {
 }
 
 ##############################
