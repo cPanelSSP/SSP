@@ -8818,4 +8818,69 @@ CPU: $cpu w/ $cores core(s)
 END_OF_TEMPLATE
 }
 
+{
+    my $fds     = '';
+    my %jobs    = ();
+    my %results = ();
+
+    sub new_async_job {
+        my ( $job_name, $coderef, @args ) = @_;
+
+        pipe my ( $out_r, $out_w );
+
+        my $pid = fork;
+
+        die "Unable to fork: $!" unless defined $pid;
+
+        if ( $pid == 0 ) {
+            close $out_r;
+
+            open STDIN,  '</dev/null';
+            open STDOUT, '>&', $out_w or die "Unable to redirect stdout: $!";
+            open STDERR, '>&', $out_w or die "Unable to redirect stderr: $!";
+
+            exit $coderef->(@args);
+        }
+        close $out_w;
+
+        $jobs{$job_name} = {
+            buf => '',
+            fh  => $out_r,
+            pid => $pid,
+        };
+
+        vec( $fds, fileno($out_r), 1 ) = 1;
+    }
+
+    sub event_loop {
+        while (%jobs) {
+            last unless select my $ready = $fds, undef, undef, undef;
+
+            foreach my $job_name ( keys %jobs ) {
+
+                my $buffer = \$jobs{$job_name}{buf};
+                my $fileno = fileno( $jobs{$job_name}{fh} );
+
+                if ( vec( $ready, $fileno, 1 ) ) {
+                    if ( read $jobs{$job_name}{fh}, my $buf, 4096 ) {
+                        ${$buffer} .= $buf;
+                    }
+                    else {
+                        $results{$job_name} = $buffer;
+
+                        vec( $fds, $fileno, 1 ) = 0;
+                        close $jobs{$job_name}{fh};
+                        delete $jobs{$job_name};
+                    }
+                }
+            }
+        }
+    }
+
+    sub async_job_result {
+        my ($job_name) = @_;
+        return ${ $results{$job_name} };
+    }
+}
+
 1;
