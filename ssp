@@ -43,7 +43,6 @@ our $opt_timeout;    # How long to wait for system commands to finish executing
 our $crit_buffer;    # Critical output to be printed at the end
 
 # Global variables initialized at application initialization
-our $libkeyutils_files_ref;
 our @phpini;
 our $ea4;            # Boolean to determine if system is running EasyApache 4
 our $ea4_php;        # EA4 PHP info
@@ -66,7 +65,6 @@ our $ipcs_ref;
 our $hostinfo;
 our $cpuinfo;
 our $meminfo;
-our $sysctl;
 our $mysql_conf;
 our $mysql_numeric_version;
 our $mysql_full_version;
@@ -124,11 +122,9 @@ sub init {
     $hostinfo                   = get_hostinfo();
     $cpuinfo                    = get_cpuinfo();
     $meminfo                    = get_meminfo();
-    $sysctl                     = get_sysctl();
     $external_ip_address        = get_external_ip('80');
     $external_license_address   = get_external_ip('2089');
     $is_kernelcare              = is_kernelcare();
-    $libkeyutils_files_ref      = build_libkeyutils_file_list();
     $hostname                   = hostname();
     $os                         = get_os();
     ( $os_release, $os_type, $os_version, $os_ises, $is_amazon, $is_cloudlinux ) = get_os_info();
@@ -1410,10 +1406,6 @@ sub format_meminfo {
         }
     }
     return int( $num / 1024 ) . "MB";
-}
-
-sub get_sysctl {
-    return { map { split( /\s=\s/, $_, 2 ) } split( /\n/, timed_run( 0, 'sysctl', '-a' ) ) };
 }
 
 sub print_info {
@@ -3700,6 +3692,8 @@ sub get_fcap {
 }
 
 sub check_for_non_default_sysctl {
+    my $sysctl = { map { split( /\s=\s/, $_, 2 ) } split( /\n/, timed_run( 0, 'sysctl', '-a' ) ) };
+
     my %check = (    # 'sysctl_key' => [ ['default1', 'default2', ...], 'Additional info' ]
         'fs.enforce_symlinksifowner' => [ [ '0', '1' ], ' - Invalid setting - https://docs.cloudlinux.com/index.html?symlink_owner_match_protection.html' ],
         'fs.protected_hardlinks_create' => [ ['0'], '' ],
@@ -8102,7 +8096,7 @@ sub check_for_libkeyutils_filenames {
 }
 
 sub check_sha1_sigs_libkeyutils {
-    return if !$libkeyutils_files_ref;
+    my $libkeyutils_files_ref = build_libkeyutils_file_list();
 
     my $trojaned_lib;
 
