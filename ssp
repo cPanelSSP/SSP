@@ -740,30 +740,30 @@ sub csi_checks_only {
 }
 
 sub all_malware_checks {
-    check_for_UMBREON_rootkit();          # malware
-    check_for_libms_rootkit();            # malware
-    check_for_jynx2_rootkit();            # malware
-    check_for_cdorked_A();                # malware
-    check_for_cdorked_B();                # malware
-    check_for_libkeyutils_symbols();      # malware
-    check_for_libkeyutils_filenames();    # malware
-    check_sha1_sigs_libkeyutils();        # malware
-    check_sha1_sigs_httpd();              # malware
-    check_sha1_sigs_named();              # malware
-    check_sha1_sigs_ssh();                # malware
-    check_sha1_sigs_ssh_add();            # malware
-    check_sha1_sigs_sshd();               # malware
-    check_for_ebury_ssh_G();              # malware
-    check_for_ebury_ssh_banner();         # malware
-    check_for_ebury_ssh_shmem();          # malware
-    check_for_ebury_root_file();          # malware
-    check_for_ebury_socket();             # malware
-    check_for_bg_botnet();                # malware
-    check_for_dragnet();                  # malware
-    check_for_xor_ddos();                 # malware
-    check_for_shellbot();                 # malware
-    check_for_ncom_filenames();           # malware
-    check_for_dirtycow_passwd();          # malware
+    check_for_UMBREON_rootkit();
+    check_for_libms_rootkit();
+    check_for_jynx2_rootkit();
+    check_for_cdorked_A();
+    check_for_cdorked_B();
+    check_for_libkeyutils_symbols();
+    check_for_libkeyutils_filenames();
+    check_sha1_sigs_libkeyutils();
+    check_sha1_sigs_httpd();
+    check_sha1_sigs_named();
+    check_sha1_sigs_ssh();
+    check_sha1_sigs_ssh_add();
+    check_sha1_sigs_sshd();
+    check_for_ebury_ssh_G();
+    check_for_ebury_ssh_banner();
+    check_for_ebury_ssh_shmem();
+    check_for_ebury_root_file();
+    check_for_ebury_socket();
+    check_for_bg_botnet();
+    check_for_dragnet();
+    check_for_xor_ddos();
+    check_for_shellbot();
+    check_for_ncom_filenames();
+    check_for_dirtycow_passwd();
     check_for_cpro();
     check_for_fkcplisc();
     check_for_cgls();
