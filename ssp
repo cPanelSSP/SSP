@@ -264,6 +264,57 @@ sub run {
     check_for_os_release_32bit();
     check_for_ea3();
 
+    new_async_job('long_check_list', \&long_check_list);
+    new_async_job('build_rpm_list' , \&build_rpm_list);
+
+    event_loop();
+
+    print async_job_result('long_check_list');
+
+    @extended_rpm_list = map {
+        my ( $arch, $name, $version, $release ) = split( /\t/, $_ );
+        {
+            'name'    => defined $name ? $name : '',
+            'arch'    => defined $arch ? $arch : '',
+            'version' => defined $version ? $version : '',
+            'release' => defined $release ? $release : '',
+        }
+    } split( /\n/, async_job_result('build_rpm_list') );
+
+    if ( scalar @extended_rpm_list > 1 ) {
+        @rpm_list = map { "$_->{name}-$_->{version}-$_->{release}" } @extended_rpm_list;
+    }
+
+    # These are run closer to the end since it has the potential to take the longest due to RPM usage
+    build_openssl_rpm_changelog();
+
+    # These require build_rpm_list() to have been run, so that @rpm_list is populated
+    check_for_openssl_heartbleed_bug();     # advisory
+    check_for_openssl_secadv_20140605();    # advisory
+    populate_mysql_rpm_versions_array();
+    check_for_mysql_4();
+    check_for_additional_rpms();
+    check_mysql_rpm_mismatch();
+    check_php_libmysqlclient_mismatch();
+    check_for_percona_rpms();
+    check_for_duplicate_rpms();
+    check_for_better_linux();
+    check_for_kernel_headers_rpm();
+    check_for_frontpage_rpms();
+    check_for_broken_rpm();
+    check_for_ea4_mismatch();
+
+    print_info2('Done.');
+
+    if ($crit_buffer) {
+        print_magenta("\n\nThere was critical-level output above, here it is again:");
+        print $crit_buffer;
+    }
+
+    return 0;
+}
+
+sub long_check_list {
     ## [INFO]
     print "\n";
     print_tip();
@@ -473,33 +524,6 @@ sub run {
     check_for_bash_secadv_20140924();    # advisory
     check_for_exim_cve_2016_1531();      # advisory
     all_malware_checks();
-
-    # These are run closer to the end since it has the potential to take the longest due to RPM usage
-    build_rpm_list();
-    build_openssl_rpm_changelog();
-
-    # These require build_rpm_list() to have been run, so that @rpm_list is populated
-    check_for_openssl_heartbleed_bug();     # advisory
-    check_for_openssl_secadv_20140605();    # advisory
-    populate_mysql_rpm_versions_array();
-    check_for_mysql_4();
-    check_for_additional_rpms();
-    check_mysql_rpm_mismatch();
-    check_php_libmysqlclient_mismatch();
-    check_for_percona_rpms();
-    check_for_duplicate_rpms();
-    check_for_better_linux();
-    check_for_kernel_headers_rpm();
-    check_for_frontpage_rpms();
-    check_for_broken_rpm();
-    check_for_ea4_mismatch();
-
-    print_info2('Done.');
-
-    if ($crit_buffer) {
-        print_magenta("\n\nThere was critical-level output above, here it is again:");
-        print $crit_buffer;
-    }
 
     return 0;
 }
@@ -8547,24 +8571,12 @@ sub build_rpm_list {
 
     local $opt_timeout = $opt_timeout ? $opt_timeout : 25;
 
-    print_info2("RPM check (running \"rpm -qa ...\"). This will timeout after $opt_timeout seconds.");
-
     my $rpm_list = timed_run( $opt_timeout, 'rpm', '-qa', '--queryformat', q{%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n} );
-    return if !$rpm_list;
 
-    @extended_rpm_list = map {
-        my ( $arch, $name, $version, $release ) = split( /\t/, $_ );
-        {
-            'name'    => $name,
-            'arch'    => $arch,
-            'version' => $version,
-            'release' => $release
-        }
-    } split( /\n/, $rpm_list );
+    print $rpm_list;
 
-    if ( $#extended_rpm_list > 1 ) {
-        @rpm_list = map { "$_->{name}-$_->{version}-$_->{release}" } @extended_rpm_list;
-    }
+    # 0 because this is an exit value.
+    return 0;
 }
 
 sub build_openssl_rpm_changelog {
@@ -8819,12 +8831,14 @@ END_OF_TEMPLATE
 }
 
 {
-    my $fds     = '';
-    my %jobs    = ();
-    my %results = ();
+    my $fds;
+    my %jobs;
+    my %results;
 
     sub new_async_job {
         my ( $job_name, $coderef, @args ) = @_;
+
+        defined $fds or $fds = '';
 
         pipe my ( $out_r, $out_w );
 
