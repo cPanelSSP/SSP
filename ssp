@@ -2208,7 +2208,7 @@ sub check_for_remote_mysql {
                 }
             }
         }
-        elsif ( $mysql_host eq 'localhost' or $mysql_host eq $HOSTNAME ) {
+        elsif ( $mysql_host eq 'localhost' or $mysql_host eq $hostname ) {
             $mysql_is_local = 1;
         }
         if ( !$mysql_is_local ) {
@@ -5479,7 +5479,7 @@ sub check_for_kernel_headers_rpm {
         print_warning('/usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
     }
     else {
-        if ( @RPM_LIST && !grep { /^kernel-headers-/ } @RPM_LIST ) {
+        if ( @rpm_list && !grep { /^kernel-headers-/ } @rpm_list ) {
             print_warn('kernel-headers RPM: ');
             print_warning('not found. This can cause problems with EA');
         }
