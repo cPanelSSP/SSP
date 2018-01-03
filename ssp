@@ -2216,7 +2216,7 @@ sub check_for_remote_mysql {
                 }
             }
         }
-        elsif ( $mysql_host eq 'localhost' or $mysql_host eq hostname() ) {
+        elsif ( $mysql_host eq 'localhost' or $mysql_host eq $HOSTNAME ) {
             $mysql_is_local = 1;
         }
         if ( !$mysql_is_local ) {
