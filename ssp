@@ -45,6 +45,7 @@ our $crit_buffer;    # Critical output to be printed at the end
 our $license_file = '/usr/local/cpanel/cpanel.lisc';
 our $cpanel_version_file = '/usr/local/cpanel/version';
 our $global_mysql_conf = '/etc/my.cnf';
+our $pure_ftpd_conf_file = '/etc/pure-ftpd.conf';
 
 # Global variables initialized at application initialization
 our @phpini;
@@ -1252,7 +1253,7 @@ sub get_mysql_conf {
 
 sub get_pureftpd_conf {
     my %conf;
-    if ( open( my $pureftpdconf_fh, '<', '/etc/pure-ftpd.conf' ) ) {
+    if ( open( my $pureftpdconf_fh, '<', $pure_ftpd_conf_file ) ) {
         while (<$pureftpdconf_fh>) {
             next if /^(#|$)/;
             if (m{ \A \s* ([^\s]+?) \s+ (.*) \Z }x) {
@@ -8596,13 +8597,13 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
     return unless defined( $cpconf{'ftpserver'} ) && $cpconf{'ftpserver'} eq 'pure-ftpd';
     if ( defined( $pure_ftpd_conf->{'calluploadscript'} ) && $pure_ftpd_conf->{'calluploadscript'}->{value} eq 'yes' ) {
         if ( !-e '/var/run/pure-ftpd.upload.pipe' ) {
-            print_warn("/etc/pure-ftpd.conf: ");
+            print_warn("$pure_ftpd_conf_file: ");
             print_warning("CallUploadScript set to yes, /var/run/pure-ftpd.upload.pipe is missing [might be broken ConfigServer's cxs ( http://configserver.com/cp/cxs.html )]");
         }
         else {
             my $out = timed_run( 0, 'lsof', '-n', '/var/run/pure-ftpd.upload.pipe' );
             if ( !$out ) {
-                print_warn("/etc/pure-ftpd.conf: ");
+                print_warn("$pure_ftpd_conf_file: ");
                 print_warning("CallUploadScript set to yes, and /var/run/pure-ftpd.upload.pipe does not seem to have anything listening on it. [might be broken ConfigServer's cxs ( http://configserver.com/cp/cxs.html )]");
             }
         }
