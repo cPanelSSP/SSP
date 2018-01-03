@@ -44,6 +44,7 @@ our $crit_buffer;    # Critical output to be printed at the end
 # Things that are the same but used many places
 our $license_file = '/usr/local/cpanel/cpanel.lisc';
 our $cpanel_version_file = '/usr/local/cpanel/version';
+our $global_mysql_conf = '/etc/my.cnf';
 
 # Global variables initialized at application initialization
 our @phpini;
@@ -1217,7 +1218,7 @@ sub get_ipcs_hash {
 sub get_mysql_conf {
     my %hash;
     my $lines = 0;
-    if ( open( my $mycnf_fh, '<', '/etc/my.cnf' ) ) {
+    if ( open( my $mycnf_fh, '<', $global_mysql_conf ) ) {
         my $section = 'unknown';
         while (<$mycnf_fh>) {
             chomp;
@@ -5249,7 +5250,7 @@ sub check_mysql_config {
         $mysqld_checks{$check}->{help}          = "" unless defined( $mysqld_checks{$check}->{help} );
         my $help = $mysqld_checks{$check}->{help} ? ' - ' . $mysqld_checks{$check}->{help} : '';
         if ( defined( $mysql_conf->{'mysqld'}{$check} ) && !( $mysql_conf->{'mysqld'}{$check}[1] eq $mysqld_checks{$check}->{default} ) ) {
-            print_warn('MySQL /etc/my.cnf: ');
+            print_warn("MySQL $global_mysql_conf: ");
             if ( $mysql_conf->{'mysqld'}{$check}[1] eq "enabled" ) {
                 print_warning("[ $mysql_conf->{'mysqld'}{$check}[0] ] found $help");
             }
@@ -5259,7 +5260,7 @@ sub check_mysql_config {
         }
         elsif ( $mysqld_checks{$check}->{check_missing} && !defined( $mysql_conf->{'mysqld'}{$check} ) ) {
             my $optname = defined( $mysqld_checks{$check}->{orig_name} ) ? $mysqld_checks{$check}->{orig_name} : $check;
-            print_warn('MySQL /etc/my.cnf: ');
+            print_warn("MySQL $global_mysql_conf: ");
             print_warning("[ $optname ] not found. $help");
         }
     }
@@ -5271,7 +5272,7 @@ sub check_mysql_datadir {
     my $bad_path_regex = '^\/(home|usr|etc|boot)(\/|\s*$)';
     if ( defined $mysql_conf->{'mysqld'}{'datadir'}[1] and $mysql_conf->{'mysqld'}{'datadir'}[1] =~ m/$bad_path_regex/ ) {
         print_warn('MySQL: ');
-        print_warning('/etc/my.cnf datadir points to a systemd protected directory which can prevent MariaDB 10.1.16+ from starting. See CPANEL-15633.');
+        print_warning("$global_mysql_conf datadir points to a systemd protected directory which can prevent MariaDB 10.1.16+ from starting. See CPANEL-15633.");
     }
     if ( -l '/var/lib/mysql' and readlink('/var/lib/mysql') =~ m/$bad_path_regex/ ) {
         print_warn('MySQL: ');
@@ -5299,7 +5300,7 @@ sub check_for_extra_mysql_config_files {
     return if !@found_locations;
     print_warn('MySQL - extra my.cnf files found: ');
     print_warning( '[ ' . join( " ", @found_locations ) . ' ]' );
-    print_warning( "\t " . '\_ These may replace or be merged with /etc/my.cnf settings!' );
+    print_warning( "\t " . "\_ These may replace or be merged with $global_mysql_conf settings!" );
 }
 
 sub check_cpanel_config {
