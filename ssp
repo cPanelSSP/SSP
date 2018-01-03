@@ -1584,8 +1584,7 @@ sub check_for_lve_environment {
     # http://cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php
 
     if ( $hostinfo->{'kernel'} =~ /\.lve/ and -x '/usr/sbin/lveps' ) {
-        my $lve_check = `/usr/sbin/lveps -p | grep " $$ "`;
-        if ($lve_check) {
+        if (`/usr/sbin/lveps -p | grep " $$ "`) {
             print_critical();
             print_crit(" You are inside a CloudLinux LVE - DO *NOT* RESTART ANY SERVICES!\n");
             print_critical("          \\_ The pam_lve configuration may not be excluding the wheel group, or your ssh login user was not in the wheel group.");
