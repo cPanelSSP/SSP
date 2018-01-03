@@ -22,7 +22,6 @@ package SSP;
 
 use strict;
 use warnings;
-use Fcntl qw(:mode);
 use File::Find;
 use Socket;
 use IO::Socket::INET;
@@ -8678,7 +8677,8 @@ sub check_ea4_php_fpm {
                     next;
                 }
 
-                $perms{$name} = { pid => $pid, user => $user } if $mode & S_IRWXO;
+                require Fcntl;
+                $perms{$name} = { pid => $pid, user => $user } if $mode & Fcntl->S_IRWXO;
             }
             elsif ( $type =~ /^ipv\d+/i && $listen =~ /LISTEN/i ) {
                 $name =~ s/^.*?:(\d+).*/$1/;
