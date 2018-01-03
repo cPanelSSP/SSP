@@ -92,7 +92,6 @@ our ( $lsws_full_version, $lsws_numeric_version );
 our ( $ea3_phpversion, $ea3_php5version, $ea3_php4version, $ea3_php4handler, $ea3_php5handler, $ea3_suexec );
 our @lsof_80;
 our $openssl_rpm_changelog;
-our $ea4_php_fpm;               # Boolean flag indicating if easyapache4's php fpm is running
 our $original_path;
 our %socket;                    # Dispatcher for optional Socket module usage
 
@@ -145,7 +144,6 @@ sub init {
         $pure_ftpd_conf  = get_pureftpd_conf();
         $pro_ftpd_conf   = get_proftpd_conf();
         $exim_local_opts = get_exim_localopts();
-        $ea4_php_fpm     = get_ea4_php_fpm_status();
         $apache_modules  = get_apache_modules_hash();
         ( $old_backup_conf,   $new_backup_conf )      = get_backup_config();
         ( $lsws_full_version, $lsws_numeric_version ) = get_lsws_version();
@@ -8645,6 +8643,8 @@ sub get_ea4_php_fpm_status {
 #   3. UNIX sockets have correct perms
 sub check_ea4_php_fpm {
     return unless $ea4;
+
+    my $ea4_php_fpm = get_ea4_php_fpm_status();
     return unless $ea4_php_fpm;
     my @running;
 
