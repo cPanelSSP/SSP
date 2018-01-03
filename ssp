@@ -820,15 +820,11 @@ sub get_apache_modules_hash {
 }
 
 sub is_ea4 {
-    if ( -f '/etc/cpanel/ea4/is_ea4' ) {
-        return 1;
-    }
-    return;
+    return -f '/etc/cpanel/ea4/is_ea4';
 }
 
 sub is_kernelcare {
-    return 1 if -e '/usr/bin/kcarectl';
-    return 0;
+    return -e '/usr/bin/kcarectl';
 }
 
 sub is_cpanel_solo {
