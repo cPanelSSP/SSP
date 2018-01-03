@@ -1755,9 +1755,7 @@ sub print_cpanel_info {
 }
 
 sub check_for_cpanel_update {
-    my $tier;
-    my $available_tier_version;
-    my $local_tier_name;
+    my ($available_tier_version,$local_tier_name);
     my $match = 0;
 
     return unless defined $cpupdate_conf->{CPANEL};
@@ -1773,7 +1771,8 @@ sub check_for_cpanel_update {
 
     for my $line (@tiers) {
         if ( $line =~ m{ \A (.*) : (\d+\.\d+\.\d+\.\d+) \z }xms ) {
-            ( $tier, $available_tier_version ) = ( $1, $2 );
+            my $tier = $1;
+            $available_tier_version = $2;
             if ( $tier =~ /^$cpupdate_conf->{CPANEL}$/i ) {
                 $match = 1;
                 last;
