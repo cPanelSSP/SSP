@@ -28,12 +28,10 @@ use Socket;
 use IO::Socket::INET;
 use Sys::Hostname;
 use Term::ANSIColor qw(:constants);
-use Storable;
-use POSIX;
-use Time::Local;
+use Time::Local qw{timelocal};
 use IPC::Open3;
 use Cwd qw(abs_path);
-use Getopt::Long;
+use Getopt::Long();
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
 our $VERSION = '4.99.171';
@@ -2216,7 +2214,7 @@ sub check_for_remote_mysql {
                 }
             }
         }
-        elsif ( $mysql_host eq 'localhost' or $mysql_host eq hostname() ) {
+        elsif ( $mysql_host eq 'localhost' or $mysql_host eq $HOSTNAME ) {
             $mysql_is_local = 1;
         }
         if ( !$mysql_is_local ) {
@@ -3560,8 +3558,7 @@ sub check_for_non_default_permissions {
             if ( !exists $check{$path}{'symlink_no_absolute'} || $check{$path}{'symlink_no_absolute'} == 0 ) {
                 if ( !( $linktarget =~ m{ \A / }x ) ) {    # If a symlink has a relative prefix, try to prepend the base path and convert to absolute
                     my @basepath = split( m{/}, $path );
-                    my $fullpath = join( '/', @basepath[ 0 .. $#basepath - 1 ] ) . '/' . $linktarget;
-                    $linktarget = defined( abs_path($fullpath) ) ? abs_path($fullpath) : $linktarget;
+                    $linktarget = abs_path( join( '/', @basepath[ 0 .. $#basepath - 1 ] ) . '/' . $linktarget );
                 }
                 elsif ( $linktarget =~ m{ / .{1,2} / }x ) {    # If a symlink is relative, convert to absolute
                     $linktarget = defined( abs_path($linktarget) ) ? abs_path($linktarget) : $linktarget;
