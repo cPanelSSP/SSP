@@ -31,7 +31,7 @@ use Term::ANSIColor qw(:constants);
 use Time::Local qw{timelocal};
 use IPC::Open3;
 use Cwd qw(abs_path);
-use Getopt::Long;
+use Getopt::Long();
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
 our $VERSION = '4.99.170';
