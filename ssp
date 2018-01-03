@@ -28,7 +28,6 @@ use Socket;
 use IO::Socket::INET;
 use Sys::Hostname;
 use Term::ANSIColor qw(:constants);
-use Storable;
 use POSIX;
 use Time::Local;
 use IPC::Open3;
