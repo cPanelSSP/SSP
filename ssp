@@ -43,6 +43,7 @@ our $crit_buffer;    # Critical output to be printed at the end
 
 # Things that are the same but used many places
 our $license_file = '/usr/local/cpanel/cpanel.lisc';
+our $cpanel_version_file = '/usr/local/cpanel/version';
 
 # Global variables initialized at application initialization
 our @phpini;
@@ -846,7 +847,6 @@ sub is_cpanel_solo {
 }
 
 sub get_cpanel_version {
-    my $cpanel_version_file = '/usr/local/cpanel/version';
     my $version;
 
     local $/ = undef;
@@ -1714,7 +1714,7 @@ sub print_cpanel_info {
 
     $cpanel_tier = defined $cpupdate_conf->{CPANEL} ? $cpupdate_conf->{CPANEL} : 'Unknown (could not open/read /etc/cpupdate.conf ?)';
 
-    my $ctime       = ( stat('/usr/local/cpanel/version') )[10];
+    my $ctime       = ( stat($cpanel_version_file) )[10];
     my $last_update = time() - $ctime;
     $last_update = $last_update / 86400;
     $last_update = sprintf '%.1f', $last_update;
