@@ -218,8 +218,8 @@ sub run {
 
     Getopt::Long::GetOptionsFromArray(
         \@argv,
-        'bugreport' => \$only_csi,
-        'csi'       => \$only_bugreport,
+        'bugreport' => \$only_bugreport,
+        'csi'       => \$only_csi,
         'timeout=i' => \$opt_timeout,
     );
 
