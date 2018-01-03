@@ -8718,9 +8718,8 @@ sub get_external_ip {
     if ( defined($reply) && $reply =~ m{ ^ \s* ([0-9]+.[0-9]+.[0-9]+.[0-9]+) \s* $ }xms ) {
         $ip = $1;
         chomp $ip;
-        return $ip;
     }
-    return;
+    return $ip;
 }
 
 sub _http_get {
