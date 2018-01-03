@@ -34,7 +34,7 @@ use Cwd qw(abs_path);
 use Getopt::Long();
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.171';
+our $VERSION = '4.99.172';
 
 # Global variables that alter application runtime
 our $opt_timeout;    # How long to wait for system commands to finish executing
