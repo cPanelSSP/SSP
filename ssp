@@ -29,7 +29,7 @@ use IO::Socket::INET;
 use Sys::Hostname;
 use Term::ANSIColor qw(:constants);
 use POSIX;
-use Time::Local;
+use Time::Local qw{timelocal};
 use IPC::Open3;
 use Cwd qw(abs_path);
 use Getopt::Long;
