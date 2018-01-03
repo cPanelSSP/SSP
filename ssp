@@ -1697,9 +1697,7 @@ sub print_kernelcare_info {
 }
 
 sub print_cpanel_info {
-    my $cpanel_tier;
     my ( $birthday_file, $birthday );
-    my $output;
 
     ## cpanel-install-thread0.log is better to be checked before cpanel-install.log
     if ( -f '/var/log/cpanel-install-thread0.log' ) {
@@ -1714,14 +1712,14 @@ sub print_cpanel_info {
         $birthday = localtime $ctime;
     }
 
-    $cpanel_tier = defined $cpupdate_conf->{CPANEL} ? $cpupdate_conf->{CPANEL} : 'Unknown (could not open/read /etc/cpupdate.conf ?)';
+    my $cpanel_tier = defined $cpupdate_conf->{CPANEL} ? $cpupdate_conf->{CPANEL} : 'Unknown (could not open/read /etc/cpupdate.conf ?)';
 
     my $ctime       = ( stat($cpanel_version_file) )[10];
     my $last_update = time() - $ctime;
     $last_update = $last_update / 86400;
     $last_update = sprintf '%.1f', $last_update;
 
-    $output = "${cpanel_version} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago";
+    my $output = "${cpanel_version} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago";
     $output .= " [ Installed $birthday ]" if $birthday;
 
     print_info('cPanel Info: ');
