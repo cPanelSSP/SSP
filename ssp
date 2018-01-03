@@ -42,9 +42,10 @@ our $opt_timeout;    # How long to wait for system commands to finish executing
 our $crit_buffer;    # Critical output to be printed at the end
 
 # Things that are the same but used many places
-our $license_file = '/usr/local/cpanel/cpanel.lisc';
+our $license_file        = '/usr/local/cpanel/cpanel.lisc';
 our $cpanel_version_file = '/usr/local/cpanel/version';
-our $global_mysql_conf = '/etc/my.cnf';
+our $cpanel_config_file  = '/var/cpanel/cpanel.config';
+our $global_mysql_conf   = '/etc/my.cnf';
 our $pure_ftpd_conf_file = '/etc/pure-ftpd.conf';
 
 # Global variables initialized at application initialization
@@ -176,13 +177,13 @@ sub init {
         # TODO: use +c 15 so the entire process name is displayed if >9 chars
         @lsof_80 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:80' );
         {
-            if ( open( my $cpconf_fh, '<', '/var/cpanel/cpanel.config' ) ) {
+            if ( open( my $cpconf_fh, '<', $cpanel_config_file ) ) {
                 local $/ = undef;
                 %cpconf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($cpconf_fh) );
                 close $cpconf_fh;
             }
             else {
-                die "/var/cpanel/cpanel.config could not be opened. Unable to proceed.\n";
+                die "$cpanel_config_file could not be opened. Unable to proceed.\n";
             }
         }
     }
@@ -2885,9 +2886,9 @@ sub check_loopback_connection {
 }
 
 sub check_cpanelconfig_filetype {
-    chomp( my $file = timed_run( 0, 'file', '/var/cpanel/cpanel.config' ) );
-    if ( $file !~ m{ \A /var/cpanel/cpanel.config: \s ASCII \s text (, \s with \s very \s long \s lines)? \z }xms ) {
-        print_warn('/var/cpanel/cpanel.config: ');
+    chomp( my $file = timed_run( 0, 'file', $cpanel_config_file ) );
+    if ( $file !~ m{ \A \Q$cpanel_config_file\E: \s ASCII \s text (, \s with \s very \s long \s lines)? \z }xms ) {
+        print_warn("$cpanel_config_file: ");
         print_warning("filetype is something other than 'ASCII text'! ($file)");
     }
 }
@@ -3401,7 +3402,7 @@ sub check_for_non_default_permissions {
         '/var/cpanel/config/email'              => { mode => ['0755'] },
         '/var/cpanel/config/email/query_apache_for_nobody_senders' => { mode => ['0644'] },
         '/var/cpanel/config/email/trust_x_php_script'              => { mode => ['0644'] },
-        '/var/cpanel/cpanel.config'             => { mode => ['0644'] },
+        $cpanel_config_file                                        => { mode => ['0644'] },
         '/var/cpanel/datastore'                 => { mode => ['0755'], perms_help => 'Users must be able to read some of the datastore contents for cPanel UI usage stats.' },
         '/var/cpanel/domain_keys_private'       => { mode => ['0640'], group => 'wheel' },
         '/var/cpanel/email_send_limits'         => { mode => [ '0750', '0751' ] }, # 0750 before, 0751 after first account
@@ -8612,7 +8613,7 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
 
 sub check_cpanel_config_for_bad_root {    # Separate from check_cpanel_config because those don't apply to DNSONLY
     if ( defined $cpconf{'root'} && $cpconf{'root'} ne '/usr/local/cpanel' ) {    # The default is used if it is missing, so only need to check if it is set
-        print_warn("/var/cpanel/cpanel.config: ");
+        print_warn("$cpanel_config_file: ");
         print_warning(qq{root set to "$cpconf{root}"});
         print_warning("\t \\_ Default is \"/usr/local/cpanel\"");
         print_warning("\t \\_ An invalid root setting can cause WHM to fail to start.  See ticket 5463121.");
