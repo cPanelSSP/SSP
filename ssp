@@ -3559,8 +3559,7 @@ sub check_for_non_default_permissions {
             if ( !exists $check{$path}{'symlink_no_absolute'} || $check{$path}{'symlink_no_absolute'} == 0 ) {
                 if ( !( $linktarget =~ m{ \A / }x ) ) {    # If a symlink has a relative prefix, try to prepend the base path and convert to absolute
                     my @basepath = split( m{/}, $path );
-                    my $fullpath = join( '/', @basepath[ 0 .. $#basepath - 1 ] ) . '/' . $linktarget;
-                    $linktarget = defined( abs_path($fullpath) ) ? abs_path($fullpath) : $linktarget;
+                    $linktarget = abs_path( join( '/', @basepath[ 0 .. $#basepath - 1 ] ) . '/' . $linktarget );
                 }
                 elsif ( $linktarget =~ m{ / .{1,2} / }x ) {    # If a symlink is relative, convert to absolute
                     $linktarget = defined( abs_path($linktarget) ) ? abs_path($linktarget) : $linktarget;
