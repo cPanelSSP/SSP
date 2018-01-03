@@ -1293,11 +1293,11 @@ sub get_exim_localopts {
 }
 
 sub get_hostinfo {
-    my %hostinfos;
-
-    $hostinfos{'kernel'}   = timed_run( 0, 'uname', '-r' );
-    $hostinfos{'hardware'} = timed_run( 0, 'uname', '-i' );
-    $hostinfos{'environment'} = get_environment();
+    my %hostinfos = (
+        kernel      => timed_run( 0, 'uname', '-r' ),
+        hardware    => timed_run( 0, 'uname', '-i' ),
+        environment => get_environment(),
+    );
 
     chomp %hostinfos;
     return \%hostinfos;
