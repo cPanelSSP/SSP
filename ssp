@@ -2525,11 +2525,13 @@ sub check_for_custom_webtemplates {
     return if !-e $template_dir;
 
     my $found;
-    my $test_ref = sub {
-        return unless /\.tmpl$/s;
-        $found = 1;
-    };
-    find( { wanted => $test_ref }, $template_dir );
+    find(
+        sub {
+            return unless /\.tmpl$/s;
+            $found = 1;
+        },
+        $template_dir
+    );
     return unless $found;
 
     print_info('Web templates: ');
