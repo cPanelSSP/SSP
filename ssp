@@ -5479,8 +5479,7 @@ sub check_for_broken_rpm {
 
 sub check_for_ea4_mismatch {
     return unless $ea4;
-    my $cp_count = 0;
-    my $cl_count = 0;
+    my ($cp_count,$cl_count) = (0,0);
     foreach (@rpm_list) {
         $cp_count++ if /^ea-.*\.cpanel/;
         $cl_count++ if /^ea-.*\.cloudlinux/;
@@ -5489,12 +5488,11 @@ sub check_for_ea4_mismatch {
         return unless $cp_count;
         print_warn('EA4 RPMs: ');
         print_warning(qq{Found $cp_count "ea-*.cpanel" RPMs on a CloudLinux system!  Using wrong EA4 repo?});
+        return;
     }
-    else {
-        return unless $cl_count;
-        print_warn('EA4 RPMs: ');
-        print_warning(qq{Found $cl_count "ea-*.cloudlinux" RPMs on a non-CloudLinux system!  Using wrong EA4 repo?});
-    }
+    return unless $cl_count;
+    print_warn('EA4 RPMs: ');
+    print_warning(qq{Found $cl_count "ea-*.cloudlinux" RPMs on a non-CloudLinux system!  Using wrong EA4 repo?});
 }
 
 sub check_eximstats_size {
