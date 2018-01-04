@@ -2274,6 +2274,7 @@ sub get_backup_config {
         close $backupconf_fh;
     }
 
+    #XXX we don't actually use this data anywhere
     if ( -f $old_backup_config && open( my $backupconf_fh, '<', $old_backup_config ) ) {
         local $/ = undef;
         $old = { map { ( split( /\s/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($backupconf_fh) ) };
@@ -2284,9 +2285,7 @@ sub get_backup_config {
 }
 
 sub print_backups_info {
-    my %new      = ();
     my %new_dest = ();
-    my %old      = ();
     my ( $new_backups_cron, $new_backups_status ) = ( 0, 'No Config' );
     my ( $old_backups_cron, $old_backups_status ) = ( 0, 'No Config' );
     my $warning           = 0;
@@ -2294,7 +2293,8 @@ sub print_backups_info {
     my $new_backup_config = $new_backup_dir . 'config';
     my $old_backup_config = '/etc/cpbackup.conf';
 
-    my ( $new, $old ) = get_backup_config();
+    #XXX this is REALLY misleading -- $new is the second arg, but we call it $old here!
+    my ( undef, $old ) = get_backup_config();
 
     if ( defined( $new_backup_conf->{'BACKUPENABLE'} ) && $new_backup_conf->{'BACKUPENABLE'} =~ /yes/ ) {
         my @dir_contents = ();
