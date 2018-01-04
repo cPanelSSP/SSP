@@ -6309,25 +6309,16 @@ sub check_for_jailshell_additional_mounts_trailing_slash {
     my $mounts_file = '/var/cpanel/jailshell-additional-mounts';
     return if ( !-f $mounts_file );
 
-    my $has_slash = 0;
-
     if ( open my $file_fh, '<', $mounts_file ) {
         while (<$file_fh>) {
             chomp;
             if (m#/(?:[\s\t]+)?\z#) {
-                $has_slash = 1;
+                print_warn("$mounts_file: ");
+                print_warning('contains trailing slashes! Server may become unstable. See FB-71613');
                 last;
             }
         }
         close $file_fh;
-    }
-    else {
-        return;
-    }
-
-    if ( $has_slash == 1 ) {
-        print_warn("$mounts_file: ");
-        print_warning('contains trailing slashes! Server may become unstable. See FB-71613');
     }
 }
 
