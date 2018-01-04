@@ -5982,18 +5982,12 @@ sub check_for_networkmanager {
 }
 
 sub check_for_dhclient {
-    my $dhclient_running;
-
     for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) dhclient }xms ) {
-            $dhclient_running = 1;
+            print_warn('dhclient: ');
+            print_warning('found in the process list');
             last;
         }
-    }
-
-    if ( $dhclient_running && $dhclient_running == 1 ) {
-        print_warn('dhclient: ');
-        print_warning('found in the process list');
     }
 }
 
