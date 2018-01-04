@@ -5409,12 +5409,11 @@ sub check_for_kernel_headers_rpm {
     if ( !-f '/usr/include/linux/limits.h' ) {
         print_warn('Missing file: ');
         print_warning('/usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
+        return;
     }
-    else {
-        if ( @rpm_list && !grep { /^kernel-headers-/ } @rpm_list ) {
-            print_warn('kernel-headers RPM: ');
-            print_warning('not found. This can cause problems with EA');
-        }
+    if ( @rpm_list && !grep { /^kernel-headers-/ } @rpm_list ) {
+        print_warn('kernel-headers RPM: ');
+        print_warning('not found. This can cause problems with EA');
     }
 }
 
