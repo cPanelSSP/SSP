@@ -77,7 +77,6 @@ our $mysql_full_version;
 our $mysql_datadir;
 our $mysql_error_log;
 our @mysql_rpm_versions;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
-our @easyapache_templates;      # items in /var/cpanel/easy/apache/profile/
 our @extended_rpm_list;         # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n'
 our @rpm_list;                  # rpm -qa
 our %cpconf;                    # cpanel.config
@@ -4258,27 +4257,28 @@ sub check_for_empty_postgres_config {
 
 sub check_for_empty_easyapache_profiles {
     return if $ea4;
-    my $templates;
     my $dir = '/var/cpanel/easy/apache/profile';
     return unless -d $dir;
-    find( \&find_easyapache_templates, $dir );
 
-    if (@easyapache_templates) {
-        for my $template (@easyapache_templates) {
-            $templates .= "$template ";
-        }
+    my @easyapache_templates;      # items in /var/cpanel/easy/apache/profile/
+    find(
+        sub {
+            my $file = $File::Find::name;
+            if ( -f $file and -z $file ) {
+                $file =~ s#/var/cpanel/easy/apache/profile/##g;
+                push @easyapache_templates, $file;
+            }
+        },
+        $dir
+    );
 
-        print_warn("EA3 Empty template(s) in $dir: ");
-        print_warning($templates);
+    my $templates;
+    for my $template (@easyapache_templates) {
+        $templates .= "$template ";
     }
-}
 
-sub find_easyapache_templates {
-    my $file = $File::Find::name;
-    if ( -f $file and -z $file ) {
-        $file =~ s#/var/cpanel/easy/apache/profile/##g;
-        push @easyapache_templates, $file;
-    }
+    print_warn("EA3 Empty template(s) in $dir: ");
+    print_warning($templates);
 }
 
 sub check_for_missing_timezone_from_phpini {
