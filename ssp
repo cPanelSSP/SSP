@@ -5154,9 +5154,7 @@ sub get_mysql_error_log {
     if ( $mysql_conf->{'LINES'} && $mysql_conf->{'mysqld'}{'logerror'} ) {
         return $mysql_conf->{'mysqld'}{'logerror'}[1];
     }
-    else {
-        return "/var/lib/mysql/$hostname.err";
-    }
+    return "/var/lib/mysql/$hostname.err";
 }
 
 sub check_mysql_config {
