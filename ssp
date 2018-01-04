@@ -2776,24 +2776,22 @@ sub check_if_upcp_is_running {
 
 sub check_valid_upcp {
     my $updatenow_static = '/scripts/updatenow.static';
-    my $updatenow_valid  = 0;
 
     if ( !-f $updatenow_static ) {
         print_warn('Valid updatenow.static: ');
         print_warning("$updatenow_static does not exist as a file!");
     }
     else {
-        open my $updatenow_fh, '<', $updatenow_static;
-        local $/ = undef;
-        my $update_now_text = readline($updatenow_fh);
-        close $updatenow_fh;
-        if ( $update_now_text =~ m/our \$VERSION_BUILD/s ) {
-            $updatenow_valid = 1;
+        my $update_now_text = '';
+        if ( open( my $updatenow_fh, '<', $updatenow_static) ) {
+            local $/ = undef;
+            $update_now_text = readline($updatenow_fh);
+            close $updatenow_fh;
         }
-    }
-    if ( !$updatenow_valid ) {
-        print_warn('Valid updatenow.static: ');
-        print_warning("No VERSION_BUILD info found in $updatenow_static, could be broken!");
+        if ( $update_now_text !~ m/our \$VERSION_BUILD/s ) {
+            print_warn('Valid updatenow.static: ');
+            print_warning("No VERSION_BUILD info found in $updatenow_static, could be broken!");
+        }
     }
 }
 
