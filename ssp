@@ -5921,45 +5921,33 @@ sub check_var_cpanel_immutable_files {
 
 sub check_for_noxsave_in_grub_conf {
     my $grub_conf   = '/boot/grub/grub.conf';
-    my $has_noxsave = 0;
-
     return if !-f $grub_conf;
 
     if ( open my $grub_fh, '<', $grub_conf ) {
         while (<$grub_fh>) {
             if (/noxsave/) {
-                $has_noxsave = 1;
+                print_warn('noxsave: ');
+                print_warning("found in ${grub_conf}. kernel panics? segfaults? see ticket 3689211");
                 last;
             }
         }
         close $grub_fh;
     }
-
-    if ( $has_noxsave == 1 ) {
-        print_warn('noxsave: ');
-        print_warning("found in ${grub_conf}. kernel panics? segfaults? see ticket 3689211");
-    }
 }
 
 sub check_for_rpm_dist_ver_unknown {
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
-    my $is_broken      = 0;
-
     return if !-f $sysinfo_config;
 
     if ( open my $file_fh, '<', $sysinfo_config ) {
         while (<$file_fh>) {
             if (/^rpm_dist_ver=unknown$/) {
-                $is_broken = 1;
+                print_warn("${sysinfo_config}: ");
+                print_warning("contains 'rpm_dist_ver=unknown'. Try running '/scripts/gensysinfo' to fix");
                 last;
             }
         }
         close $file_fh;
-    }
-
-    if ( $is_broken == 1 ) {
-        print_warn("${sysinfo_config}: ");
-        print_warning("contains 'rpm_dist_ver=unknown'. Try running '/scripts/gensysinfo' to fix");
     }
 }
 
