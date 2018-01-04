@@ -4901,14 +4901,11 @@ sub check_for_non_default_modsec_rules {
 }
 
 sub check_etc_hosts_sanity {
-    my $hosts             = '/etc/hosts';
-    my $localhost         = 0;
-    my $httpupdate        = 0;
-    my $localhost_not_127 = 0;
-    my $hostname_entry    = 0;
+    my $hosts = '/etc/hosts';
+    my ($localhost,$httpupdate,$localhost_not_127,$hostname_entry) = (0,0,0,0);
 
     if ( !-f $hosts ) {
-        print_warn('/etc/hosts: ');
+        print_warn("$hosts: ");
         print_warning('missing!');
         return;
     }
@@ -4935,23 +4932,23 @@ sub check_etc_hosts_sanity {
         close $hosts_fh;
     }
 
-    if ( $localhost == 0 ) {
-        print_warn('/etc/hosts: ');
+    if ( !$localhost ) {
+        print_warn("$hosts: ");
         print_warning('no entry for localhost, or commented out');
     }
 
-    if ( $httpupdate == 1 ) {
-        print_warn('/etc/hosts: ');
+    if ( $httpupdate ) {
+        print_warn("$hosts: ");
         print_warning('contains an entry for httpupdate.cpanel.net');
     }
 
-    if ( $localhost_not_127 == 1 ) {
-        print_warn('/etc/hosts: ');
+    if ( $localhost_not_127 ) {
+        print_warn("$hosts: ");
         print_warning('contains an entry for "localhost" that isn\'t 127.0.0.1! This can break EA and webmail logins');
     }
 
-    if ( $hostname_entry == 0 ) {
-        print_warn('/etc/hosts: ');
+    if ( !$hostname_entry ) {
+        print_warn("$hosts: ");
         print_warning("no entry found for the server's hostname! [$hostname] (Can break EA or Apache when mod_unique_id is enabled)");
     }
 }
