@@ -2748,10 +2748,10 @@ sub check_for_missing_root_cron {
 
 sub check_for_missing_usr_bin_crontab {
     my $crontab = '/usr/bin/crontab';
-    if ( !-f $crontab ) {
-        print_warn('Missing crontab binary: ');
-        print_warning( 'file ' . $crontab . ' is missing!  Seeing "warn [jail_safe_crontab] Cpanel::Wrap::send_cpwrapd_request error"?  This may be why.' );
-    }
+    return if -f $crontab;
+
+    print_warn('Missing crontab binary: ');
+    print_warning( 'file ' . $crontab . ' is missing!  Seeing "warn [jail_safe_crontab] Cpanel::Wrap::send_cpwrapd_request error"?  This may be why.' );
 }
 
 sub check_if_upcp_is_running {
