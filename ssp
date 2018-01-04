@@ -5388,15 +5388,12 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
 
 sub check_for_non_default_umask {
     my $umask = timed_run( 0, 'echo `umask`' );
-
-    return if !$umask;
-
     chomp $umask;
 
-    if ( $umask !~ /2$/ ) {
-        print_warn('umask: ');
-        print_warning("Non-default value [$umask] (check FB-62683 if permissions error when running convert_roundcube_mysql2sqlite)");
-    }
+    return if !$umask || $umask =~ /2$/;
+
+    print_warn('umask: ');
+    print_warning("Non-default value [$umask] (check FB-62683 if permissions error when running convert_roundcube_mysql2sqlite)");
 }
 
 sub check_for_multiple_imagemagick_installs {
