@@ -77,7 +77,6 @@ our $mysql_full_version;
 our $mysql_datadir;
 our $mysql_error_log;
 our @mysql_rpm_versions;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
-our @custom_opt_mods;           # items in /var/cpanel/easy/apache/custom_opt_mods/
 our @easyapache_templates;      # items in /var/cpanel/easy/apache/profile/
 our @extended_rpm_list;         # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n'
 our @rpm_list;                  # rpm -qa
@@ -2922,7 +2921,21 @@ sub check_for_custom_opt_mods {
 
     return if !-e $dir;
 
-    find( \&find_custom_opt_mods, $dir );
+    my @custom_opt_mods;           # items in /var/cpanel/easy/apache/custom_opt_mods/
+    find(
+        sub {
+            # ignore these, Attracta:
+            #  /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm
+            #  /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm.tar.gz
+
+            my $file = $File::Find::name;
+            if ( -f $file and $file !~ m{ /ModFastInclude\.pm(.*) }xms ) {
+                $file =~ s#/var/cpanel/easy/apache/custom_opt_mods/##;
+                push @custom_opt_mods, $file;
+            }
+        },
+        $dir
+    );
 
     if ( scalar @custom_opt_mods > 10 ) {
         print_warn("EA3 $dir: ");
@@ -2935,19 +2948,6 @@ sub check_for_custom_opt_mods {
 
         print_warn("EA3 $dir: ");
         print_warning($custom_opt_mods);
-    }
-}
-
-sub find_custom_opt_mods {
-
-    # ignore these, Attracta:
-    #  /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm
-    #  /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm.tar.gz
-
-    my $file = $File::Find::name;
-    if ( -f $file and $file !~ m{ /ModFastInclude\.pm(.*) }xms ) {
-        $file =~ s#/var/cpanel/easy/apache/custom_opt_mods/##;
-        push @custom_opt_mods, $file;
     }
 }
 
