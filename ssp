@@ -1819,13 +1819,9 @@ sub print_uptime {
 }
 
 sub check_for_clustering {
-    if ( -e '/var/cpanel/useclusteringdns' ) {
-        print_info('DNS Clustering: ');
-        print_normal('is enabled');
-    }
-    else {
-        return;
-    }
+    return unless -e '/var/cpanel/useclusteringdns';
+    print_info('DNS Clustering: ');
+    print_normal('is enabled');
 
     my $cluster_dir = '/var/cpanel/cluster/root/config';
     my @dir_contents;
