@@ -1962,8 +1962,7 @@ sub print_apache_info {
 
 sub print_ea3_php_configuration {
     return if $ea4;
-    my $phpconf;
-    $phpconf = '/usr/local/apache/conf/php.conf.yaml';
+    my $phpconf = '/usr/local/apache/conf/php.conf.yaml';
 
     if ( !-f $phpconf ) {
         print_info('PHP: ');
@@ -1971,23 +1970,25 @@ sub print_ea3_php_configuration {
         return;
     }
 
-    open my $phpconf_fh, '<', $phpconf;
-    while (<$phpconf_fh>) {
-        chomp;
-        if (/^phpversion: (\d)/) {
-            $ea3_phpversion = $1;
+    if (open( my $phpconf_fh, '<', $phpconf) ) {
+        while (<$phpconf_fh>) {
+            chomp;
+            if (/^phpversion: (\d)/) {
+                $ea3_phpversion = $1;
+            }
+            if (/^php4:[ \t]+['"]?([^'"]+)/) {
+                $ea3_php4handler = $1;
+            }
+            if (/^php5:[ \t]+['"]?([^'"]+)/) {
+                $ea3_php5handler = $1;
+            }
+            if (/^suexec:[ \t]+['"]?([^'"]+)/) {
+                $ea3_suexec = $1;
+            }
         }
-        if (/^php4:[ \t]+['"]?([^'"]+)/) {
-            $ea3_php4handler = $1;
-        }
-        if (/^php5:[ \t]+['"]?([^'"]+)/) {
-            $ea3_php5handler = $1;
-        }
-        if (/^suexec:[ \t]+['"]?([^'"]+)/) {
-            $ea3_suexec = $1;
-        }
+        close $phpconf_fh;
     }
-    close $phpconf_fh;
+
     my $has_ea3_suexec;
     if ( $ea3_suexec && $ea3_suexec eq '1' ) {
         $has_ea3_suexec = 'with suexec';
@@ -1996,7 +1997,7 @@ sub print_ea3_php_configuration {
         $has_ea3_suexec = 'without suexec';
     }
 
-    if ( $ea3_phpversion == 5 ) {
+    if ( $ea3_phpversion && $ea3_phpversion == 5 ) {
         if ( -x '/usr/bin/php' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/bin/php', '-n', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
