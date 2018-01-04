@@ -2739,13 +2739,11 @@ sub check_runlevel {
 }
 
 sub check_for_missing_root_cron {
-    my $cron;
-    $cron = '/var/spool/cron/root';
+    my $cron = '/var/spool/cron/root';
+    return if -f $cron;
 
-    if ( !-f $cron ) {
-        print_warn('Missing cron: ');
-        print_warning("root's cron file $cron is missing!");
-    }
+    print_warn('Missing cron: ');
+    print_warning("root's cron file $cron is missing!");
 }
 
 sub check_for_missing_usr_bin_crontab {
