@@ -2501,8 +2501,8 @@ sub print_ftpserver_info {
     }
     else {
         print_warning('missing ftpserver setting in cpanel.config');
-        return;
     }
+    return;
 }
 
 sub print_exim_info {
