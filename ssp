@@ -5323,7 +5323,7 @@ sub check_for_custom_exim_conf_local {
         close $file_fh;
     }
 
-    if ( $is_customized == 1 ) {
+    if ( $is_customized ) {
         print_warn('Exim: ');
         print_warning("$exim_conf_local contains customizations");
     }
