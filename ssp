@@ -6326,23 +6326,15 @@ sub check_for_allow_query_localhost {
     my $named_conf = '/etc/named.conf';
     return if !-f $named_conf;
 
-    my $allow_query_localhost = 0;
-
     my $namedconf_contents;
     if ( open my $named_conf_fh, '<', $named_conf ) {
         local $/;
         $namedconf_contents = <$named_conf_fh>;
         close $named_conf_fh;
     }
-    else {
-        return;
-    }
+    return unless $namedconf_contents;
 
     if ( $namedconf_contents =~ m#allow-query ([\s\t\r\n]+)? { ([\s\t]+)? ( localhost | 127\. )#xms ) {
-        $allow_query_localhost = 1;
-    }
-
-    if ( $allow_query_localhost == 1 ) {
         print_warn('named.conf: ');
         print_warning('allow-query is restricted to localhost. Remote DNS queries may not work');
     }
