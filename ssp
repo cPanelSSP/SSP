@@ -6182,22 +6182,16 @@ sub check_for_cpbackup_exclude_everything {
     my $conf = '/etc/cpbackup-exclude.conf';
     return if ( !-f $conf );
 
-    my $excluding_everything = 0;
-
     open my $conf_fh, '<', $conf or return;
     while (<$conf_fh>) {
         chomp;
         if (/^\*$/) {
-            $excluding_everything = 1;
+            print_warn('Backups: ');
+            print_warning("'*' exists by itself in $conf . This can cause 0 byte backups");
             last;
         }
     }
     close $conf_fh;
-
-    if ( $excluding_everything == 1 ) {
-        print_warn('Backups: ');
-        print_warning("'*' exists by itself in $conf . This can cause 0 byte backups");
-    }
 }
 
 sub check_for_usr_local_include_jpeglib_h {
