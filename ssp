@@ -5374,16 +5374,16 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
         }
     }
 
-    if ($limit_last_hit_date) {
-        if ( version_compare( $apache_version, qw( < 2.3.0 ) ) ) {
-            print_warn('Apache MaxClients: ');
-        }
-        elsif ( version_compare( $apache_version, qw( >= 2.4.0 ) ) ) {
-            print_warn('Apache MaxRequestWorkers: ');
-        }
+    return unless $limit_last_hit_date;
 
-        print_warning("limit last reached at $limit_last_hit_date");
+    if ( version_compare( $apache_version, qw( < 2.3.0 ) ) ) {
+        print_warn('Apache MaxClients: ');
     }
+    elsif ( version_compare( $apache_version, qw( >= 2.4.0 ) ) ) {
+        print_warn('Apache MaxRequestWorkers: ');
+    }
+
+    print_warning("limit last reached at $limit_last_hit_date");
 }
 
 sub check_for_non_default_umask {
