@@ -22,7 +22,6 @@ package SSP;
 
 use strict;
 use warnings;
-use Fcntl qw(:mode);
 use File::Find;
 use Socket;
 use IO::Socket::INET;
@@ -41,6 +40,13 @@ our $opt_timeout;    # How long to wait for system commands to finish executing
 
 # Global variables updated throughout application
 our $crit_buffer;    # Critical output to be printed at the end
+
+# Things that are the same but used many places
+our $license_file        = '/usr/local/cpanel/cpanel.lisc';
+our $cpanel_version_file = '/usr/local/cpanel/version';
+our $cpanel_config_file  = '/var/cpanel/cpanel.config';
+our $global_mysql_conf   = '/etc/my.cnf';
+our $pure_ftpd_conf_file = '/etc/pure-ftpd.conf';
 
 # Global variables initialized at application initialization
 our @phpini;
@@ -92,7 +98,6 @@ our ( $lsws_full_version, $lsws_numeric_version );
 our ( $ea3_phpversion, $ea3_php5version, $ea3_php4version, $ea3_php4handler, $ea3_php5handler, $ea3_suexec );
 our @lsof_80;
 our $openssl_rpm_changelog;
-our $ea4_php_fpm;               # Boolean flag indicating if easyapache4's php fpm is running
 our $original_path;
 our %socket;                    # Dispatcher for optional Socket module usage
 
@@ -145,7 +150,6 @@ sub init {
         $pure_ftpd_conf  = get_pureftpd_conf();
         $pro_ftpd_conf   = get_proftpd_conf();
         $exim_local_opts = get_exim_localopts();
-        $ea4_php_fpm     = get_ea4_php_fpm_status();
         $apache_modules  = get_apache_modules_hash();
         ( $old_backup_conf,   $new_backup_conf )      = get_backup_config();
         ( $lsws_full_version, $lsws_numeric_version ) = get_lsws_version();
@@ -173,13 +177,13 @@ sub init {
         # TODO: use +c 15 so the entire process name is displayed if >9 chars
         @lsof_80 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:80' );
         {
-            if ( open( my $cpconf_fh, '<', '/var/cpanel/cpanel.config' ) ) {
+            if ( open( my $cpconf_fh, '<', $cpanel_config_file ) ) {
                 local $/ = undef;
                 %cpconf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($cpconf_fh) );
                 close $cpconf_fh;
             }
             else {
-                die "/var/cpanel/cpanel.config could not be opened. Unable to proceed.\n";
+                die "$cpanel_config_file could not be opened. Unable to proceed.\n";
             }
         }
     }
@@ -221,8 +225,8 @@ sub run {
 
     Getopt::Long::GetOptionsFromArray(
         \@argv,
-        'bugreport' => \$only_csi,
-        'csi'       => \$only_bugreport,
+        'bugreport' => \$only_bugreport,
+        'csi'       => \$only_csi,
         'timeout=i' => \$opt_timeout,
     );
 
@@ -823,19 +827,14 @@ sub get_apache_modules_hash {
 }
 
 sub is_ea4 {
-    if ( -f '/etc/cpanel/ea4/is_ea4' ) {
-        return 1;
-    }
-    return;
+    return -f '/etc/cpanel/ea4/is_ea4';
 }
 
 sub is_kernelcare {
-    return 1 if -e '/usr/bin/kcarectl';
-    return 0;
+    return -e '/usr/bin/kcarectl';
 }
 
 sub is_cpanel_solo {
-    my $license_file = '/usr/local/cpanel/cpanel.lisc';
     my $is_cpanel_solo;
 
     if ( open my $license_fh, '<', $license_file ) {
@@ -851,7 +850,6 @@ sub is_cpanel_solo {
 }
 
 sub get_cpanel_version {
-    my $cpanel_version_file = '/usr/local/cpanel/version';
     my $version;
 
     local $/ = undef;
@@ -1222,7 +1220,7 @@ sub get_ipcs_hash {
 sub get_mysql_conf {
     my %hash;
     my $lines = 0;
-    if ( open( my $mycnf_fh, '<', '/etc/my.cnf' ) ) {
+    if ( open( my $mycnf_fh, '<', $global_mysql_conf ) ) {
         my $section = 'unknown';
         while (<$mycnf_fh>) {
             chomp;
@@ -1256,7 +1254,7 @@ sub get_mysql_conf {
 
 sub get_pureftpd_conf {
     my %conf;
-    if ( open( my $pureftpdconf_fh, '<', '/etc/pure-ftpd.conf' ) ) {
+    if ( open( my $pureftpdconf_fh, '<', $pure_ftpd_conf_file ) ) {
         while (<$pureftpdconf_fh>) {
             next if /^(#|$)/;
             if (m{ \A \s* ([^\s]+?) \s+ (.*) \Z }x) {
@@ -1295,11 +1293,11 @@ sub get_exim_localopts {
 }
 
 sub get_hostinfo {
-    my %hostinfos;
-
-    $hostinfos{'kernel'}   = timed_run( 0, 'uname', '-r' );
-    $hostinfos{'hardware'} = timed_run( 0, 'uname', '-i' );
-    $hostinfos{'environment'} = get_environment();
+    my %hostinfos = (
+        kernel      => timed_run( 0, 'uname', '-r' ),
+        hardware    => timed_run( 0, 'uname', '-i' ),
+        environment => get_environment(),
+    );
 
     chomp %hostinfos;
     return \%hostinfos;
@@ -1586,8 +1584,7 @@ sub check_for_lve_environment {
     # http://cloudlinux.com/blog/clnews/read-this-if-you-use-su-or-sudo.php
 
     if ( $hostinfo->{'kernel'} =~ /\.lve/ and -x '/usr/sbin/lveps' ) {
-        my $lve_check = `/usr/sbin/lveps -p | grep " $$ "`;
-        if ($lve_check) {
+        if (`/usr/sbin/lveps -p | grep " $$ "`) {
             print_critical();
             print_crit(" You are inside a CloudLinux LVE - DO *NOT* RESTART ANY SERVICES!\n");
             print_critical("          \\_ The pam_lve configuration may not be excluding the wheel group, or your ssh login user was not in the wheel group.");
@@ -1700,9 +1697,7 @@ sub print_kernelcare_info {
 }
 
 sub print_cpanel_info {
-    my $cpanel_tier;
     my ( $birthday_file, $birthday );
-    my $output;
 
     ## cpanel-install-thread0.log is better to be checked before cpanel-install.log
     if ( -f '/var/log/cpanel-install-thread0.log' ) {
@@ -1717,14 +1712,14 @@ sub print_cpanel_info {
         $birthday = localtime $ctime;
     }
 
-    $cpanel_tier = defined $cpupdate_conf->{CPANEL} ? $cpupdate_conf->{CPANEL} : 'Unknown (could not open/read /etc/cpupdate.conf ?)';
+    my $cpanel_tier = defined $cpupdate_conf->{CPANEL} ? $cpupdate_conf->{CPANEL} : 'Unknown (could not open/read /etc/cpupdate.conf ?)';
 
-    my $ctime       = ( stat('/usr/local/cpanel/version') )[10];
+    my $ctime       = ( stat($cpanel_version_file) )[10];
     my $last_update = time() - $ctime;
     $last_update = $last_update / 86400;
     $last_update = sprintf '%.1f', $last_update;
 
-    $output = "${cpanel_version} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago";
+    my $output = "${cpanel_version} " . '(' . uc($cpanel_tier) . ' tier)' . " Last update: $last_update days ago";
     $output .= " [ Installed $birthday ]" if $birthday;
 
     print_info('cPanel Info: ');
@@ -1760,9 +1755,7 @@ sub print_cpanel_info {
 }
 
 sub check_for_cpanel_update {
-    my $tier;
-    my $available_tier_version;
-    my $local_tier_name;
+    my ($available_tier_version,$local_tier_name);
     my $match = 0;
 
     return unless defined $cpupdate_conf->{CPANEL};
@@ -1778,7 +1771,8 @@ sub check_for_cpanel_update {
 
     for my $line (@tiers) {
         if ( $line =~ m{ \A (.*) : (\d+\.\d+\.\d+\.\d+) \z }xms ) {
-            ( $tier, $available_tier_version ) = ( $1, $2 );
+            my $tier = $1;
+            $available_tier_version = $2;
             if ( $tier =~ /^$cpupdate_conf->{CPANEL}$/i ) {
                 $match = 1;
                 last;
@@ -1825,13 +1819,9 @@ sub print_uptime {
 }
 
 sub check_for_clustering {
-    if ( -e '/var/cpanel/useclusteringdns' ) {
-        print_info('DNS Clustering: ');
-        print_normal('is enabled');
-    }
-    else {
-        return;
-    }
+    return unless -e '/var/cpanel/useclusteringdns';
+    print_info('DNS Clustering: ');
+    print_normal('is enabled');
 
     my $cluster_dir = '/var/cpanel/cluster/root/config';
     my @dir_contents;
@@ -1885,16 +1875,13 @@ sub check_for_clustering {
 }
 
 sub print_apache_info {
-    my $output;
+    my $output = 'could not determine Apache info!';
 
     if ($ea4) {
-        $output .= "[ EA4 ] [ $apache_version ]";
+        $output = "[ EA4 ] [ $apache_version ]";
     }
     elsif ( $apache_version && $apache_built && $apache_ea_version ) {
-        $output .= "[ $apache_version ] [ $apache_built w/ $apache_ea_version ]";
-    }
-    else {
-        $output .= 'could not determine Apache info!';
+        $output = "[ $apache_version ] [ $apache_built w/ $apache_ea_version ]";
     }
 
     my ( $apache_uptime, $apache_generations );
@@ -1975,8 +1962,7 @@ sub print_apache_info {
 
 sub print_ea3_php_configuration {
     return if $ea4;
-    my $phpconf;
-    $phpconf = '/usr/local/apache/conf/php.conf.yaml';
+    my $phpconf = '/usr/local/apache/conf/php.conf.yaml';
 
     if ( !-f $phpconf ) {
         print_info('PHP: ');
@@ -1984,23 +1970,25 @@ sub print_ea3_php_configuration {
         return;
     }
 
-    open my $phpconf_fh, '<', $phpconf;
-    while (<$phpconf_fh>) {
-        chomp;
-        if (/^phpversion: (\d)/) {
-            $ea3_phpversion = $1;
+    if (open( my $phpconf_fh, '<', $phpconf) ) {
+        while (<$phpconf_fh>) {
+            chomp;
+            if (/^phpversion: (\d)/) {
+                $ea3_phpversion = $1;
+            }
+            if (/^php4:[ \t]+['"]?([^'"]+)/) {
+                $ea3_php4handler = $1;
+            }
+            if (/^php5:[ \t]+['"]?([^'"]+)/) {
+                $ea3_php5handler = $1;
+            }
+            if (/^suexec:[ \t]+['"]?([^'"]+)/) {
+                $ea3_suexec = $1;
+            }
         }
-        if (/^php4:[ \t]+['"]?([^'"]+)/) {
-            $ea3_php4handler = $1;
-        }
-        if (/^php5:[ \t]+['"]?([^'"]+)/) {
-            $ea3_php5handler = $1;
-        }
-        if (/^suexec:[ \t]+['"]?([^'"]+)/) {
-            $ea3_suexec = $1;
-        }
+        close $phpconf_fh;
     }
-    close $phpconf_fh;
+
     my $has_ea3_suexec;
     if ( $ea3_suexec && $ea3_suexec eq '1' ) {
         $has_ea3_suexec = 'with suexec';
@@ -2009,7 +1997,7 @@ sub print_ea3_php_configuration {
         $has_ea3_suexec = 'without suexec';
     }
 
-    if ( $ea3_phpversion == 5 ) {
+    if ( $ea3_phpversion && $ea3_phpversion == 5 ) {
         if ( -x '/usr/bin/php' ) {
             my @php_v = split /\n/, timed_run( 0, '/usr/bin/php', '-n', '-v' );
             if ( @php_v && $php_v[0] =~ /^PHP\s(\S+)\s(\S+)/ ) {
@@ -2082,16 +2070,13 @@ sub print_ea3_php_configuration {
 
 sub print_ea4_php_configuration {
     return if !$ea4;
-    my $info;
+    my $info = 'UNKNOWN';
     my $fpm_jail_toggle = '/var/cpanel/feature_toggles/apachefpmjail';
     print_info('PHP Default: ');
     if ( defined($ea4_php) && defined( $ea4_php->{default} ) && defined( $ea4_php->{ $ea4_php->{default} }->{release_version} ) && defined( $ea4_php->{ $ea4_php->{default} }->{handler} ) ) {
-        $info .= '[ EA4 ]';
+        $info = '[ EA4 ]';
         $info .= " [ $ea4_php->{ $ea4_php->{default} }->{release_version} ( $ea4_php->{default} ) ]";
         $info .= " [ $ea4_php->{ $ea4_php->{default} }->{handler} ]";
-    }
-    else {
-        $info .= 'UNKNOWN';
     }
     print_normal($info);
     if ( -e $fpm_jail_toggle ) {
@@ -2211,7 +2196,7 @@ sub check_for_remote_mysql {
                 }
             }
         }
-        elsif ( $mysql_host eq 'localhost' or $mysql_host eq $HOSTNAME ) {
+        elsif ( $mysql_host eq 'localhost' or $mysql_host eq $hostname ) {
             $mysql_is_local = 1;
         }
         if ( !$mysql_is_local ) {
@@ -2289,6 +2274,7 @@ sub get_backup_config {
         close $backupconf_fh;
     }
 
+    #XXX we don't actually use this data anywhere
     if ( -f $old_backup_config && open( my $backupconf_fh, '<', $old_backup_config ) ) {
         local $/ = undef;
         $old = { map { ( split( /\s/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($backupconf_fh) ) };
@@ -2299,9 +2285,7 @@ sub get_backup_config {
 }
 
 sub print_backups_info {
-    my %new      = ();
     my %new_dest = ();
-    my %old      = ();
     my ( $new_backups_cron, $new_backups_status ) = ( 0, 'No Config' );
     my ( $old_backups_cron, $old_backups_status ) = ( 0, 'No Config' );
     my $warning           = 0;
@@ -2309,7 +2293,8 @@ sub print_backups_info {
     my $new_backup_config = $new_backup_dir . 'config';
     my $old_backup_config = '/etc/cpbackup.conf';
 
-    my ( $new, $old ) = get_backup_config();
+    #XXX this is REALLY misleading -- $new is the second arg, but we call it $old here!
+    my ( undef, $old ) = get_backup_config();
 
     if ( defined( $new_backup_conf->{'BACKUPENABLE'} ) && $new_backup_conf->{'BACKUPENABLE'} =~ /yes/ ) {
         my @dir_contents = ();
@@ -2516,8 +2501,8 @@ sub print_ftpserver_info {
     }
     else {
         print_warning('missing ftpserver setting in cpanel.config');
-        return;
     }
+    return;
 }
 
 sub print_exim_info {
@@ -2594,16 +2579,17 @@ sub print_lsws_info {
             $lshttpd_ports{$portnum} = 1;
         }
     }
+
     if ( scalar keys(%lshttpd_ports) ) {
         print_info('LiteSpeed Web Server: ');
         print_normal( 'is listening on ports [ ' . join( " ", sort( keys(%lshttpd_ports) ) ) . ' ]' );
     }
+
+    print_info('LiteSpeed Web Server: ');
     if ( $lsws_full_version =~ /Enterprise/ ) {
-        print_info('LiteSpeed Web Server: ');
         print_normal('is supported, see http://cpanel.wiki/display/LS/LiteSpeed');
     }
     else {
-        print_info('LiteSpeed Web Server: ');
         print_warning('non-Enterprise editions of LiteSpeed are NOT directly supported');
     }
     print_info('LiteSpeed Web Server: ');
@@ -2753,26 +2739,23 @@ sub check_runlevel {
 }
 
 sub check_for_missing_root_cron {
-    my $cron;
-    $cron = '/var/spool/cron/root';
+    my $cron = '/var/spool/cron/root';
+    return if -f $cron;
 
-    if ( !-f $cron ) {
-        print_warn('Missing cron: ');
-        print_warning("root's cron file $cron is missing!");
-    }
+    print_warn('Missing cron: ');
+    print_warning("root's cron file $cron is missing!");
 }
 
 sub check_for_missing_usr_bin_crontab {
     my $crontab = '/usr/bin/crontab';
-    if ( !-f $crontab ) {
-        print_warn('Missing crontab binary: ');
-        print_warning( 'file ' . $crontab . ' is missing!  Seeing "warn [jail_safe_crontab] Cpanel::Wrap::send_cpwrapd_request error"?  This may be why.' );
-    }
+    return if -f $crontab;
+
+    print_warn('Missing crontab binary: ');
+    print_warning( 'file ' . $crontab . ' is missing!  Seeing "warn [jail_safe_crontab] Cpanel::Wrap::send_cpwrapd_request error"?  This may be why.' );
 }
 
 sub check_if_upcp_is_running {
     my $upcp_running   = 0;
-    my $upcp_touchfile = 0;
 
     for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) cPanel \s Update \s \(upcp\) }xms ) {
@@ -2781,15 +2764,11 @@ sub check_if_upcp_is_running {
         }
     }
 
-    if ( -e '/usr/local/cpanel/upgrade_in_progress.txt' ) {
-        $upcp_touchfile = 1;
-    }
-
     if ( $upcp_running == 1 ) {
         print_warn('upcp check: ');
         print_warning('upcp is currently running');
     }
-    elsif ( $upcp_touchfile == 1 ) {
+    elsif ( -e '/usr/local/cpanel/upgrade_in_progress.txt' ) {
         print_warn('upcp check: ');
         print_warning('/usr/local/cpanel/upgrade_in_progress.txt found, but upcp doesn\'t appear to be running. Last run failed? If Tweak Settings is not loading, this may be why.');
     }
@@ -2797,24 +2776,22 @@ sub check_if_upcp_is_running {
 
 sub check_valid_upcp {
     my $updatenow_static = '/scripts/updatenow.static';
-    my $updatenow_valid  = 0;
 
     if ( !-f $updatenow_static ) {
         print_warn('Valid updatenow.static: ');
         print_warning("$updatenow_static does not exist as a file!");
     }
     else {
-        open my $updatenow_fh, '<', $updatenow_static;
-        local $/ = undef;
-        my $update_now_text = readline($updatenow_fh);
-        close $updatenow_fh;
-        if ( $update_now_text =~ m/our \$VERSION_BUILD/s ) {
-            $updatenow_valid = 1;
+        my $update_now_text = '';
+        if ( open( my $updatenow_fh, '<', $updatenow_static) ) {
+            local $/ = undef;
+            $update_now_text = readline($updatenow_fh);
+            close $updatenow_fh;
         }
-    }
-    if ( !$updatenow_valid ) {
-        print_warn('Valid updatenow.static: ');
-        print_warning("No VERSION_BUILD info found in $updatenow_static, could be broken!");
+        if ( $update_now_text !~ m/our \$VERSION_BUILD/s ) {
+            print_warn('Valid updatenow.static: ');
+            print_warning("No VERSION_BUILD info found in $updatenow_static, could be broken!");
+        }
     }
 }
 
@@ -2840,24 +2817,13 @@ sub check_cpupdate_conf {
 }
 
 sub check_interface_lo {
-    my $is_up = 0;
-    my $output;
+    my $output = timed_run( 0, 'ip', 'addr', 'show', 'dev', 'lo' );
+    $output ||= timed_run( 0, 'ifconfig', 'lo' );
 
-    unless ( $output = timed_run( 0, 'ip', 'addr', 'show', 'dev', 'lo' ) ) {
-        $output = timed_run( 0, 'ifconfig', 'lo' );
-    }
+    return check_loopback_connection() if $output =~ /UP.LOOPBACK|LOOPBACK.UP/;    # ip addr and ifconfig swap the LOOPBACK and UP keywords
 
-    if ( $output =~ /UP.LOOPBACK|LOOPBACK.UP/ ) {    # ip addr and ifconfig swap the LOOPBACK and UP keywords
-        $is_up = 1;
-    }
-
-    if ( !$is_up ) {
-        print_warn('Loopback Interface: ');
-        print_warning('loopback interface is not up!');
-    }
-    else {
-        check_loopback_connection();
-    }
+    print_warn('Loopback Interface: ');
+    print_warning('loopback interface is not up!');
 }
 
 sub check_loopback_connection {
@@ -2876,9 +2842,8 @@ sub check_loopback_connection {
         if ($sock) {
             $connected = 1;
             close $sock;
+            last;
         }
-
-        last if $connected == 1;
     }
 
     if ( !$connected ) {
@@ -2888,9 +2853,9 @@ sub check_loopback_connection {
 }
 
 sub check_cpanelconfig_filetype {
-    chomp( my $file = timed_run( 0, 'file', '/var/cpanel/cpanel.config' ) );
-    if ( $file !~ m{ \A /var/cpanel/cpanel.config: \s ASCII \s text (, \s with \s very \s long \s lines)? \z }xms ) {
-        print_warn('/var/cpanel/cpanel.config: ');
+    chomp( my $file = timed_run( 0, 'file', $cpanel_config_file ) );
+    if ( $file !~ m{ \A \Q$cpanel_config_file\E: \s ASCII \s text (, \s with \s very \s long \s lines)? \z }xms ) {
+        print_warn("$cpanel_config_file: ");
         print_warning("filetype is something other than 'ASCII text'! ($file)");
     }
 }
@@ -3375,7 +3340,7 @@ sub check_for_non_default_permissions {
         '/usr/local/cpanel/base/horde/index.php'                                        => { mode => ['0644'] },
         '/usr/local/cpanel/bin/cpwrap'          => { mode => ['0755'] },
         '/usr/local/cpanel/bin/sendmail'        => { mode => ['0755'] },
-        '/usr/local/cpanel/cpanel.lisc'         => { mode => ['0644'] },
+        $license_file                           => { mode => ['0644'] },
         '/usr/local/cpanel/cpsanitycheck.so'    => { mode => ['0754'] },
         '/usr/local/cpanel/logs/cpdavd_error_log'   => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
         '/usr/local/cpanel/logs/cphulkd.log'        => { attr_check => [ 'IMMUTABLE', 'UNDELETABLE' ] },
@@ -3404,7 +3369,7 @@ sub check_for_non_default_permissions {
         '/var/cpanel/config/email'              => { mode => ['0755'] },
         '/var/cpanel/config/email/query_apache_for_nobody_senders' => { mode => ['0644'] },
         '/var/cpanel/config/email/trust_x_php_script'              => { mode => ['0644'] },
-        '/var/cpanel/cpanel.config'             => { mode => ['0644'] },
+        $cpanel_config_file                                        => { mode => ['0644'] },
         '/var/cpanel/datastore'                 => { mode => ['0755'], perms_help => 'Users must be able to read some of the datastore contents for cPanel UI usage stats.' },
         '/var/cpanel/domain_keys_private'       => { mode => ['0640'], group => 'wheel' },
         '/var/cpanel/email_send_limits'         => { mode => [ '0750', '0751' ] }, # 0750 before, 0751 after first account
@@ -3972,25 +3937,17 @@ sub check_pkgacct_override {
 }
 
 sub check_for_gdm {
-    my $gdm = 0;
-
     for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) gdm }xms ) {
-            $gdm = 1;
-            last;
+            print_warn('gdm Process: ');
+            print_warning('is running');
+            return;
         }
-    }
-
-    if ( $gdm == 1 ) {
-        print_warn('gdm Process: ');
-        print_warning('is running');
     }
 }
 
 sub check_for_redhat_firewall {
-    my $iptables = timed_run( 0, 'iptables', '-L', 'RH-Firewall-1-INPUT' );
-
-    if ($iptables) {
+    if ( timed_run( 0, 'iptables', '-L', 'RH-Firewall-1-INPUT' ) ) {
         print_warn('Default Redhat Firewall Check: ');
         print_warning('RH-Firewall-1-INPUT table exists. /scripts/configure_rh_firewall_for_cpanel to open ports.');
     }
@@ -4108,7 +4065,7 @@ sub check_mounts {
             print_warn('mounted noexec: ');
             print_warning($noexec_partition);
         }
-        if ( $mount =~ m{ \s /usr/local/cpanel/cpanel.lisc \s }xms ) {
+        if ( $mount =~ m{ \s \Q$license_file\E \s }xms ) {
             print_generic_hack_predef('C.PRO');
             print_critical('The following mount entry was found:');
             print_critical( "\t" . $mount );
@@ -5254,7 +5211,7 @@ sub check_mysql_config {
         $mysqld_checks{$check}->{help}          = "" unless defined( $mysqld_checks{$check}->{help} );
         my $help = $mysqld_checks{$check}->{help} ? ' - ' . $mysqld_checks{$check}->{help} : '';
         if ( defined( $mysql_conf->{'mysqld'}{$check} ) && !( $mysql_conf->{'mysqld'}{$check}[1] eq $mysqld_checks{$check}->{default} ) ) {
-            print_warn('MySQL /etc/my.cnf: ');
+            print_warn("MySQL $global_mysql_conf: ");
             if ( $mysql_conf->{'mysqld'}{$check}[1] eq "enabled" ) {
                 print_warning("[ $mysql_conf->{'mysqld'}{$check}[0] ] found $help");
             }
@@ -5264,7 +5221,7 @@ sub check_mysql_config {
         }
         elsif ( $mysqld_checks{$check}->{check_missing} && !defined( $mysql_conf->{'mysqld'}{$check} ) ) {
             my $optname = defined( $mysqld_checks{$check}->{orig_name} ) ? $mysqld_checks{$check}->{orig_name} : $check;
-            print_warn('MySQL /etc/my.cnf: ');
+            print_warn("MySQL $global_mysql_conf: ");
             print_warning("[ $optname ] not found. $help");
         }
     }
@@ -5276,7 +5233,7 @@ sub check_mysql_datadir {
     my $bad_path_regex = '^\/(home|usr|etc|boot)(\/|\s*$)';
     if ( defined $mysql_conf->{'mysqld'}{'datadir'}[1] and $mysql_conf->{'mysqld'}{'datadir'}[1] =~ m/$bad_path_regex/ ) {
         print_warn('MySQL: ');
-        print_warning('/etc/my.cnf datadir points to a systemd protected directory which can prevent MariaDB 10.1.16+ from starting. See CPANEL-15633.');
+        print_warning("$global_mysql_conf datadir points to a systemd protected directory which can prevent MariaDB 10.1.16+ from starting. See CPANEL-15633.");
     }
     if ( -l '/var/lib/mysql' and readlink('/var/lib/mysql') =~ m/$bad_path_regex/ ) {
         print_warn('MySQL: ');
@@ -5304,7 +5261,7 @@ sub check_for_extra_mysql_config_files {
     return if !@found_locations;
     print_warn('MySQL - extra my.cnf files found: ');
     print_warning( '[ ' . join( " ", @found_locations ) . ' ]' );
-    print_warning( "\t " . '\_ These may replace or be merged with /etc/my.cnf settings!' );
+    print_warning( "\t " . "\_ These may replace or be merged with $global_mysql_conf settings!" );
 }
 
 sub check_cpanel_config {
@@ -5482,7 +5439,7 @@ sub check_for_kernel_headers_rpm {
         print_warning('/usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
     }
     else {
-        if ( @RPM_LIST && !grep { /^kernel-headers-/ } @RPM_LIST ) {
+        if ( @rpm_list && !grep { /^kernel-headers-/ } @rpm_list ) {
             print_warn('kernel-headers RPM: ');
             print_warning('not found. This can cause problems with EA');
         }
@@ -8600,13 +8557,13 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
     return unless defined( $cpconf{'ftpserver'} ) && $cpconf{'ftpserver'} eq 'pure-ftpd';
     if ( defined( $pure_ftpd_conf->{'calluploadscript'} ) && $pure_ftpd_conf->{'calluploadscript'}->{value} eq 'yes' ) {
         if ( !-e '/var/run/pure-ftpd.upload.pipe' ) {
-            print_warn("/etc/pure-ftpd.conf: ");
+            print_warn("$pure_ftpd_conf_file: ");
             print_warning("CallUploadScript set to yes, /var/run/pure-ftpd.upload.pipe is missing [might be broken ConfigServer's cxs ( http://configserver.com/cp/cxs.html )]");
         }
         else {
             my $out = timed_run( 0, 'lsof', '-n', '/var/run/pure-ftpd.upload.pipe' );
             if ( !$out ) {
-                print_warn("/etc/pure-ftpd.conf: ");
+                print_warn("$pure_ftpd_conf_file: ");
                 print_warning("CallUploadScript set to yes, and /var/run/pure-ftpd.upload.pipe does not seem to have anything listening on it. [might be broken ConfigServer's cxs ( http://configserver.com/cp/cxs.html )]");
             }
         }
@@ -8615,7 +8572,7 @@ sub check_pure_ftpd_conf_for_upload_script_and_dead {
 
 sub check_cpanel_config_for_bad_root {    # Separate from check_cpanel_config because those don't apply to DNSONLY
     if ( defined $cpconf{'root'} && $cpconf{'root'} ne '/usr/local/cpanel' ) {    # The default is used if it is missing, so only need to check if it is set
-        print_warn("/var/cpanel/cpanel.config: ");
+        print_warn("$cpanel_config_file: ");
         print_warning(qq{root set to "$cpconf{root}"});
         print_warning("\t \\_ Default is \"/usr/local/cpanel\"");
         print_warning("\t \\_ An invalid root setting can cause WHM to fail to start.  See ticket 5463121.");
@@ -8645,6 +8602,8 @@ sub get_ea4_php_fpm_status {
 #   3. UNIX sockets have correct perms
 sub check_ea4_php_fpm {
     return unless $ea4;
+
+    my $ea4_php_fpm = get_ea4_php_fpm_status();
     return unless $ea4_php_fpm;
     my @running;
 
@@ -8678,7 +8637,8 @@ sub check_ea4_php_fpm {
                     next;
                 }
 
-                $perms{$name} = { pid => $pid, user => $user } if $mode & S_IRWXO;
+                require Fcntl;
+                $perms{$name} = { pid => $pid, user => $user } if $mode & Fcntl->S_IRWXO;
             }
             elsif ( $type =~ /^ipv\d+/i && $listen =~ /LISTEN/i ) {
                 $name =~ s/^.*?:(\d+).*/$1/;
@@ -8718,9 +8678,8 @@ sub get_external_ip {
     if ( defined($reply) && $reply =~ m{ ^ \s* ([0-9]+.[0-9]+.[0-9]+.[0-9]+) \s* $ }xms ) {
         $ip = $1;
         chomp $ip;
-        return $ip;
     }
-    return;
+    return $ip;
 }
 
 sub _http_get {
