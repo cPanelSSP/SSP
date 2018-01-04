@@ -1875,16 +1875,13 @@ sub check_for_clustering {
 }
 
 sub print_apache_info {
-    my $output;
+    my $output = 'could not determine Apache info!';
 
     if ($ea4) {
-        $output .= "[ EA4 ] [ $apache_version ]";
+        $output = "[ EA4 ] [ $apache_version ]";
     }
     elsif ( $apache_version && $apache_built && $apache_ea_version ) {
-        $output .= "[ $apache_version ] [ $apache_built w/ $apache_ea_version ]";
-    }
-    else {
-        $output .= 'could not determine Apache info!';
+        $output = "[ $apache_version ] [ $apache_built w/ $apache_ea_version ]";
     }
 
     my ( $apache_uptime, $apache_generations );
