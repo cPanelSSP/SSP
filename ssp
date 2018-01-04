@@ -3937,18 +3937,12 @@ sub check_pkgacct_override {
 }
 
 sub check_for_gdm {
-    my $gdm = 0;
-
     for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) gdm }xms ) {
-            $gdm = 1;
-            last;
+            print_warn('gdm Process: ');
+            print_warning('is running');
+            return;
         }
-    }
-
-    if ( $gdm == 1 ) {
-        print_warn('gdm Process: ');
-        print_warning('is running');
     }
 }
 
