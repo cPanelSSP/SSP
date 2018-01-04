@@ -4350,18 +4350,12 @@ sub populate_mysql_rpm_versions_array {
 sub check_for_mysql_4 {
     return if !@mysql_rpm_versions;
 
-    my $mysql_4 = 0;
-
     for my $rpm (@mysql_rpm_versions) {
         if ( $rpm =~ m{ \A 4 }xms ) {
-            $mysql_4 = 1;
-            last;
+            print_warn('MySQL 4.x RPM: ');
+            print_warning('found! This can interfere with cPanel updates');
+            return;
         }
-    }
-
-    if ( $mysql_4 == 1 ) {
-        print_warn('MySQL 4.x RPM: ');
-        print_warning('found! This can interfere with cPanel updates');
     }
 }
 
