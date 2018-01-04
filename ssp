@@ -4788,44 +4788,45 @@ sub check_for_missing_or_commented_customlog {
 
 sub check_for_cpsources_conf {
     my $cpsources_conf = '/etc/cpsources.conf';
-    if ( -f $cpsources_conf and not -z $cpsources_conf ) {
-        print_warn('/etc/cpsources.conf: ');
-        print_warning('exists! This can affect upcp and EA.');
+    return unless -f $cpsources_conf and not -z $cpsources_conf;
 
-        my @cpsources_servers;
-        if ( open( my $cpsources_conf_fh, '<', $cpsources_conf ) ) {
-            while (<$cpsources_conf_fh>) {
-                my ( $key, $value ) = split( '=', $_ );
-                if ( $key eq 'HTTPUPDATE' ) {
-                    push @cpsources_servers, $value;
-                }
+    print_warn('/etc/cpsources.conf: ');
+    print_warning('exists! This can affect upcp and EA.');
+
+    my @cpsources_servers;
+    if ( open( my $cpsources_conf_fh, '<', $cpsources_conf ) ) {
+        while (<$cpsources_conf_fh>) {
+            my ( $key, $value ) = split( '=', $_ );
+            if ( $key eq 'HTTPUPDATE' ) {
+                push @cpsources_servers, $value;
             }
-            close $cpsources_conf_fh;
         }
-        foreach my $cpsources_server (@cpsources_servers) {
-            chomp $cpsources_server;
-            my ( $host, $port ) = split( ':', $cpsources_server );
-            if ( !defined($port) ) {
-                $port = 80;
-            }
-            my $tiers_data = _http_get( Host => $host, Port => $port, Path => '/cpanelsync/TIERS', WantHeaders => 1 );
-            if ( !$tiers_data ) {
+        close $cpsources_conf_fh;
+    }
+
+    foreach my $cpsources_server (@cpsources_servers) {
+        chomp $cpsources_server;
+        my ( $host, $port ) = split( ':', $cpsources_server );
+        if ( !defined($port) ) {
+            $port = 80;
+        }
+        my $tiers_data = _http_get( Host => $host, Port => $port, Path => '/cpanelsync/TIERS', WantHeaders => 1 );
+        if ( !$tiers_data ) {
+            print_warn('/etc/cpsources.conf: ');
+            print_warning("Unresponsive mirror: http://$host:$port");
+            next;
+        }
+        ( my $http_response ) = split( '\n', $tiers_data );
+        ($http_response) = split( '\r', $http_response );
+        if ( $http_response =~ /^HTTP\/(\d*?)\.(\d*?) (\d\d\d) (.*?)$/ ) {
+            if ( $3 != 200 ) {
                 print_warn('/etc/cpsources.conf: ');
-                print_warning("Unresponsive mirror: http://$host:$port");
-                next;
+                print_warning("Server $host:$port responded with [ $http_response ] when fetching TIERS file.");
             }
-            ( my $http_response ) = split( '\n', $tiers_data );
-            ($http_response) = split( '\r', $http_response );
-            if ( $http_response =~ /^HTTP\/(\d*?)\.(\d*?) (\d\d\d) (.*?)$/ ) {
-                if ( $3 != 200 ) {
-                    print_warn('/etc/cpsources.conf: ');
-                    print_warning("Server $host:$port responded with [ $http_response ] when fetching TIERS file.");
-                }
-            }
-            else {
-                print_warn('/etc/cpsources.conf: ');
-                print_warning("Server $host:$port responds with weird HTTP response [ $http_response ]");
-            }
+        }
+        else {
+            print_warn('/etc/cpsources.conf: ');
+            print_warning("Server $host:$port responds with weird HTTP response [ $http_response ]");
         }
     }
 }
