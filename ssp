@@ -6032,7 +6032,6 @@ sub check_for_perl_env_var {
 
 sub check_for_disabled_services {
     my %disabled_services;
-    my $disabled;
 
     my %touchfiles = (
         '/etc/antirelayddisable'                                 => 'antirelayd',
