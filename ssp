@@ -5994,10 +5994,9 @@ sub check_for_dhclient {
 sub check_for_var_cpanel_roundcube_install {
     my $install = '/var/cpanel/roundcube/install';
 
-    if ( -f $install and -x $install ) {
-        print_warn('RoundCube: ');
-        print_warning("$install exists. /u/l/c/b/update-roundcube won't fully run (by design - see the docs)");
-    }
+    return unless ( -f $install and -x $install );
+    print_warn('RoundCube: ');
+    print_warning("$install exists. /u/l/c/b/update-roundcube won't fully run (by design - see the docs)");
 }
 
 sub check_for_missing_etc_localtime {
