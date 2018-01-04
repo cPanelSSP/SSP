@@ -5781,7 +5781,7 @@ sub check_for_custom_postgres_repo {
         }
     }
 
-    if ( $has_postgres_repo == 1 ) {
+    if ( $has_postgres_repo ) {
         print_warn('PostgreSQL: ');
         print_warning('custom Postgres repo (pgdg-*) found in /etc/yum.repos.d/ . See tickets 3690445, 3568781');
     }
