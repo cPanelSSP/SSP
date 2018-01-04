@@ -6236,9 +6236,6 @@ sub check_for_harmful_php_mode_600_cron {
     return if !-d '/etc/cron.daily';
 
     my @dir_contents;
-    my $has_harmful_cron = 0;
-    my $cron_file;
-
     opendir( my $dir_fh, '/etc/cron.daily' ) or return;
     @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
     closedir $dir_fh;
@@ -6248,17 +6245,12 @@ sub check_for_harmful_php_mode_600_cron {
         open my $file_fh, '<', $file or next;
         while (<$file_fh>) {
             if (/^mytmpfile=\/tmp\/php-mode-/) {
-                $has_harmful_cron = 1;
-                $cron_file        = $file;
+                print_warn('harmful cron: ');
+                print_warning("${file}! Breaks webmail, phpMyAdmin, and more! See tickets 4225765, 4237465, 4099807, 4231469, 4231473. Vendor: http://whmscripts.net/misc/2013/apache-symlink-security-issue-fixpatch/");
                 last;
             }
         }
         close $file_fh;
-    }
-
-    if ( $has_harmful_cron == 1 ) {
-        print_warn('harmful cron: ');
-        print_warning("${cron_file}! Breaks webmail, phpMyAdmin, and more! See tickets 4225765, 4237465, 4099807, 4231469, 4231473. Vendor: http://whmscripts.net/misc/2013/apache-symlink-security-issue-fixpatch/");
     }
 }
 
