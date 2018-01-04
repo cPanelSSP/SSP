@@ -4089,27 +4089,27 @@ sub check_mounts {
 ## check if only internal IP addrs are bound to server (this is not as reliable,
 ## as NAT can still be used with external IP addrs of course)
 sub check_for_unsupported_nat {
-    my @external_ipaddrs;
     return if -e '/var/cpanel/cpnat';
+    my @external_ipaddrs;
 
     if ( defined($external_ip_address) ) {
         if ( !grep { /$external_ip_address/ } @local_ipaddrs_list ) {
             print_warn('NAT: ');
             print_warning("external IP address $external_ip_address is not bound to server");
         }
+        return;
     }
-    else {
-        for my $ipaddr (@local_ipaddrs_list) {
 
-            # Matches any local IP (127.0.0.0/8) or RFC-1918 IP (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
-            if ( $ipaddr !~ /(?:10\.|127\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/ ) {
-                push @external_ipaddrs, $ipaddr;
-            }
+    for my $ipaddr (@local_ipaddrs_list) {
+
+        # Matches any local IP (127.0.0.0/8) or RFC-1918 IP (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+        if ( $ipaddr !~ /(?:10\.|127\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/ ) {
+            push @external_ipaddrs, $ipaddr;
         }
-        if ( !@external_ipaddrs ) {
-            print_warn('NAT: ');
-            print_warning('no external IP addresses detected');
-        }
+    }
+    if ( !@external_ipaddrs ) {
+        print_warn('NAT: ');
+        print_warning('no external IP addresses detected');
     }
 }
 
