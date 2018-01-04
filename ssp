@@ -2579,16 +2579,17 @@ sub print_lsws_info {
             $lshttpd_ports{$portnum} = 1;
         }
     }
+
     if ( scalar keys(%lshttpd_ports) ) {
         print_info('LiteSpeed Web Server: ');
         print_normal( 'is listening on ports [ ' . join( " ", sort( keys(%lshttpd_ports) ) ) . ' ]' );
     }
+
+    print_info('LiteSpeed Web Server: ');
     if ( $lsws_full_version =~ /Enterprise/ ) {
-        print_info('LiteSpeed Web Server: ');
         print_normal('is supported, see http://cpanel.wiki/display/LS/LiteSpeed');
     }
     else {
-        print_info('LiteSpeed Web Server: ');
         print_warning('non-Enterprise editions of LiteSpeed are NOT directly supported');
     }
     print_info('LiteSpeed Web Server: ');
