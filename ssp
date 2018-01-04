@@ -3965,11 +3965,8 @@ sub check_easyapache {
                 $ea_in_process_list = 1;
                 last;
             }
-            else {
-                $ea_in_process_list = 0;
-            }
         }
-        if ( $ea_in_process_list == 0 ) {
+        if ( !$ea_in_process_list ) {
             print_warn('EA3: ');
             print_warning("$ea_is_running_file exists, but 'easyapache' not found in process list");
         }
@@ -3980,7 +3977,7 @@ sub check_easyapache {
         }
     }
 
-    if ( -e $apache_update_no_restart and $ea_is_running == 0 ) {
+    if ( -e $apache_update_no_restart and $ea_is_running ) {
         print_warn('EA3: ');
         print_warning("$apache_update_no_restart exists! This will prevent EA from completing successfully.");
     }
