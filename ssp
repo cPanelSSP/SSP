@@ -5231,11 +5231,7 @@ sub check_for_extra_mysql_config_files {
       /usr/etc/my.cnf
       /var/lib/mysql/my.cnf
     );
-    my @found_locations = ();
-
-    for my $loc (@extra_locations) {
-        push @found_locations, $loc if -f $loc;
-    }
+    my @found_locations = grep { -f $_ } @extra_locations;
 
     return if !@found_locations;
     print_warn('MySQL - extra my.cnf files found: ');
