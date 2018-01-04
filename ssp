@@ -3947,9 +3947,7 @@ sub check_for_gdm {
 }
 
 sub check_for_redhat_firewall {
-    my $iptables = timed_run( 0, 'iptables', '-L', 'RH-Firewall-1-INPUT' );
-
-    if ($iptables) {
+    if ( timed_run( 0, 'iptables', '-L', 'RH-Firewall-1-INPUT' ) ) {
         print_warn('Default Redhat Firewall Check: ');
         print_warning('RH-Firewall-1-INPUT table exists. /scripts/configure_rh_firewall_for_cpanel to open ports.');
     }
