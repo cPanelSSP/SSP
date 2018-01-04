@@ -78,7 +78,6 @@ our $mysql_datadir;
 our $mysql_error_log;
 our @mysql_rpm_versions;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
 our @custom_opt_mods;           # items in /var/cpanel/easy/apache/custom_opt_mods/
-our @usr_local_cpanel_hooks;    # items in /usr/local/cpanel/hooks/
 our @easyapache_templates;      # items in /var/cpanel/easy/apache/profile/
 our @extended_rpm_list;         # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n'
 our @rpm_list;                  # rpm -qa
@@ -4130,7 +4129,18 @@ sub check_for_oracle_linux {
 sub check_for_usr_local_cpanel_hooks {
     my $hooks;
     my $dir = '/usr/local/cpanel/hooks';
-    find( \&find_usr_local_cpanel_hooks, $dir );
+
+    my @usr_local_cpanel_hooks;    # items in /usr/local/cpanel/hooks/
+    find(
+        sub  {
+            my $file = $File::Find::name;
+            if ( -f $file and $file !~ m{ ( README | \.example ) \z }xms ) {
+                $file =~ s#/usr/local/cpanel/hooks/##;
+                push @usr_local_cpanel_hooks, $file;
+            }
+        },
+        $dir
+    );
 
     # default CloudLinux hooks that can be ignored
     my %hooks_ignore = qw(
@@ -4142,29 +4152,19 @@ sub check_for_usr_local_cpanel_hooks {
       289b2b4c8b5293103def4557d3538060    /usr/local/cpanel/hooks/mysql/deluser
     );
 
-    if (@usr_local_cpanel_hooks) {
-        for my $hook (@usr_local_cpanel_hooks) {
-            my $tmp_hook = '/usr/local/cpanel/hooks/' . $hook;
-            if ( -f $tmp_hook and not -z $tmp_hook ) {
-                chomp( my $checksum = timed_run( 0, 'md5sum', $tmp_hook ) );
-                $checksum =~ s/\s.*//g;
-                next if exists $hooks_ignore{$checksum};
-                $hooks .= "$hook ";
-            }
+    for my $hook (@usr_local_cpanel_hooks) {
+        my $tmp_hook = '/usr/local/cpanel/hooks/' . $hook;
+        if ( -f $tmp_hook and not -z $tmp_hook ) {
+            chomp( my $checksum = timed_run( 0, 'md5sum', $tmp_hook ) );
+            $checksum =~ s/\s.*//g;
+            next if exists $hooks_ignore{$checksum};
+            $hooks .= "$hook ";
         }
     }
 
     if ($hooks) {
         print_warn("$dir: ");
         print_warning($hooks);
-    }
-}
-
-sub find_usr_local_cpanel_hooks {
-    my $file = $File::Find::name;
-    if ( -f $file and $file !~ m{ ( README | \.example ) \z }xms ) {
-        $file =~ s#/usr/local/cpanel/hooks/##;
-        push @usr_local_cpanel_hooks, $file;
     }
 }
 
