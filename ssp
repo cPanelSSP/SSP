@@ -2817,24 +2817,13 @@ sub check_cpupdate_conf {
 }
 
 sub check_interface_lo {
-    my $is_up = 0;
-    my $output;
+    my $output = timed_run( 0, 'ip', 'addr', 'show', 'dev', 'lo' );
+    $output ||= timed_run( 0, 'ifconfig', 'lo' );
 
-    unless ( $output = timed_run( 0, 'ip', 'addr', 'show', 'dev', 'lo' ) ) {
-        $output = timed_run( 0, 'ifconfig', 'lo' );
-    }
+    return check_loopback_connection() if $output =~ /UP.LOOPBACK|LOOPBACK.UP/;    # ip addr and ifconfig swap the LOOPBACK and UP keywords
 
-    if ( $output =~ /UP.LOOPBACK|LOOPBACK.UP/ ) {    # ip addr and ifconfig swap the LOOPBACK and UP keywords
-        $is_up = 1;
-    }
-
-    if ( !$is_up ) {
-        print_warn('Loopback Interface: ');
-        print_warning('loopback interface is not up!');
-    }
-    else {
-        check_loopback_connection();
-    }
+    print_warn('Loopback Interface: ');
+    print_warning('loopback interface is not up!');
 }
 
 sub check_loopback_connection {
