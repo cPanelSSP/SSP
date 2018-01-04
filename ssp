@@ -5720,13 +5720,12 @@ sub check_if_httpdconf_ipaddrs_exist {
         }
     }
 
-    if (@unbound_ipaddrs) {
-        print_warn('Apache: ');
-        print_warning('httpd.conf has VirtualHosts for these IP addrs, which aren\'t bound to the server:');
+    return unless @unbound_ipaddrs;
+    print_warn('Apache: ');
+    print_warning('httpd.conf has VirtualHosts for these IP addrs, which aren\'t bound to the server:');
 
-        for my $unbound_ipaddr (@unbound_ipaddrs) {
-            print_magenta("\t \\_ $unbound_ipaddr");
-        }
+    for my $unbound_ipaddr (@unbound_ipaddrs) {
+        print_magenta("\t \\_ $unbound_ipaddr");
     }
 }
 
