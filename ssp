@@ -2756,7 +2756,6 @@ sub check_for_missing_usr_bin_crontab {
 
 sub check_if_upcp_is_running {
     my $upcp_running   = 0;
-    my $upcp_touchfile = 0;
 
     for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) cPanel \s Update \s \(upcp\) }xms ) {
@@ -2765,15 +2764,11 @@ sub check_if_upcp_is_running {
         }
     }
 
-    if ( -e '/usr/local/cpanel/upgrade_in_progress.txt' ) {
-        $upcp_touchfile = 1;
-    }
-
     if ( $upcp_running == 1 ) {
         print_warn('upcp check: ');
         print_warning('upcp is currently running');
     }
-    elsif ( $upcp_touchfile == 1 ) {
+    elsif ( -e '/usr/local/cpanel/upgrade_in_progress.txt' ) {
         print_warn('upcp check: ');
         print_warning('/usr/local/cpanel/upgrade_in_progress.txt found, but upcp doesn\'t appear to be running. Last run failed? If Tweak Settings is not loading, this may be why.');
     }
