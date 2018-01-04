@@ -2070,16 +2070,13 @@ sub print_ea3_php_configuration {
 
 sub print_ea4_php_configuration {
     return if !$ea4;
-    my $info;
+    my $info = 'UNKNOWN';
     my $fpm_jail_toggle = '/var/cpanel/feature_toggles/apachefpmjail';
     print_info('PHP Default: ');
     if ( defined($ea4_php) && defined( $ea4_php->{default} ) && defined( $ea4_php->{ $ea4_php->{default} }->{release_version} ) && defined( $ea4_php->{ $ea4_php->{default} }->{handler} ) ) {
-        $info .= '[ EA4 ]';
+        $info = '[ EA4 ]';
         $info .= " [ $ea4_php->{ $ea4_php->{default} }->{release_version} ( $ea4_php->{default} ) ]";
         $info .= " [ $ea4_php->{ $ea4_php->{default} }->{handler} ]";
-    }
-    else {
-        $info .= 'UNKNOWN';
     }
     print_normal($info);
     if ( -e $fpm_jail_toggle ) {
