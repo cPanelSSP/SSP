@@ -2842,9 +2842,8 @@ sub check_loopback_connection {
         if ($sock) {
             $connected = 1;
             close $sock;
+            last;
         }
-
-        last if $connected == 1;
     }
 
     if ( !$connected ) {
