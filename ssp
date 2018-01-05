@@ -6545,7 +6545,6 @@ sub check_for_processes_killed_by_lfd {
     my $bytes_to_check = 20_971_520 / 2;    # 10M
     my $seek_position  = 0;
     my $log_data;
-    my @logs;
     my $count = 0;
     my @killed_by_lfd;
 
@@ -6559,7 +6558,7 @@ sub check_for_processes_killed_by_lfd {
     close $file_fh;
 
     if ( $log_data =~ /\sKill:1\s/ ) {
-        @logs = split /\n/, $log_data;
+        my @logs = split /\n/, $log_data;
         undef $log_data;
         @logs = reverse @logs;
 
