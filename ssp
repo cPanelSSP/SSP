@@ -7553,7 +7553,6 @@ sub check_updatelog {
 ##############################
 
 sub check_smtp_processes {
-    my $assp_running = 0;
 
     return if scalar keys(%$port_ref) == 0;
     if ( !defined( $port_ref->{"25"} ) && !-f '/etc/eximdisable' ) {
@@ -7571,14 +7570,10 @@ sub check_smtp_processes {
             print_3rdp2( 'a process other than exim is listening on port 25 [' . $href->{IPV} . ' ' . $href->{IP} . '] [USER: ' . $href->{USER} . '] [CMD: ' . $cmd . '] [PID: ' . $pid . ']' );
         }
         if ( $cmd =~ m{ assp\.pl }xms ) {
-            $assp_running = $pid;
+            print_3rdp('ASSP: ');
+            print_3rdp2( 'assp.pl is listening on port 25 [PID: ' . $pid . ']' );
+            print_3rdp2('         \_  SNI is not supported unless enabled in the plugin: http://www.grscripts.com/howtofaq.html -> "Does ASSP Support SNI?"');
         }
-    }
-
-    if ($assp_running) {
-        print_3rdp('ASSP: ');
-        print_3rdp2( 'assp.pl is listening on port 25 [PID: ' . $assp_running . ']' );
-        print_3rdp2('         \_  SNI is not supported unless enabled in the plugin: http://www.grscripts.com/howtofaq.html -> "Does ASSP Support SNI?"');
     }
 }
 
