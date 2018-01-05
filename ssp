@@ -6962,21 +6962,15 @@ sub check_for_allow_update_in_named_conf {
     my $namedconf = '/etc/named.conf';
     return if !-e $namedconf;
 
-    my $has_allow_update = 0;
-
     if ( open my $fh, '<', $namedconf ) {
         while (<$fh>) {
             if (/allow-update/i) {
-                $has_allow_update = 1;
+                print_warn('named.conf: ');
+                print_warning('allow-update found. This can possibly prevent rndc from reloading. See ticket 4717591');
                 last;
             }
         }
         close $fh;
-    }
-
-    if ( $has_allow_update == 1 ) {
-        print_warn('named.conf: ');
-        print_warning('allow-update found. This can possibly prevent rndc from reloading. See ticket 4717591');
     }
 }
 
