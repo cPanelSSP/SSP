@@ -7218,10 +7218,11 @@ sub check_for_unsupported_php {
     return if $ea4;
     return if !$ea3_phpversion;
     return if $ea3_phpversion >= 6;
-    my $min_php5 = '5.3.0';
     if ( $ea3_phpversion == 4 ) {
         return if !$ea3_php4version;
     }
+
+    my $min_php5 = '5.3.0';
     if ( $ea3_phpversion == 5 ) {
         return if !$ea3_php5version;
         return if !version_compare( $ea3_php5version, '<', $min_php5 );
@@ -7385,7 +7386,6 @@ sub check_for_jynx2_rootkit {
 }
 
 sub check_for_bg_botnet {
-    my @found_bg_files = ();
 
     # /bin/ps, /bin/netstat, and /usr/sbin/lsof have also been found to be modified
     # This one is causing some rare false-positives:
@@ -7442,11 +7442,7 @@ sub check_for_bg_botnet {
       /tmp/whitptabil
     );
 
-    for my $file (@bg_files) {
-        if ( -e $file ) {
-            push( @found_bg_files, $file );
-        }
-    }
+    my @found_bg_files = grep { -e $_ } @bg_files;
     for my $file (@root_bg_files) {
         if ( -e $file && ( stat $file )[4] eq 0 ) {
             push( @found_bg_files, $file );
