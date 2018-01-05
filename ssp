@@ -6668,8 +6668,7 @@ sub check_for_processes_killed_by_prm {
 
         my $bytes_to_check = 10485760;    # 10M
         my $seek_position  = 0;
-        my $log_data       = undef;
-        my @logs;
+        my $log_data;
         my $count         = 0;
         my @killed_by_prm = ();
 
@@ -6683,7 +6682,7 @@ sub check_for_processes_killed_by_prm {
         close $file_fh;
 
         if ( $log_data =~ /\sKILLED\s/ ) {
-            @logs = split /\n/, $log_data;
+            my @logs = split /\n/, $log_data;
             undef $log_data;
             @logs = reverse @logs;
 
@@ -6708,27 +6707,21 @@ sub check_for_processes_killed_by_prm {
 sub check_for_broken_userdatadomains {
     return if !-f '/etc/userdatadomains';
 
-    my $is_broken = 0;
-
     open my $userdatadomains_fh, '<', '/etc/userdatadomains' or return;
     while (<$userdatadomains_fh>) {
         if (/^:/) {
-            $is_broken = 1;
+            print_warn('/etc/userdatadomains: ');
+            print_warning('contains a line that begins with ":". Check the following for accuracy (see 4416539 for examples):');
+            print_magenta("\t \\_ /etc/userdatadomains");
+            print_magenta("\t \\_ /var/cpanel/users/USER (check the ^DNS= lines)");
+            print_magenta("\t \\_ /var/cpanel/userdata/USER/main (check for things like '')");
+            print_magenta("\t \\_ /var/cpanel/userdata/USER/DOMAIN (check serveralias line)");
+            print_magenta("\t \\_ /var/cpanel/userdata/USER/cache (userdatadomains uses this)");
+            print_magenta("\t \\_ /usr/local/apache/conf/httpd.conf (may need rebuilding after fixing userdata)");
             last;
         }
     }
     close $userdatadomains_fh;
-
-    if ( $is_broken == 1 ) {
-        print_warn('/etc/userdatadomains: ');
-        print_warning('contains a line that begins with ":". Check the following for accuracy (see 4416539 for examples):');
-        print_magenta("\t \\_ /etc/userdatadomains");
-        print_magenta("\t \\_ /var/cpanel/users/USER (check the ^DNS= lines)");
-        print_magenta("\t \\_ /var/cpanel/userdata/USER/main (check for things like '')");
-        print_magenta("\t \\_ /var/cpanel/userdata/USER/DOMAIN (check serveralias line)");
-        print_magenta("\t \\_ /var/cpanel/userdata/USER/cache (userdatadomains uses this)");
-        print_magenta("\t \\_ /usr/local/apache/conf/httpd.conf (may need rebuilding after fixing userdata)");
-    }
 }
 
 sub check_ssl_db_perms {
