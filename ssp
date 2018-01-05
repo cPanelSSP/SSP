@@ -326,6 +326,7 @@ sub long_check_list {
     print_kernelcare_info();
     print_cpanel_info();
     check_for_cpanel_update();
+    print_time();
     print_uptime();
     print_logged_in_users();
     print_load_average();
@@ -554,6 +555,7 @@ sub non_cpanel_checks_only {
     print_os();
     print_kernel_and_cpu();
     print_kernelcare_info();
+    print_time();
     print_uptime();
     print_logged_in_users();
     print_load_average();
@@ -666,6 +668,7 @@ sub dnsonly_checks_only {
     print_kernelcare_info();
     print_cpanel_info();
     check_for_cpanel_update();
+    print_time();
     print_uptime();
     print_logged_in_users();
     print_load_average();
@@ -1811,6 +1814,11 @@ sub check_perl_version_less_than_588 {
         print_warn('Perl Version: ');
         print_warning('better resolver results can be obtained when running SSP with Perl 5.14 or later');
     }
+}
+
+sub print_time {
+    print_info('Server time: ');
+    print_normal(gmtime().' GMT');
 }
 
 sub print_uptime {
