@@ -6890,23 +6890,17 @@ sub check_for_pgpass_colon_in_password_field {
     my $pgpass = '/root/.pgpass';
     return if !-f $pgpass;
 
-    my $has_colon = 0;
-
     if ( open my $fh, '<', $pgpass ) {
         while (<$fh>) {
             if (/^\*:\*:\*:postgres:(.*)/) {
                 if ( $1 =~ /:/ ) {
-                    $has_colon = 1;
+                    print_warn("$pgpass: ");
+                    print_warning('password field contains a colon. Seeing Postgres auth issues? See FB-89093');
                     last;
                 }
             }
         }
         close $fh;
-    }
-
-    if ( $has_colon == 1 ) {
-        print_warn("$pgpass: ");
-        print_warning('password field contains a colon. Seeing Postgres auth issues? See FB-89093');
     }
 }
 
