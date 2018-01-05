@@ -7069,42 +7069,38 @@ sub check_for_openssl_heartbleed_bug {
 
 sub check_for_openssl_secadv_20140605 {
     return if !$openssl_rpm_changelog;
+    return if ( $openssl_rpm_changelog =~ m{ \sCVE-2014-0224\s }xms );
+
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
     return if !-f $sysinfo_config;
-
-    my $rpm_dist_ver;
 
     open my $fh, '<', $sysinfo_config or return;
     while (<$fh>) {
         if (/^rpm_dist_ver=(\d+)$/) {
-            $rpm_dist_ver = $1;
+            my $rpm_dist_ver = $1;
+            return if !$rpm_dist_ver;
+            return if ( $rpm_dist_ver < 5 || $rpm_dist_ver > 6 );    # Only RHEL/CentOS 5 and 6 need apply
             last;
         }
     }
     close $fh or return;
 
-    return if !$rpm_dist_ver;
-    return if ( $rpm_dist_ver < 5 || $rpm_dist_ver > 6 );    # Only RHEL/CentOS 5 and 6 need apply
-
     chomp( my $openssl_ver = timed_run( 0, 'openssl', 'version' ) );
     return if !$openssl_ver;
 
     # fixed in openssl 1.0.1h, 1.0.0m, and 0.9.8za
-    if ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)([a-z])([a-z]?)/ ) {
-        my ( $maj, $min, $patch ) = ( $1, $2, $3 );
+    return unless ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)([a-z])([a-z]?)/ );
 
-        # If we map the alphas into a number and sum the values the version will be compatible with version_compare() and save us a lot of trouble, i.e. h=8, m=13, and za=27
-        my %al2num = map { ( "a" .. "z" )[ $_ - 1 ] => $_ } ( 1 .. 26 );    # Isn't there a better way to do this?
-        my $sub = 0;
-        if ($4) { $sub += $al2num{ lc($4) } }
-        if ($5) { $sub += $al2num{ lc($5) } }
-        my $ver = join( '.', $maj, $min, $patch, $sub );
-        return if version_compare( $ver, qw( >= 1.0.1.8 ) );                # If > 1.0.1h we're done.
-        return if ( version_compare( $ver, qw( < 1.0.1.0 ) ) && version_compare( $ver, qw( >= 1.0.0.13 ) ) );    # If < 1.0.1 and >= 1.0.0m we're done.
-        return if ( version_compare( $ver, qw( < 0.9.9.0 ) ) && version_compare( $ver, qw( >= 0.9.8.27 ) ) );    # If < 0.9.9 and >= 0.9.8za we're done.
-    }
-
-    return if ( $openssl_rpm_changelog =~ m{ \sCVE-2014-0224\s }xms );
+    my ( $maj, $min, $patch ) = ( $1, $2, $3 );
+    # If we map the alphas into a number and sum the values the version will be compatible with version_compare() and save us a lot of trouble, i.e. h=8, m=13, and za=27
+    my %al2num = map { ( "a" .. "z" )[ $_ - 1 ] => $_ } ( 1 .. 26 );    # Isn't there a better way to do this?
+    my $sub = 0;
+    if ($4) { $sub += $al2num{ lc($4) } }
+    if ($5) { $sub += $al2num{ lc($5) } }
+    my $ver = join( '.', $maj, $min, $patch, $sub );
+    return if version_compare( $ver, qw( >= 1.0.1.8 ) );                # If > 1.0.1h we're done.
+    return if ( version_compare( $ver, qw( < 1.0.1.0 ) ) && version_compare( $ver, qw( >= 1.0.0.13 ) ) );    # If < 1.0.1 and >= 1.0.0m we're done.
+    return if ( version_compare( $ver, qw( < 0.9.9.0 ) ) && version_compare( $ver, qw( >= 0.9.8.27 ) ) );    # If < 0.9.9 and >= 0.9.8za we're done.
 
     print_critical();
     print_crit('OpenSSL RPM missing secadv_20140605 patches: ');
