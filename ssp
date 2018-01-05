@@ -7153,11 +7153,11 @@ sub check_for_broken_mysqldump {
 sub check_for_exim_cve_2016_1531 {
     my $eximbin = '/usr/sbin/exim';
     return if !-x $eximbin;
-    my $eximver;
 
     chomp( my $exim_out = timed_run( 0, $eximbin, '--version' ) );
     return if !$exim_out;
 
+    my $eximver;
     if ( $exim_out =~ m{version (\d+\.\d+(?:[._](\d+))?)}ms ) {
         $eximver = $1;
     }
