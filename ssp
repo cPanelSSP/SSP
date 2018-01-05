@@ -7907,8 +7907,6 @@ sub check_for_libkeyutils_filenames {
 sub check_sha1_sigs_libkeyutils {
     my $libkeyutils_files_ref = build_libkeyutils_file_list();
 
-    my $trojaned_lib;
-
     # p67 http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf
     # https://www.welivesecurity.com/2017/10/30/windigo-ebury-update-2/
     my @checksums = qw(
@@ -7959,24 +7957,20 @@ sub check_sha1_sigs_libkeyutils {
         chomp $checksum;
         $checksum =~ s/\s.*//g;
         if ( grep { /$checksum/ } @checksums ) {
-            $trojaned_lib = "$lib\n\tSHA-1 checksum: $checksum";
+            my $trojaned_lib = "$lib\n\tSHA-1 checksum: $checksum";
+            print_ebury_cdorked_predef('EBURY');
+            print_critical('The following file(s) were found:');
+            print_critical( "\t" . $trojaned_lib );
+            print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/ and https://www.welivesecurity.com/2017/10/30/windigo-ebury-update-2/");
+            print_critical();
             last;
         }
-    }
-
-    if ($trojaned_lib) {
-        print_ebury_cdorked_predef('EBURY');
-        print_critical('The following file(s) were found:');
-        print_critical( "\t" . $trojaned_lib );
-        print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/ and https://www.welivesecurity.com/2017/10/30/windigo-ebury-update-2/");
-        print_critical();
     }
 }
 
 sub check_sha1_sigs_httpd {
     return unless defined $httpd_bin;
     return if !-e $httpd_bin;
-    my $infected = 0;
     return unless my $sha1sum = timed_run( 0, 'sha1sum', $httpd_bin );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
@@ -8008,23 +8002,18 @@ sub check_sha1_sigs_httpd {
 
     for my $sig (@sigs) {
         if ( $sha1sum eq $sig ) {
-            $infected = 1;
+            print_ebury_cdorked_predef('CDORKED');
+            print_critical( "\t" . $httpd_bin . " has a SHA-1 signature of " . $sha1sum );
+            print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
+            print_critical();
             last;
         }
-    }
-
-    if ( $infected == 1 ) {
-        print_ebury_cdorked_predef('CDORKED');
-        print_critical( "\t" . $httpd_bin . " has a SHA-1 signature of " . $sha1sum );
-        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
-        print_critical();
     }
 }
 
 sub check_sha1_sigs_named {
     my $named = '/usr/sbin/named';
     return if !-e $named;
-    my $infected = 0;
     return unless my $sha1sum = timed_run( 0, 'sha1sum', $named );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
@@ -8037,22 +8026,17 @@ sub check_sha1_sigs_named {
 
     for my $sig (@sigs) {
         if ( $sha1sum eq $sig ) {
-            $infected = 1;
+            print_ebury_cdorked_predef('CDORKED');
+            print_critical( "\t" . $named . " has a SHA-1 signature of " . $sha1sum );
+            print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
             last;
         }
-    }
-
-    if ( $infected == 1 ) {
-        print_ebury_cdorked_predef('CDORKED');
-        print_critical( "\t" . $named . " has a SHA-1 signature of " . $sha1sum );
-        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
     }
 }
 
 sub check_sha1_sigs_ssh {
     my $ssh = '/usr/bin/ssh';
     return if !-e $ssh;
-    my $infected = 0;
     return unless my $sha1sum = timed_run( 0, 'sha1sum', $ssh );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
@@ -8065,23 +8049,18 @@ sub check_sha1_sigs_ssh {
 
     for my $sig (@sigs) {
         if ( $sha1sum eq $sig ) {
-            $infected = 1;
+            print_ebury_cdorked_predef('EBURY');
+            print_critical( "\t" . $ssh . " has a SHA-1 signature of " . $sha1sum );
+            print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
+            print_critical();
             last;
         }
-    }
-
-    if ( $infected == 1 ) {
-        print_ebury_cdorked_predef('EBURY');
-        print_critical( "\t" . $ssh . " has a SHA-1 signature of " . $sha1sum );
-        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
-        print_critical();
     }
 }
 
 sub check_sha1_sigs_ssh_add {
     my $ssh_add = '/usr/bin/ssh-add';
     return if !-e $ssh_add;
-    my $infected = 0;
     return unless my $sha1sum = timed_run( 0, 'sha1sum', $ssh_add );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
@@ -8093,22 +8072,18 @@ sub check_sha1_sigs_ssh_add {
 
     for my $sig (@sigs) {
         if ( $sha1sum eq $sig ) {
-            $infected = 1;
+            print_ebury_cdorked_predef('EBURY');
+            print_critical( "\t$ssh_add has a SHA-1 signature of $sha1sum\n");
+            print_critical( "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n");
+            print_critical();
             last;
         }
-    }
-
-    if ( $infected == 1 ) {
-        print_ebury_cdorked_predef('EBURY');
-        print "\t$ssh_add has a SHA-1 signature of $sha1sum\n";
-        print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
     }
 }
 
 sub check_sha1_sigs_sshd {
     my $sshd = '/usr/sbin/sshd';
     return if !-e $sshd;
-    my $infected = 0;
     return unless my $sha1sum = timed_run( 0, 'sha1sum', $sshd );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
@@ -8123,16 +8098,12 @@ sub check_sha1_sigs_sshd {
 
     for my $sig (@sigs) {
         if ( $sha1sum eq $sig ) {
-            $infected = 1;
+            print_ebury_cdorked_predef('EBURY');
+            print_critical( "\t" . $sshd . " has a SHA-1 signature of " . $sha1sum );
+            print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
+            print_critical();
             last;
         }
-    }
-
-    if ( $infected == 1 ) {
-        print_ebury_cdorked_predef('EBURY');
-        print_critical( "\t" . $sshd . " has a SHA-1 signature of " . $sha1sum );
-        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
-        print_critical();
     }
 }
 
