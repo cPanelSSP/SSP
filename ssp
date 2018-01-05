@@ -77,9 +77,6 @@ our $mysql_full_version;
 our $mysql_datadir;
 our $mysql_error_log;
 our @mysql_rpm_versions;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
-our @custom_opt_mods;           # items in /var/cpanel/easy/apache/custom_opt_mods/
-our @usr_local_cpanel_hooks;    # items in /usr/local/cpanel/hooks/
-our @easyapache_templates;      # items in /var/cpanel/easy/apache/profile/
 our @extended_rpm_list;         # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n'
 our @rpm_list;                  # rpm -qa
 our %cpconf;                    # cpanel.config
@@ -2564,11 +2561,13 @@ sub check_for_custom_webtemplates {
     return if !-e $template_dir;
 
     my $found;
-    my $test_ref = sub {
-        return unless /\.tmpl$/s;
-        $found = 1;
-    };
-    find( { wanted => $test_ref }, $template_dir );
+    find(
+        sub {
+            return unless /\.tmpl$/s;
+            $found = 1;
+        },
+        $template_dir
+    );
     return unless $found;
 
     print_info('Web templates: ');
@@ -2959,7 +2958,21 @@ sub check_for_custom_opt_mods {
 
     return if !-e $dir;
 
-    find( \&find_custom_opt_mods, $dir );
+    my @custom_opt_mods;           # items in /var/cpanel/easy/apache/custom_opt_mods/
+    find(
+        sub {
+            # ignore these, Attracta:
+            #  /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm
+            #  /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm.tar.gz
+
+            my $file = $File::Find::name;
+            if ( -f $file and $file !~ m{ /ModFastInclude\.pm(.*) }xms ) {
+                $file =~ s#/var/cpanel/easy/apache/custom_opt_mods/##;
+                push @custom_opt_mods, $file;
+            }
+        },
+        $dir
+    );
 
     if ( scalar @custom_opt_mods > 10 ) {
         print_warn("EA3 $dir: ");
@@ -2972,19 +2985,6 @@ sub check_for_custom_opt_mods {
 
         print_warn("EA3 $dir: ");
         print_warning($custom_opt_mods);
-    }
-}
-
-sub find_custom_opt_mods {
-
-    # ignore these, Attracta:
-    #  /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm
-    #  /var/cpanel/easy/apache/custom_opt_mods/Cpanel/Easy/ModFastInclude.pm.tar.gz
-
-    my $file = $File::Find::name;
-    if ( -f $file and $file !~ m{ /ModFastInclude\.pm(.*) }xms ) {
-        $file =~ s#/var/cpanel/easy/apache/custom_opt_mods/##;
-        push @custom_opt_mods, $file;
     }
 }
 
@@ -4003,11 +4003,8 @@ sub check_easyapache {
                 $ea_in_process_list = 1;
                 last;
             }
-            else {
-                $ea_in_process_list = 0;
-            }
         }
-        if ( $ea_in_process_list == 0 ) {
+        if ( !$ea_in_process_list ) {
             print_warn('EA3: ');
             print_warning("$ea_is_running_file exists, but 'easyapache' not found in process list");
         }
@@ -4018,7 +4015,7 @@ sub check_easyapache {
         }
     }
 
-    if ( -e $apache_update_no_restart and $ea_is_running == 0 ) {
+    if ( -e $apache_update_no_restart and $ea_is_running ) {
         print_warn('EA3: ');
         print_warning("$apache_update_no_restart exists! This will prevent EA from completing successfully.");
     }
@@ -4130,27 +4127,27 @@ sub check_mounts {
 ## check if only internal IP addrs are bound to server (this is not as reliable,
 ## as NAT can still be used with external IP addrs of course)
 sub check_for_unsupported_nat {
-    my @external_ipaddrs;
     return if -e '/var/cpanel/cpnat';
+    my @external_ipaddrs;
 
     if ( defined($external_ip_address) ) {
         if ( !grep { /$external_ip_address/ } @local_ipaddrs_list ) {
             print_warn('NAT: ');
             print_warning("external IP address $external_ip_address is not bound to server");
         }
+        return;
     }
-    else {
-        for my $ipaddr (@local_ipaddrs_list) {
 
-            # Matches any local IP (127.0.0.0/8) or RFC-1918 IP (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
-            if ( $ipaddr !~ /(?:10\.|127\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/ ) {
-                push @external_ipaddrs, $ipaddr;
-            }
+    for my $ipaddr (@local_ipaddrs_list) {
+
+        # Matches any local IP (127.0.0.0/8) or RFC-1918 IP (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+        if ( $ipaddr !~ /(?:10\.|127\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/ ) {
+            push @external_ipaddrs, $ipaddr;
         }
-        if ( !@external_ipaddrs ) {
-            print_warn('NAT: ');
-            print_warning('no external IP addresses detected');
-        }
+    }
+    if ( !@external_ipaddrs ) {
+        print_warn('NAT: ');
+        print_warning('no external IP addresses detected');
     }
 }
 
@@ -4171,7 +4168,18 @@ sub check_for_oracle_linux {
 sub check_for_usr_local_cpanel_hooks {
     my $hooks;
     my $dir = '/usr/local/cpanel/hooks';
-    find( \&find_usr_local_cpanel_hooks, $dir );
+
+    my @usr_local_cpanel_hooks;    # items in /usr/local/cpanel/hooks/
+    find(
+        sub  {
+            my $file = $File::Find::name;
+            if ( -f $file and $file !~ m{ ( README | \.example ) \z }xms ) {
+                $file =~ s#/usr/local/cpanel/hooks/##;
+                push @usr_local_cpanel_hooks, $file;
+            }
+        },
+        $dir
+    );
 
     # default CloudLinux hooks that can be ignored
     my %hooks_ignore = qw(
@@ -4183,29 +4191,19 @@ sub check_for_usr_local_cpanel_hooks {
       289b2b4c8b5293103def4557d3538060    /usr/local/cpanel/hooks/mysql/deluser
     );
 
-    if (@usr_local_cpanel_hooks) {
-        for my $hook (@usr_local_cpanel_hooks) {
-            my $tmp_hook = '/usr/local/cpanel/hooks/' . $hook;
-            if ( -f $tmp_hook and not -z $tmp_hook ) {
-                chomp( my $checksum = timed_run( 0, 'md5sum', $tmp_hook ) );
-                $checksum =~ s/\s.*//g;
-                next if exists $hooks_ignore{$checksum};
-                $hooks .= "$hook ";
-            }
+    for my $hook (@usr_local_cpanel_hooks) {
+        my $tmp_hook = '/usr/local/cpanel/hooks/' . $hook;
+        if ( -f $tmp_hook and not -z $tmp_hook ) {
+            chomp( my $checksum = timed_run( 0, 'md5sum', $tmp_hook ) );
+            $checksum =~ s/\s.*//g;
+            next if exists $hooks_ignore{$checksum};
+            $hooks .= "$hook ";
         }
     }
 
     if ($hooks) {
         print_warn("$dir: ");
         print_warning($hooks);
-    }
-}
-
-sub find_usr_local_cpanel_hooks {
-    my $file = $File::Find::name;
-    if ( -f $file and $file !~ m{ ( README | \.example ) \z }xms ) {
-        $file =~ s#/usr/local/cpanel/hooks/##;
-        push @usr_local_cpanel_hooks, $file;
     }
 }
 
@@ -4297,27 +4295,28 @@ sub check_for_empty_postgres_config {
 
 sub check_for_empty_easyapache_profiles {
     return if $ea4;
-    my $templates;
     my $dir = '/var/cpanel/easy/apache/profile';
     return unless -d $dir;
-    find( \&find_easyapache_templates, $dir );
 
-    if (@easyapache_templates) {
-        for my $template (@easyapache_templates) {
-            $templates .= "$template ";
-        }
+    my @easyapache_templates;      # items in /var/cpanel/easy/apache/profile/
+    find(
+        sub {
+            my $file = $File::Find::name;
+            if ( -f $file and -z $file ) {
+                $file =~ s#/var/cpanel/easy/apache/profile/##g;
+                push @easyapache_templates, $file;
+            }
+        },
+        $dir
+    );
 
-        print_warn("EA3 Empty template(s) in $dir: ");
-        print_warning($templates);
+    my $templates;
+    for my $template (@easyapache_templates) {
+        $templates .= "$template ";
     }
-}
 
-sub find_easyapache_templates {
-    my $file = $File::Find::name;
-    if ( -f $file and -z $file ) {
-        $file =~ s#/var/cpanel/easy/apache/profile/##g;
-        push @easyapache_templates, $file;
-    }
+    print_warn("EA3 Empty template(s) in $dir: ");
+    print_warning($templates);
 }
 
 sub check_for_missing_timezone_from_phpini {
@@ -4389,18 +4388,12 @@ sub populate_mysql_rpm_versions_array {
 sub check_for_mysql_4 {
     return if !@mysql_rpm_versions;
 
-    my $mysql_4 = 0;
-
     for my $rpm (@mysql_rpm_versions) {
         if ( $rpm =~ m{ \A 4 }xms ) {
-            $mysql_4 = 1;
-            last;
+            print_warn('MySQL 4.x RPM: ');
+            print_warning('found! This can interfere with cPanel updates');
+            return;
         }
-    }
-
-    if ( $mysql_4 == 1 ) {
-        print_warn('MySQL 4.x RPM: ');
-        print_warning('found! This can interfere with cPanel updates');
     }
 }
 
@@ -4833,44 +4826,45 @@ sub check_for_missing_or_commented_customlog {
 
 sub check_for_cpsources_conf {
     my $cpsources_conf = '/etc/cpsources.conf';
-    if ( -f $cpsources_conf and not -z $cpsources_conf ) {
-        print_warn('/etc/cpsources.conf: ');
-        print_warning('exists! This can affect upcp and EA.');
+    return unless -f $cpsources_conf and not -z $cpsources_conf;
 
-        my @cpsources_servers;
-        if ( open( my $cpsources_conf_fh, '<', $cpsources_conf ) ) {
-            while (<$cpsources_conf_fh>) {
-                my ( $key, $value ) = split( '=', $_ );
-                if ( $key eq 'HTTPUPDATE' ) {
-                    push @cpsources_servers, $value;
-                }
+    print_warn('/etc/cpsources.conf: ');
+    print_warning('exists! This can affect upcp and EA.');
+
+    my @cpsources_servers;
+    if ( open( my $cpsources_conf_fh, '<', $cpsources_conf ) ) {
+        while (<$cpsources_conf_fh>) {
+            my ( $key, $value ) = split( '=', $_ );
+            if ( $key eq 'HTTPUPDATE' ) {
+                push @cpsources_servers, $value;
             }
-            close $cpsources_conf_fh;
         }
-        foreach my $cpsources_server (@cpsources_servers) {
-            chomp $cpsources_server;
-            my ( $host, $port ) = split( ':', $cpsources_server );
-            if ( !defined($port) ) {
-                $port = 80;
-            }
-            my $tiers_data = _http_get( Host => $host, Port => $port, Path => '/cpanelsync/TIERS', WantHeaders => 1 );
-            if ( !$tiers_data ) {
+        close $cpsources_conf_fh;
+    }
+
+    foreach my $cpsources_server (@cpsources_servers) {
+        chomp $cpsources_server;
+        my ( $host, $port ) = split( ':', $cpsources_server );
+        if ( !defined($port) ) {
+            $port = 80;
+        }
+        my $tiers_data = _http_get( Host => $host, Port => $port, Path => '/cpanelsync/TIERS', WantHeaders => 1 );
+        if ( !$tiers_data ) {
+            print_warn('/etc/cpsources.conf: ');
+            print_warning("Unresponsive mirror: http://$host:$port");
+            next;
+        }
+        ( my $http_response ) = split( '\n', $tiers_data );
+        ($http_response) = split( '\r', $http_response );
+        if ( $http_response =~ /^HTTP\/(\d*?)\.(\d*?) (\d\d\d) (.*?)$/ ) {
+            if ( $3 != 200 ) {
                 print_warn('/etc/cpsources.conf: ');
-                print_warning("Unresponsive mirror: http://$host:$port");
-                next;
+                print_warning("Server $host:$port responded with [ $http_response ] when fetching TIERS file.");
             }
-            ( my $http_response ) = split( '\n', $tiers_data );
-            ($http_response) = split( '\r', $http_response );
-            if ( $http_response =~ /^HTTP\/(\d*?)\.(\d*?) (\d\d\d) (.*?)$/ ) {
-                if ( $3 != 200 ) {
-                    print_warn('/etc/cpsources.conf: ');
-                    print_warning("Server $host:$port responded with [ $http_response ] when fetching TIERS file.");
-                }
-            }
-            else {
-                print_warn('/etc/cpsources.conf: ');
-                print_warning("Server $host:$port responds with weird HTTP response [ $http_response ]");
-            }
+        }
+        else {
+            print_warn('/etc/cpsources.conf: ');
+            print_warning("Server $host:$port responds with weird HTTP response [ $http_response ]");
         }
     }
 }
@@ -4945,14 +4939,11 @@ sub check_for_non_default_modsec_rules {
 }
 
 sub check_etc_hosts_sanity {
-    my $hosts             = '/etc/hosts';
-    my $localhost         = 0;
-    my $httpupdate        = 0;
-    my $localhost_not_127 = 0;
-    my $hostname_entry    = 0;
+    my $hosts = '/etc/hosts';
+    my ($localhost,$httpupdate,$localhost_not_127,$hostname_entry) = (0,0,0,0);
 
     if ( !-f $hosts ) {
-        print_warn('/etc/hosts: ');
+        print_warn("$hosts: ");
         print_warning('missing!');
         return;
     }
@@ -4979,23 +4970,23 @@ sub check_etc_hosts_sanity {
         close $hosts_fh;
     }
 
-    if ( $localhost == 0 ) {
-        print_warn('/etc/hosts: ');
+    if ( !$localhost ) {
+        print_warn("$hosts: ");
         print_warning('no entry for localhost, or commented out');
     }
 
-    if ( $httpupdate == 1 ) {
-        print_warn('/etc/hosts: ');
+    if ( $httpupdate ) {
+        print_warn("$hosts: ");
         print_warning('contains an entry for httpupdate.cpanel.net');
     }
 
-    if ( $localhost_not_127 == 1 ) {
-        print_warn('/etc/hosts: ');
+    if ( $localhost_not_127 ) {
+        print_warn("$hosts: ");
         print_warning('contains an entry for "localhost" that isn\'t 127.0.0.1! This can break EA and webmail logins');
     }
 
-    if ( $hostname_entry == 0 ) {
-        print_warn('/etc/hosts: ');
+    if ( !$hostname_entry ) {
+        print_warn("$hosts: ");
         print_warning("no entry found for the server's hostname! [$hostname] (Can break EA or Apache when mod_unique_id is enabled)");
     }
 }
@@ -5136,31 +5127,21 @@ sub check_roundcube_mysql_pass_mismatch {
     my $roundcubepass;
     my $rc_mysql_pass;
 
-    if ( open my $rc_pass_fh, '<', '/var/cpanel/roundcubepass' ) {
-        while (<$rc_pass_fh>) {
-            chomp( $roundcubepass = $_ );
-        }
-        close $rc_pass_fh;
+    return unless open my $rc_pass_fh, '<', '/var/cpanel/roundcubepass';
+    while (<$rc_pass_fh>) {
+        chomp( $roundcubepass = $_ );
     }
-    else {
-        return;
-    }
+    close $rc_pass_fh;
 
-    if ( open my $db_inc_fh, '<', '/usr/local/cpanel/base/3rdparty/roundcube/config/db.inc.php' ) {
-        while (<$db_inc_fh>) {
-            if (m{ \A \$rcmail_config\['db_dsnw'\] \s = \s 'mysql://roundcube:(.*)\@(?:.*)/roundcube';  }xms) {
-                $rc_mysql_pass = $1;
-            }
+    return unless open my $db_inc_fh, '<', '/usr/local/cpanel/base/3rdparty/roundcube/config/db.inc.php';
+    while (<$db_inc_fh>) {
+        if (m{ \A \$rcmail_config\['db_dsnw'\] \s = \s 'mysql://roundcube:(.*)\@(?:.*)/roundcube';  }xms) {
+            $rc_mysql_pass = $1;
         }
-        close $db_inc_fh;
     }
-    else {
-        return;
-    }
+    close $db_inc_fh;
 
-    if ( not $roundcubepass or not $rc_mysql_pass ) {
-        return;
-    }
+    return if ( not $roundcubepass or not $rc_mysql_pass );
 
     if ( $roundcubepass ne $rc_mysql_pass ) {
         print_warn('RoundCube: ');
@@ -5211,9 +5192,7 @@ sub get_mysql_error_log {
     if ( $mysql_conf->{'LINES'} && $mysql_conf->{'mysqld'}{'logerror'} ) {
         return $mysql_conf->{'mysqld'}{'logerror'}[1];
     }
-    else {
-        return "/var/lib/mysql/$hostname.err";
-    }
+    return "/var/lib/mysql/$hostname.err";
 }
 
 sub check_mysql_config {
@@ -5290,11 +5269,7 @@ sub check_for_extra_mysql_config_files {
       /usr/etc/my.cnf
       /var/lib/mysql/my.cnf
     );
-    my @found_locations = ();
-
-    for my $loc (@extra_locations) {
-        push @found_locations, $loc if -f $loc;
-    }
+    my @found_locations = grep { -f $_ } @extra_locations;
 
     return if !@found_locations;
     print_warn('MySQL - extra my.cnf files found: ');
@@ -5386,7 +5361,7 @@ sub check_for_custom_exim_conf_local {
         close $file_fh;
     }
 
-    if ( $is_customized == 1 ) {
+    if ( $is_customized ) {
         print_warn('Exim: ');
         print_warning("$exim_conf_local contains customizations");
     }
@@ -5437,29 +5412,26 @@ sub check_for_maxclients_or_maxrequestworkers_reached {
         }
     }
 
-    if ($limit_last_hit_date) {
-        if ( version_compare( $apache_version, qw( < 2.3.0 ) ) ) {
-            print_warn('Apache MaxClients: ');
-        }
-        elsif ( version_compare( $apache_version, qw( >= 2.4.0 ) ) ) {
-            print_warn('Apache MaxRequestWorkers: ');
-        }
+    return unless $limit_last_hit_date;
 
-        print_warning("limit last reached at $limit_last_hit_date");
+    if ( version_compare( $apache_version, qw( < 2.3.0 ) ) ) {
+        print_warn('Apache MaxClients: ');
     }
+    elsif ( version_compare( $apache_version, qw( >= 2.4.0 ) ) ) {
+        print_warn('Apache MaxRequestWorkers: ');
+    }
+
+    print_warning("limit last reached at $limit_last_hit_date");
 }
 
 sub check_for_non_default_umask {
     my $umask = timed_run( 0, 'echo `umask`' );
-
-    return if !$umask;
-
     chomp $umask;
 
-    if ( $umask !~ /2$/ ) {
-        print_warn('umask: ');
-        print_warning("Non-default value [$umask] (check FB-62683 if permissions error when running convert_roundcube_mysql2sqlite)");
-    }
+    return if !$umask || $umask =~ /2$/;
+
+    print_warn('umask: ');
+    print_warning("Non-default value [$umask] (check FB-62683 if permissions error when running convert_roundcube_mysql2sqlite)");
 }
 
 sub check_for_multiple_imagemagick_installs {
@@ -5475,12 +5447,11 @@ sub check_for_kernel_headers_rpm {
     if ( !-f '/usr/include/linux/limits.h' ) {
         print_warn('Missing file: ');
         print_warning('/usr/include/linux/limits.h not found. This can cause problems with EA. kernel-headers RPM missing/broken?');
+        return;
     }
-    else {
-        if ( @rpm_list && !grep { /^kernel-headers-/ } @rpm_list ) {
-            print_warn('kernel-headers RPM: ');
-            print_warning('not found. This can cause problems with EA');
-        }
+    if ( @rpm_list && !grep { /^kernel-headers-/ } @rpm_list ) {
+        print_warn('kernel-headers RPM: ');
+        print_warning('not found. This can cause problems with EA');
     }
 }
 
@@ -5546,8 +5517,7 @@ sub check_for_broken_rpm {
 
 sub check_for_ea4_mismatch {
     return unless $ea4;
-    my $cp_count = 0;
-    my $cl_count = 0;
+    my ($cp_count,$cl_count) = (0,0);
     foreach (@rpm_list) {
         $cp_count++ if /^ea-.*\.cpanel/;
         $cl_count++ if /^ea-.*\.cloudlinux/;
@@ -5556,12 +5526,11 @@ sub check_for_ea4_mismatch {
         return unless $cp_count;
         print_warn('EA4 RPMs: ');
         print_warning(qq{Found $cp_count "ea-*.cpanel" RPMs on a CloudLinux system!  Using wrong EA4 repo?});
+        return;
     }
-    else {
-        return unless $cl_count;
-        print_warn('EA4 RPMs: ');
-        print_warning(qq{Found $cl_count "ea-*.cloudlinux" RPMs on a non-CloudLinux system!  Using wrong EA4 repo?});
-    }
+    return unless $cl_count;
+    print_warn('EA4 RPMs: ');
+    print_warning(qq{Found $cl_count "ea-*.cloudlinux" RPMs on a non-CloudLinux system!  Using wrong EA4 repo?});
 }
 
 sub check_eximstats_size {
@@ -5789,13 +5758,12 @@ sub check_if_httpdconf_ipaddrs_exist {
         }
     }
 
-    if (@unbound_ipaddrs) {
-        print_warn('Apache: ');
-        print_warning('httpd.conf has VirtualHosts for these IP addrs, which aren\'t bound to the server:');
+    return unless @unbound_ipaddrs;
+    print_warn('Apache: ');
+    print_warning('httpd.conf has VirtualHosts for these IP addrs, which aren\'t bound to the server:');
 
-        for my $unbound_ipaddr (@unbound_ipaddrs) {
-            print_magenta("\t \\_ $unbound_ipaddr");
-        }
+    for my $unbound_ipaddr (@unbound_ipaddrs) {
+        print_magenta("\t \\_ $unbound_ipaddr");
     }
 }
 
@@ -5815,7 +5783,7 @@ sub check_distcache_and_libapr {
         close $profile_fh;
     }
 
-    if ( $has_distcache == 1 ) {
+    if ( $has_distcache ) {
         my @ldd = split /\n/, timed_run( 0, 'ldd', $httpd_bin );
         for my $line (@ldd) {
             if ( $line =~ m{ libapr(?:.*) \s+ => \s+ (\S+) }xms ) {
@@ -5827,7 +5795,7 @@ sub check_distcache_and_libapr {
         }
     }
 
-    if ( $httpd_not_linked_to_system_apr == 1 ) {
+    if ( $httpd_not_linked_to_system_apr ) {
         print_warn('Apache: ');
         print_warning('httpd linked to system APR, not APR in /usr/local/apache/lib/ (see EAL-2551)');
     }
@@ -5851,7 +5819,7 @@ sub check_for_custom_postgres_repo {
         }
     }
 
-    if ( $has_postgres_repo == 1 ) {
+    if ( $has_postgres_repo ) {
         print_warn('PostgreSQL: ');
         print_warning('custom Postgres repo (pgdg-*) found in /etc/yum.repos.d/ . See tickets 3690445, 3568781');
     }
@@ -5859,6 +5827,8 @@ sub check_for_custom_postgres_repo {
 
 sub check_for_rpm_overrides {
     my $rpm_override_dir = '/var/cpanel/rpm.versions.d/';
+    return if !-d $rpm_override_dir;
+
     my $local_versions   = '/var/cpanel/rpm.versions.d/local.versions';
     my $easy_versions    = '/var/cpanel/rpm.versions.d/easy.versions';
     my $cloud_versions   = '/var/cpanel/rpm.versions.d/cloudlinux.versions';
@@ -5868,8 +5838,6 @@ sub check_for_rpm_overrides {
     my $local_is_default = 0;
     my $easy_is_default  = 0;
     my $cloud_is_default = 0;
-
-    return if !-d $rpm_override_dir;
 
     if ( -f $local_versions ) {
         $md5_local = timed_run( 0, 'md5sum', $local_versions );
@@ -5951,33 +5919,30 @@ sub check_for_rpm_overrides {
     }
 
     ## if the only items in rpm.versions.d/ were defaults that we can ignore, return
-    if ( !@dir_contents ) {
-        return;
+    return unless @dir_contents;
+
+    print_warn('RPM override: ');
+    print_warning("$rpm_override_dir contains custom entries, manually review. More info: http://go.cpanel.net/rpmversions");
+
+    return unless -r $local_versions;
+
+    my %ignore_package = (
+        'easy-tomcat7' => 'uninstalled'    # easy-tomcat7 is often shown uninstalled, which is OK
+    );
+    if ( cpanel_version_is(qw( >= 11.61.0.0 )) ) {
+        $ignore_package{'perl522'} = 'uninstalled';    # Normal for WHM 62 upgrade process
     }
 
-    if (@dir_contents) {
-        print_warn('RPM override: ');
-        print_warning("$rpm_override_dir contains custom entries, manually review. More info: http://go.cpanel.net/rpmversions");
+    eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require YAML::Syck; };
+    return if $@;
 
-        my %ignore_package = (
-            'easy-tomcat7' => 'uninstalled'    # easy-tomcat7 is often shown uninstalled, which is OK
-        );
-        if ( cpanel_version_is(qw( >= 11.61.0.0 )) ) {
-            $ignore_package{'perl522'} = 'uninstalled';    # Normal for WHM 62 upgrade process
-        }
-        if ( -r $local_versions ) {
-            eval { local $SIG{__DIE__}; local $SIG{__WARN__}; require YAML::Syck; };
-            if ( !$@ ) {
-                my $ref = YAML::Syck::LoadFile($local_versions);
-                if ( $ref && exists $ref->{'target_settings'} ) {
-                    foreach my $package ( keys %{ $ref->{'target_settings'} } ) {
-                        next if exists $ignore_package{$package} && $ref->{'target_settings'}{$package} =~ m{$ignore_package{$package}};
-                        if ( $ref->{'target_settings'}{$package} =~ m{(uninstalled|unmanaged)} ) {
-                            print_warn($package);
-                            print_warning( " is listed as " . $1 . " in " . $local_versions );
-                        }
-                    }
-                }
+    my $ref = YAML::Syck::LoadFile($local_versions);
+    if ( $ref && exists $ref->{'target_settings'} ) {
+        foreach my $package ( keys %{ $ref->{'target_settings'} } ) {
+            next if exists $ignore_package{$package} && $ref->{'target_settings'}{$package} =~ m{$ignore_package{$package}};
+            if ( $ref->{'target_settings'}{$package} =~ m{(uninstalled|unmanaged)} ) {
+                print_warn($package);
+                print_warning( " is listed as " . $1 . " in " . $local_versions );
             }
         }
     }
@@ -5994,45 +5959,33 @@ sub check_var_cpanel_immutable_files {
 
 sub check_for_noxsave_in_grub_conf {
     my $grub_conf   = '/boot/grub/grub.conf';
-    my $has_noxsave = 0;
-
     return if !-f $grub_conf;
 
     if ( open my $grub_fh, '<', $grub_conf ) {
         while (<$grub_fh>) {
             if (/noxsave/) {
-                $has_noxsave = 1;
+                print_warn('noxsave: ');
+                print_warning("found in ${grub_conf}. kernel panics? segfaults? see ticket 3689211");
                 last;
             }
         }
         close $grub_fh;
     }
-
-    if ( $has_noxsave == 1 ) {
-        print_warn('noxsave: ');
-        print_warning("found in ${grub_conf}. kernel panics? segfaults? see ticket 3689211");
-    }
 }
 
 sub check_for_rpm_dist_ver_unknown {
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
-    my $is_broken      = 0;
-
     return if !-f $sysinfo_config;
 
     if ( open my $file_fh, '<', $sysinfo_config ) {
         while (<$file_fh>) {
             if (/^rpm_dist_ver=unknown$/) {
-                $is_broken = 1;
+                print_warn("${sysinfo_config}: ");
+                print_warning("contains 'rpm_dist_ver=unknown'. Try running '/scripts/gensysinfo' to fix");
                 last;
             }
         }
         close $file_fh;
-    }
-
-    if ( $is_broken == 1 ) {
-        print_warn("${sysinfo_config}: ");
-        print_warning("contains 'rpm_dist_ver=unknown'. Try running '/scripts/gensysinfo' to fix");
     }
 }
 
@@ -6067,28 +6020,21 @@ sub check_for_networkmanager {
 }
 
 sub check_for_dhclient {
-    my $dhclient_running;
-
     for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) dhclient }xms ) {
-            $dhclient_running = 1;
+            print_warn('dhclient: ');
+            print_warning('found in the process list');
             last;
         }
-    }
-
-    if ( $dhclient_running && $dhclient_running == 1 ) {
-        print_warn('dhclient: ');
-        print_warning('found in the process list');
     }
 }
 
 sub check_for_var_cpanel_roundcube_install {
     my $install = '/var/cpanel/roundcube/install';
 
-    if ( -f $install and -x $install ) {
-        print_warn('RoundCube: ');
-        print_warning("$install exists. /u/l/c/b/update-roundcube won't fully run (by design - see the docs)");
-    }
+    return unless ( -f $install and -x $install );
+    print_warn('RoundCube: ');
+    print_warning("$install exists. /u/l/c/b/update-roundcube won't fully run (by design - see the docs)");
 }
 
 sub check_for_missing_etc_localtime {
@@ -6124,7 +6070,6 @@ sub check_for_perl_env_var {
 
 sub check_for_disabled_services {
     my %disabled_services;
-    my $disabled;
 
     my %touchfiles = (
         '/etc/antirelayddisable'                                 => 'antirelayd',
@@ -6275,22 +6220,16 @@ sub check_for_cpbackup_exclude_everything {
     my $conf = '/etc/cpbackup-exclude.conf';
     return if ( !-f $conf );
 
-    my $excluding_everything = 0;
-
     open my $conf_fh, '<', $conf or return;
     while (<$conf_fh>) {
         chomp;
         if (/^\*$/) {
-            $excluding_everything = 1;
+            print_warn('Backups: ');
+            print_warning("'*' exists by itself in $conf . This can cause 0 byte backups");
             last;
         }
     }
     close $conf_fh;
-
-    if ( $excluding_everything == 1 ) {
-        print_warn('Backups: ');
-        print_warning("'*' exists by itself in $conf . This can cause 0 byte backups");
-    }
 }
 
 sub check_for_usr_local_include_jpeglib_h {
@@ -6335,9 +6274,6 @@ sub check_for_harmful_php_mode_600_cron {
     return if !-d '/etc/cron.daily';
 
     my @dir_contents;
-    my $has_harmful_cron = 0;
-    my $cron_file;
-
     opendir( my $dir_fh, '/etc/cron.daily' ) or return;
     @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
     closedir $dir_fh;
@@ -6347,17 +6283,12 @@ sub check_for_harmful_php_mode_600_cron {
         open my $file_fh, '<', $file or next;
         while (<$file_fh>) {
             if (/^mytmpfile=\/tmp\/php-mode-/) {
-                $has_harmful_cron = 1;
-                $cron_file        = $file;
+                print_warn('harmful cron: ');
+                print_warning("${file}! Breaks webmail, phpMyAdmin, and more! See tickets 4225765, 4237465, 4099807, 4231469, 4231473. Vendor: http://whmscripts.net/misc/2013/apache-symlink-security-issue-fixpatch/");
                 last;
             }
         }
         close $file_fh;
-    }
-
-    if ( $has_harmful_cron == 1 ) {
-        print_warn('harmful cron: ');
-        print_warning("${cron_file}! Breaks webmail, phpMyAdmin, and more! See tickets 4225765, 4237465, 4099807, 4231469, 4231473. Vendor: http://whmscripts.net/misc/2013/apache-symlink-security-issue-fixpatch/");
     }
 }
 
@@ -6416,25 +6347,16 @@ sub check_for_jailshell_additional_mounts_trailing_slash {
     my $mounts_file = '/var/cpanel/jailshell-additional-mounts';
     return if ( !-f $mounts_file );
 
-    my $has_slash = 0;
-
     if ( open my $file_fh, '<', $mounts_file ) {
         while (<$file_fh>) {
             chomp;
             if (m#/(?:[\s\t]+)?\z#) {
-                $has_slash = 1;
+                print_warn("$mounts_file: ");
+                print_warning('contains trailing slashes! Server may become unstable. See FB-71613');
                 last;
             }
         }
         close $file_fh;
-    }
-    else {
-        return;
-    }
-
-    if ( $has_slash == 1 ) {
-        print_warn("$mounts_file: ");
-        print_warning('contains trailing slashes! Server may become unstable. See FB-71613');
     }
 }
 
@@ -6442,23 +6364,15 @@ sub check_for_allow_query_localhost {
     my $named_conf = '/etc/named.conf';
     return if !-f $named_conf;
 
-    my $allow_query_localhost = 0;
-
     my $namedconf_contents;
     if ( open my $named_conf_fh, '<', $named_conf ) {
         local $/;
         $namedconf_contents = <$named_conf_fh>;
         close $named_conf_fh;
     }
-    else {
-        return;
-    }
+    return unless $namedconf_contents;
 
     if ( $namedconf_contents =~ m#allow-query ([\s\t\r\n]+)? { ([\s\t]+)? ( localhost | 127\. )#xms ) {
-        $allow_query_localhost = 1;
-    }
-
-    if ( $allow_query_localhost == 1 ) {
         print_warn('named.conf: ');
         print_warning('allow-query is restricted to localhost. Remote DNS queries may not work');
     }
