@@ -7804,8 +7804,6 @@ sub check_for_cdorked_A {
     my $max_bin_size = 10_485_760;    # avoid slurping too much mem
     return if ( ( stat($httpd_bin) )[7] > $max_bin_size );
 
-    my $has_cdorked = 0;
-    my $signature;
     my @apache_bins = ();
     push @apache_bins, $httpd_bin;
 
@@ -7831,32 +7829,26 @@ sub check_for_cdorked_A {
         next if !$httpd;
 
         if ( $httpd =~ /(open_tty|hangout|ptsname|Qkkbal)/ ) {
-            $signature   = $check_bin . ": \"" . $1 . "\"";
-            $has_cdorked = 1;
+            my $signature   = $check_bin . ": \"" . $1 . "\"";
+            print_ebury_cdorked_predef('CDORKED');
+            print_critical("\tString found in $signature (see ticket 4482347)");
+            print_critical();
             last;
         }
-    }
-
-    if ( $has_cdorked == 1 ) {
-        print_ebury_cdorked_predef('CDORKED');
-        print_critical("\tString found in $signature (see ticket 4482347)");
-        print_critical();
     }
 }
 
 sub check_for_cdorked_B {
-    my $has_cdorked_b = 0;
     my @files = ( '/usr/sbin/arpd ', '/usr/sbin/tunelp ', '/usr/bin/s2p ' );
     my $cdorked_files;
 
     for my $file (@files) {
         if ( -e $file ) {
-            $has_cdorked_b = 1;
             $cdorked_files .= "[$file] ";
         }
     }
 
-    if ( $has_cdorked_b == 1 ) {
+    if ( $cdorked_files ) {
         print_ebury_cdorked_predef('CDORKED');
         print_critical("\tThe following files were found (note the spaces at the end of the files):");
         print_critical("\t$cdorked_files");
