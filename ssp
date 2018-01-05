@@ -7628,26 +7628,16 @@ sub check_for_csf {
     my $lfd = 0;
     my $csf = timed_run( 0, 'whereis', 'csf' );
 
-    if ( $csf =~ /\// ) {
-        print_3rdp('CSF: ');
-    }
-    else {
-        return;
-    }
+    return unless ( $csf =~ /\// );
+    print_3rdp('CSF: ');
 
     for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) lfd }xms ) {
-            $lfd = 1;
-            last;
+            print_3rdp2('installed, LFD is running');
+            return;
         }
     }
-
-    if ($lfd) {
-        print_3rdp2('installed, LFD is running');
-    }
-    else {
-        print_3rdp2('installed, LFD is not running');
-    }
+    print_3rdp2('installed, LFD is not running');
 }
 
 sub check_for_prm {
