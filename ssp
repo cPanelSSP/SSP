@@ -7031,38 +7031,32 @@ sub check_for_cron_allow {
 
 sub check_for_openssl_heartbleed_bug {
     return if !$openssl_rpm_changelog;
+    return if $openssl_rpm_changelog =~ m{ \sCVE-2014-0160\s }xms;
+
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
     return if !-f $sysinfo_config;
-
-    my $rpm_dist_ver;
 
     open my $fh, '<', $sysinfo_config or return;
     while (<$fh>) {
         if (/^rpm_dist_ver=(\d+)$/) {
-            $rpm_dist_ver = $1;
+            my $rpm_dist_ver = $1;
+            return if !$rpm_dist_ver;
+            return if ( $rpm_dist_ver <= 5 );    # RHEL/CentOS 5 not vuln: http://cpanel.net/heartbleed-vulnerability-information/
             last;
         }
     }
     close $fh or return;
 
-    return if !$rpm_dist_ver;
-    return if ( $rpm_dist_ver <= 5 );    # RHEL/CentOS 5 not vuln: http://cpanel.net/heartbleed-vulnerability-information/
-
     chomp( my $openssl_ver = timed_run( 0, 'openssl', 'version' ) );
     return if !$openssl_ver;
 
     # only 1.0.1[a-f] is vuln (and 1.0.2-beta which no one should be using)
-    if ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)[a-f]/ ) {
-        my ( $maj, $min, $patch ) = ( $1, $2, $3 );
-        return if $maj != 1;
-        return if $min != 0;
-        return if $patch != 1;
-    }
-    else {
-        return;
-    }
+    return unless ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)[a-f]/ );
 
-    return if $openssl_rpm_changelog =~ m{ \sCVE-2014-0160\s }xms;
+    my ( $maj, $min, $patch ) = ( $1, $2, $3 );
+    return if $maj != 1;
+    return if $min != 0;
+    return if $patch != 1;
 
     print_critical();
     print_crit('Heartbleed: ');
