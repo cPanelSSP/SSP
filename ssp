@@ -7673,12 +7673,9 @@ sub check_for_1h {
 }
 
 sub check_for_webmin {
-    my @lsof_10000 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:10000' );
-
-    if (@lsof_10000) {
-        print_3rdp('Webmin: ');
-        print_3rdp2('Port 10000 is listening, webmin may be running');
-    }
+    return unless timed_run( 0, 'lsof', '-n', '-i', 'tcp:10000' );
+    print_3rdp('Webmin: ');
+    print_3rdp2('Port 10000 is listening, webmin may be running');
 }
 
 sub check_for_symantec {
