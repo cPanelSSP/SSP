@@ -7679,18 +7679,12 @@ sub check_for_webmin {
 }
 
 sub check_for_symantec {
-    my $symantec = 0;
-
     for my $process (@process_list) {
         if ( $process =~ m{ \A root (?:.*) /opt/Symantec/symantec_antivirus }xms ) {
-            $symantec = 1;
+            print_3rdp('Symantec: ');
+            print_3rdp2('found /opt/Symantec/symantec_antivirus in process list');
             last;
         }
-    }
-
-    if ( $symantec == 1 ) {
-        print_3rdp('Symantec: ');
-        print_3rdp2('found /opt/Symantec/symantec_antivirus in process list');
     }
 }
 
