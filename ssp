@@ -7723,21 +7723,15 @@ sub check_for_multilevel_reseller {
 sub check_for_cpremote {
     return if !-e '/var/spool/cron/root';
 
-    my $has_cpremote = 0;
-
     open my $file_fh, '<', '/var/spool/cron/root' or return;
     while (<$file_fh>) {
         if (m#/scripts/cpremotebackup#) {
-            $has_cpremote = 1;
+            print_3rdp('cpremote: ');
+            print_3rdp2('installed. third party backup software (cron job found for root)');
             last;
         }
     }
     close $file_fh;
-
-    if ( $has_cpremote == 1 ) {
-        print_3rdp('cpremote: ');
-        print_3rdp2('installed. third party backup software (cron job found for root)');
-    }
 }
 
 sub check_for_whmxtra {
