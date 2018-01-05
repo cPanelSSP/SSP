@@ -8295,18 +8295,12 @@ sub check_for_fkcplisc {
 }
 
 sub check_for_cgls {
-    my @bad_paths;
     my @paths = qw(
       /etc/cron.d/cgls
       /usr/local/cgls
     );
 
-    for my $path (@paths) {
-        if ( -e $path ) {
-            push @bad_paths, $path;
-        }
-    }
-
+    my @bad_paths = grep { -e $_ } @paths;
     if (@bad_paths) {
         print_generic_hack_predef('CGLS');
         print_critical('The following files or directories were found:');
