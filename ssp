@@ -8271,7 +8271,6 @@ sub check_for_cpro {
 }
 
 sub check_for_fkcplisc {
-    my @bad_paths;
     my @paths = qw(
       /bin/cplicense
       /bin/cplicense-32bit
@@ -8285,12 +8284,7 @@ sub check_for_fkcplisc {
       /usr/local/sectools
     );
 
-    for my $path (@paths) {
-
-        if ( -e $path ) {
-            push @bad_paths, $path;
-        }
-    }
+    my @bad_paths = grep { -e $_ } @paths;
     if (@bad_paths) {
         print_generic_hack_predef('FKCPLISC');
         print_critical('The following files or directories were found:');
