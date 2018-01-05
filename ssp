@@ -8243,7 +8243,6 @@ sub check_for_dirtycow_passwd {
 }
 
 sub check_for_cpro {
-    my @bad_paths;
     my @paths = qw(
       /YasITCSP/
       /etc/customcspips
@@ -8261,12 +8260,7 @@ sub check_for_cpro {
       /var/log/updatecp/
     );
 
-    for my $path (@paths) {
-
-        if ( -e $path ) {
-            push @bad_paths, $path;
-        }
-    }
+    my @bad_paths = grep { -e $_ } @paths;
     if (@bad_paths) {
         print_generic_hack_predef('C.PRO');
         print_critical('The following files or directories were found:');
