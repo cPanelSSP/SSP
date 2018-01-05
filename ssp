@@ -7689,18 +7689,12 @@ sub check_for_symantec {
 }
 
 sub check_for_haproxy {
-    my $haproxy = 0;
-
     for my $process (@process_list) {
         if ( $process =~ m{ \A haproxy (?:.*) haproxy }xms ) {
-            $haproxy = 1;
+            print_3rdp('HAProxy: ');
+            print_3rdp2('found haproxy in process list');
             last;
         }
-    }
-
-    if ( $haproxy == 1 ) {
-        print_3rdp('HAProxy: ');
-        print_3rdp2('found haproxy in process list');
     }
 }
 
