@@ -5713,21 +5713,15 @@ sub check_for_duplicate_rpms {
 sub check_for_percona_rpms {
     return if !@rpm_list;
 
-    my $has_percona = 0;
-
     for my $rpm (@rpm_list) {
         next if $rpm =~ /^percona-toolkit/i;    # Can be used with MariaDB/MySQL
         if ( $rpm =~ /^Percona-/i ) {
-            $has_percona = 1;
+            print_warn("Percona RPMs found:\n");
+            print_magenta("\t \\_ EA failing with \"Cannot find libmysqlclient\"? libmysqlclient.so missing? see FB-93349");
+            print_magenta("\t \\_ If Exim is segfaulting after STARTTLS, this may be why. See ticket 3658929");
+            print_magenta("\t \\_ If Apache with PHP DSO is segfaulting after restart, this may be why. See ticket 5525179");
             last;
         }
-    }
-
-    if ( $has_percona == 1 ) {
-        print_warn("Percona RPMs found:\n");
-        print_magenta("\t \\_ EA failing with \"Cannot find libmysqlclient\"? libmysqlclient.so missing? see FB-93349");
-        print_magenta("\t \\_ If Exim is segfaulting after STARTTLS, this may be why. See ticket 3658929");
-        print_magenta("\t \\_ If Apache with PHP DSO is segfaulting after restart, this may be why. See ticket 5525179");
     }
 }
 
