@@ -6587,15 +6587,17 @@ sub check_for_processes_killed_by_lfd {
 sub check_for_processes_killed_by_oom {
     my $log = "/var/log/messages";
     return unless -e $log;
-    my $bytes_to_check = 10485760;
+
     my $size           = ( stat($log) )[7];
     return unless defined $size;
+
     my $seek_position = 0;
+    my $bytes_to_check = 10485760;
     if ( $size > $bytes_to_check ) {
         $seek_position = ( $size - $bytes_to_check );
     }
-    my $log_data = undef;
-    my @logs;
+
+    my $log_data;
     my $count         = 0;
     my @killed_by_oom = ();
 
@@ -6605,7 +6607,7 @@ sub check_for_processes_killed_by_oom {
     close $file_fh;
 
     if ( $log_data =~ /[Kk]illed process/ ) {
-        @logs = split /\n/, $log_data;
+        my @logs = split /\n/, $log_data;
         undef $log_data;
         @logs = reverse @logs;
 
