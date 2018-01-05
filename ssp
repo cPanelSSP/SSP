@@ -6499,21 +6499,14 @@ sub check_for_suphp_but_no_fileprotect {
 }
 
 sub check_if_hostname_missing_from_localdomains {
-    my $hostname_check = 0;
-
     if ( open my $localdomains_fh, '<', '/etc/localdomains' ) {
         while (<$localdomains_fh>) {
-            if (/^${hostname}$/) {
-                $hostname_check = 1;
-                last;
-            }
+            return if (/^${hostname}$/);
         }
         close $localdomains_fh;
     }
-    if ( $hostname_check == 0 ) {
-        print_warn('Hostname: ');
-        print_warning('not found in /etc/localdomains. This can cause "lowest numbered MX record points to local host"');
-    }
+    print_warn('Hostname: ');
+    print_warning('not found in /etc/localdomains. This can cause "lowest numbered MX record points to local host"');
 }
 
 sub check_for_eximstats_newline {
