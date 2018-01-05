@@ -7656,21 +7656,16 @@ sub check_for_les {
 
 sub check_for_1h {
     return unless -d '/usr/local/1h';
-    my $guardian;
+    my $guardian = 'not running';
     my $hive_module = scalar keys %{$apache_modules} ? ( defined $apache_modules->{'hive_module'} ? 'loaded' : 'not active' ) : 'unknown';
 
     if ( -x '/usr/local/1h/sbin/guardian' ) {
         for my $line (@process_list) {
             if ( $line =~ /Guardian/ ) {
                 $guardian = 'running';
-            }
-            else {
-                $guardian = 'not running';
+                last;
             }
         }
-    }
-    else {
-        $guardian = 'not running';
     }
 
     print_3rdp('1H Software: ');
