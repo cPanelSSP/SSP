@@ -7595,18 +7595,12 @@ sub check_for_varnish {
 }
 
 sub check_for_nginx {
-    my $nginx = 0;
-
     for my $line (@process_list) {
         if ( $line =~ m{ \A (root|nobody) (?:.*) nginx(:?) }xms ) {
-            $nginx = 1;
+            print_3rdp('nginx: ');
+            print_3rdp2('is running');
             last;
         }
-    }
-
-    if ( $nginx == 1 ) {
-        print_3rdp('nginx: ');
-        print_3rdp2('is running');
     }
 }
 
