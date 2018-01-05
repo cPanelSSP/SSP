@@ -6437,7 +6437,6 @@ sub check_for_invalid_HOMEDIR {
     return if !-f $wwwacctconf;
 
     my $homedir;
-
     if ( open my $file_fh, '<', $wwwacctconf ) {
         while (<$file_fh>) {
             if (/\AHOMEDIR[\s\t]+([^\s]+)/) {
@@ -6451,12 +6450,12 @@ sub check_for_invalid_HOMEDIR {
     if ( !$homedir ) {
         print_warn("$wwwacctconf: ");
         print_warning('HOMEDIR value not found!');
+        return;
     }
-    else {
-        if ( !-d $homedir ) {
-            print_warn("$wwwacctconf: ");
-            print_warning("the directory that is specified as the HOMEDIR does not exist! ($homedir)");
-        }
+
+    if ( !-d $homedir ) {
+        print_warn("$wwwacctconf: ");
+        print_warning("the directory that is specified as the HOMEDIR does not exist! ($homedir)");
     }
 }
 
