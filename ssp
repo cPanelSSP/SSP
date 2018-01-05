@@ -330,6 +330,8 @@ sub long_check_list {
     print_cpanel_info();
     check_for_cpanel_update();
     print_uptime();
+    print_logged_in_users();
+    print_load_average();
     print_apache_info();
     print_lsws_info();
     check_for_lsws_update();
@@ -556,6 +558,8 @@ sub non_cpanel_checks_only {
     print_kernel_and_cpu();
     print_kernelcare_info();
     print_uptime();
+    print_logged_in_users();
+    print_load_average();
     check_for_remote_mysql();
     print_mysql_version();
     check_for_license_info();
@@ -666,6 +670,8 @@ sub dnsonly_checks_only {
     print_cpanel_info();
     check_for_cpanel_update();
     print_uptime();
+    print_logged_in_users();
+    print_load_average();
     check_for_clustering();
     check_sysinfo();
     print_if_using_other_dns();
@@ -1811,11 +1817,43 @@ sub check_perl_version_less_than_588 {
 }
 
 sub print_uptime {
-    my $uptime = timed_run( 0, 'uptime' );
-    chomp $uptime if $uptime;
-    $uptime = $uptime ? $uptime : 'UNKNOWN';
-    print_info('Uptime: ');
-    print_normal($uptime);
+    if ( open(my $ut, '<', '/proc/uptime') ) {
+        my $uptime = 'UNKNOWN';
+        my $line = <$ut>;
+        close $ut;
+        ($uptime) = $line =~ m/^(\S*\s)/;
+        $uptime = sprintf("%d days  %dh:%dm:%ds",$uptime/86400, $uptime%86400/3600,$uptime%3600/60,$uptime%60);
+        print_info('Uptime: ');
+        print_normal($uptime);
+    }
+}
+
+sub print_load_average {
+    if ( open(my $ut, '<', '/proc/loadavg') ) {
+        my $line = <$ut>;
+        close $ut;
+        my ($a,$b,$c) = $line =~ m/(\S*)\s*(\S*)\s*(\S*)/;
+        print_info('Load Average: ');
+        print_normal("$a, $b, $c")
+    }
+}
+
+sub print_logged_in_users {
+    my $users = timed_run( 0, 'users' );
+    chomp $users if $users;
+    my %users_dedup;
+    foreach my $u (split( / /, $users)) {
+        $users_dedup{$u}++;
+    }
+    my $user_out='';
+    foreach my $key (keys(%users_dedup)) {
+        $user_out .= " $key";
+        $user_out .= " ($users_dedup{$key})" if $users_dedup{$key} - 1;
+        $user_out .= ",";
+    }
+    chop $user_out;
+    print_info("Currently Logged in Users:");
+    print_normal($user_out);
 }
 
 sub check_for_clustering {
