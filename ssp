@@ -6755,11 +6755,10 @@ sub check_for_stray_index_php {
 }
 
 sub check_for_port_80_not_apache {
-    my ( $filename, $pid, $cmdline );
-    my $unknown_httpd = 0;
-
     return if !@lsof_80;
     return if scalar @lsof_80 < 2;
+
+    my ( $filename, $pid);
 
     for my $line (@lsof_80) {
         if ( $line =~ m{ \A (\S+) \s+ (\d+) (?:.*) \(LISTEN\) }xms ) {
@@ -6774,31 +6773,25 @@ sub check_for_port_80_not_apache {
     my $cwd = readlink "/proc/${pid}/cwd" or return;
 
     if ( $exe ne '/usr/local/apache/bin/httpd' && $exe ne '/usr/sbin/httpd' ) {
-        $unknown_httpd = 1;
 
         open my $file_fh, '<', "/proc/${pid}/cmdline" or return;
-        $cmdline = readline $file_fh;
+        my $cmdline = readline $file_fh;
         close $file_fh;
 
         return if !$cmdline;
         $cmdline =~ s/\0/ /g;
         $cmdline =~ s/(\s+)$//g;
-    }
 
-    return if !$unknown_httpd;
+        my $ipcs = timed_run( 0, 'ipcs', '-m' );
 
-    my $ipcs = timed_run( 0, 'ipcs', '-m' );
+        print_warn('Port 80: ');
 
-    print_warn('Port 80: ');
-
-    print_warning("something other than Apache is running:");
-    print_magenta("\t \\_ file [$filename]");
-    print_magenta("\t \\_ exe  [$exe]");
-    print_magenta("\t \\_ cmd  [$cmdline]");
-    print_magenta("\t \\_ cwd  [$cwd]");
-
-    if ( $ipcs =~ /nobody/ ) {
-        print_magenta($ipcs);
+        print_warning("something other than Apache is running:");
+        print_magenta("\t \\_ file [$filename]");
+        print_magenta("\t \\_ exe  [$exe]");
+        print_magenta("\t \\_ cmd  [$cmdline]");
+        print_magenta("\t \\_ cwd  [$cwd]");
+        print_magenta($ipcs) if ( $ipcs =~ /nobody/ );
     }
 }
 
