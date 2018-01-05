@@ -7009,11 +7009,9 @@ sub check_for_modsec2_stage_files {
 }
 
 sub check_for_cron_allow {
-    my $warn       = 0;
     my $cron_allow = "/etc/cron.allow";
     my $cron_deny  = "/etc/cron.deny";
 
-    $warn = 1 if -e $cron_allow;
     if ( -s $cron_deny ) {
 
         # By default /etc/cron.deny can contain the "nobody" user.  Checking the contents can be expensive, size will do.
