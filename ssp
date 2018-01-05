@@ -7699,20 +7699,13 @@ sub check_for_haproxy {
 }
 
 sub check_for_newrelic {
-    my $has_newrelic = 0;
-
     for my $process (@process_list) {
         if ( $process =~ /newrelic-daemon/ ) {
-            $has_newrelic = 1;
+            print_3rdp('newrelic-daemon: ');
+            print_3rdp2('found in process list. Caused server stability issues in 4396009');
             last;
         }
     }
-
-    if ( $has_newrelic == 1 ) {
-        print_3rdp('newrelic-daemon: ');
-        print_3rdp2('found in process list. Caused server stability issues in 4396009');
-    }
-
 }
 
 sub check_for_multilevel_reseller {
