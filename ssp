@@ -163,13 +163,18 @@ sub init {
                     $apache_built = $1;
                     $apache_built =~ s/^\s+//g;
                 }
-                if (m{ \A Cpanel::Easy::Apache \s+ (.*) \z }xms) {
-                    $apache_ea_version = $1;
+                if ( !$ea4 ) {
+                    if (m{ \A Cpanel::Easy::Apache \s+ (.*) \z }xms) {
+                        $apache_ea_version = $1;
+                    }
                 }
             }
-        }
 
-        if ($ea4) { $apache_ea_version = ''; }
+            if ($ea4) {
+                chomp( $apache_ea_version = timed_run( 0, 'rpm', '-qf', $httpd_bin ) );
+                $apache_ea_version =~ s/\.\w\d{1,3}\D+\d+\n//;
+            }
+        }
 
         # TODO: use +c 15 so the entire process name is displayed if >9 chars
         @lsof_80 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:80' );
@@ -1872,13 +1877,15 @@ sub check_for_clustering {
 }
 
 sub print_apache_info {
-    my $output = 'could not determine Apache info!';
+    my $output;
 
-    if ($ea4) {
-        $output = "[ EA4 ] [ $apache_version ]";
+    $output .= "[ EA4 ] " if $ea4;
+
+    if ( not $apache_version or not $apache_built or not $apache_ea_version ) {
+        $output .= 'could not determine Apache info!';
     }
-    elsif ( $apache_version && $apache_built && $apache_ea_version ) {
-        $output = "[ $apache_version ] [ $apache_built w/ $apache_ea_version ]";
+    else {
+        $output .= "[ $apache_version ] [ $apache_built w/ $apache_ea_version ]";
     }
 
     my ( $apache_uptime, $apache_generations );
