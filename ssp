@@ -327,8 +327,6 @@ sub long_check_list {
     print_cpanel_info();
     check_for_cpanel_update();
     print_uptime();
-    print_logged_in_users();
-    print_load_average();
     print_apache_info();
     print_lsws_info();
     check_for_lsws_update();
@@ -555,8 +553,6 @@ sub non_cpanel_checks_only {
     print_kernel_and_cpu();
     print_kernelcare_info();
     print_uptime();
-    print_logged_in_users();
-    print_load_average();
     check_for_remote_mysql();
     print_mysql_version();
     check_for_license_info();
@@ -667,8 +663,6 @@ sub dnsonly_checks_only {
     print_cpanel_info();
     check_for_cpanel_update();
     print_uptime();
-    print_logged_in_users();
-    print_load_average();
     check_for_clustering();
     check_sysinfo();
     print_if_using_other_dns();
@@ -1814,43 +1808,11 @@ sub check_perl_version_less_than_588 {
 }
 
 sub print_uptime {
-    if ( open(my $ut, '<', '/proc/uptime') ) {
-        my $uptime = 'UNKNOWN';
-        my $line = <$ut>;
-        close $ut;
-        ($uptime) = $line =~ m/^(\S*\s)/;
-        $uptime = sprintf("%d days  %dh:%dm:%ds",$uptime/86400, $uptime%86400/3600,$uptime%3600/60,$uptime%60);
-        print_info('Uptime: ');
-        print_normal($uptime);
-    }
-}
-
-sub print_load_average {
-    if ( open(my $ut, '<', '/proc/loadavg') ) {
-        my $line = <$ut>;
-        close $ut;
-        my ($a,$b,$c) = $line =~ m/(\S*)\s*(\S*)\s*(\S*)/;
-        print_info('Load Average: ');
-        print_normal("$a, $b, $c")
-    }
-}
-
-sub print_logged_in_users {
-    my $users = timed_run( 0, 'users' );
-    chomp $users if $users;
-    my %users_dedup;
-    foreach my $u (split( / /, $users)) {
-        $users_dedup{$u}++;
-    }
-    my $user_out='';
-    foreach my $key (keys(%users_dedup)) {
-        $user_out .= " $key";
-        $user_out .= " ($users_dedup{$key})" if $users_dedup{$key} - 1;
-        $user_out .= ",";
-    }
-    chop $user_out;
-    print_info("Currently Logged in Users:");
-    print_normal($user_out);
+    my $uptime = timed_run( 0, 'uptime' );
+    chomp $uptime if $uptime;
+    $uptime = $uptime ? $uptime : 'UNKNOWN';
+    print_info('Uptime: ');
+    print_normal($uptime);
 }
 
 sub check_for_clustering {
@@ -5705,21 +5667,15 @@ sub check_for_duplicate_rpms {
 sub check_for_percona_rpms {
     return if !@rpm_list;
 
-    my $has_percona = 0;
-
     for my $rpm (@rpm_list) {
         next if $rpm =~ /^percona-toolkit/i;    # Can be used with MariaDB/MySQL
         if ( $rpm =~ /^Percona-/i ) {
-            $has_percona = 1;
+            print_warn("Percona RPMs found:\n");
+            print_magenta("\t \\_ EA failing with \"Cannot find libmysqlclient\"? libmysqlclient.so missing? see FB-93349");
+            print_magenta("\t \\_ If Exim is segfaulting after STARTTLS, this may be why. See ticket 3658929");
+            print_magenta("\t \\_ If Apache with PHP DSO is segfaulting after restart, this may be why. See ticket 5525179");
             last;
         }
-    }
-
-    if ( $has_percona == 1 ) {
-        print_warn("Percona RPMs found:\n");
-        print_magenta("\t \\_ EA failing with \"Cannot find libmysqlclient\"? libmysqlclient.so missing? see FB-93349");
-        print_magenta("\t \\_ If Exim is segfaulting after STARTTLS, this may be why. See ticket 3658929");
-        print_magenta("\t \\_ If Apache with PHP DSO is segfaulting after restart, this may be why. See ticket 5525179");
     }
 }
 
@@ -6437,7 +6393,6 @@ sub check_for_invalid_HOMEDIR {
     return if !-f $wwwacctconf;
 
     my $homedir;
-
     if ( open my $file_fh, '<', $wwwacctconf ) {
         while (<$file_fh>) {
             if (/\AHOMEDIR[\s\t]+([^\s]+)/) {
@@ -6451,12 +6406,12 @@ sub check_for_invalid_HOMEDIR {
     if ( !$homedir ) {
         print_warn("$wwwacctconf: ");
         print_warning('HOMEDIR value not found!');
+        return;
     }
-    else {
-        if ( !-d $homedir ) {
-            print_warn("$wwwacctconf: ");
-            print_warning("the directory that is specified as the HOMEDIR does not exist! ($homedir)");
-        }
+
+    if ( !-d $homedir ) {
+        print_warn("$wwwacctconf: ");
+        print_warning("the directory that is specified as the HOMEDIR does not exist! ($homedir)");
     }
 }
 
@@ -6498,50 +6453,35 @@ sub check_for_suphp_but_no_fileprotect {
 }
 
 sub check_if_hostname_missing_from_localdomains {
-    my $hostname_check = 0;
-
     if ( open my $localdomains_fh, '<', '/etc/localdomains' ) {
         while (<$localdomains_fh>) {
-            if (/^${hostname}$/) {
-                $hostname_check = 1;
-                last;
-            }
+            return if (/^${hostname}$/);
         }
         close $localdomains_fh;
     }
-    if ( $hostname_check == 0 ) {
-        print_warn('Hostname: ');
-        print_warning('not found in /etc/localdomains. This can cause "lowest numbered MX record points to local host"');
-    }
+    print_warn('Hostname: ');
+    print_warning('not found in /etc/localdomains. This can cause "lowest numbered MX record points to local host"');
 }
 
 sub check_for_eximstats_newline {
     my $eximstatspass = '/var/cpanel/eximstatspass';
-    my $has_newline   = 0;
 
-    if ( cpanel_version_is(qw( < 11.63.0.0 )) ) {
-        if ( !-e $eximstatspass ) {
-            print_warn("$eximstatspass: ");
-            print_warning('missing!');
-        }
-        else {
-            if ( open my $eximstatspass_fh, '<', $eximstatspass ) {
-                while (<$eximstatspass_fh>) {
-                    if (/\n/) {
-                        $has_newline = 1;
-                        last;
-                    }
-                }
-                close $eximstatspass_fh;
+    return unless cpanel_version_is(qw( < 11.63.0.0 ));
+    if ( !-e $eximstatspass ) {
+        print_warn("$eximstatspass: ");
+        print_warning('missing!');
+        return;
+    }
+    if ( open my $eximstatspass_fh, '<', $eximstatspass ) {
+        while (<$eximstatspass_fh>) {
+            if (/\n/) {
+                print_warn("$eximstatspass: ");
+                print_warning('contains a newline. Breaks Mail Delivery Reports / eximstats');
+                last;
             }
         }
-
-        if ( $has_newline == 1 ) {
-            print_warn("$eximstatspass: ");
-            print_warning('contains a newline. Breaks Mail Delivery Reports / eximstats');
-        }
+        close $eximstatspass_fh;
     }
-
 }
 
 sub check_for_processes_killed_by_lfd {
@@ -6554,7 +6494,6 @@ sub check_for_processes_killed_by_lfd {
     my $bytes_to_check = 20_971_520 / 2;    # 10M
     my $seek_position  = 0;
     my $log_data;
-    my @logs;
     my $count = 0;
     my @killed_by_lfd;
 
@@ -6568,7 +6507,7 @@ sub check_for_processes_killed_by_lfd {
     close $file_fh;
 
     if ( $log_data =~ /\sKill:1\s/ ) {
-        @logs = split /\n/, $log_data;
+        my @logs = split /\n/, $log_data;
         undef $log_data;
         @logs = reverse @logs;
 
@@ -6597,15 +6536,17 @@ sub check_for_processes_killed_by_lfd {
 sub check_for_processes_killed_by_oom {
     my $log = "/var/log/messages";
     return unless -e $log;
-    my $bytes_to_check = 10485760;
+
     my $size           = ( stat($log) )[7];
     return unless defined $size;
+
     my $seek_position = 0;
+    my $bytes_to_check = 10485760;
     if ( $size > $bytes_to_check ) {
         $seek_position = ( $size - $bytes_to_check );
     }
-    my $log_data = undef;
-    my @logs;
+
+    my $log_data;
     my $count         = 0;
     my @killed_by_oom = ();
 
@@ -6615,7 +6556,7 @@ sub check_for_processes_killed_by_oom {
     close $file_fh;
 
     if ( $log_data =~ /[Kk]illed process/ ) {
-        @logs = split /\n/, $log_data;
+        my @logs = split /\n/, $log_data;
         undef $log_data;
         @logs = reverse @logs;
 
@@ -6676,8 +6617,7 @@ sub check_for_processes_killed_by_prm {
 
         my $bytes_to_check = 10485760;    # 10M
         my $seek_position  = 0;
-        my $log_data       = undef;
-        my @logs;
+        my $log_data;
         my $count         = 0;
         my @killed_by_prm = ();
 
@@ -6691,7 +6631,7 @@ sub check_for_processes_killed_by_prm {
         close $file_fh;
 
         if ( $log_data =~ /\sKILLED\s/ ) {
-            @logs = split /\n/, $log_data;
+            my @logs = split /\n/, $log_data;
             undef $log_data;
             @logs = reverse @logs;
 
@@ -6716,27 +6656,21 @@ sub check_for_processes_killed_by_prm {
 sub check_for_broken_userdatadomains {
     return if !-f '/etc/userdatadomains';
 
-    my $is_broken = 0;
-
     open my $userdatadomains_fh, '<', '/etc/userdatadomains' or return;
     while (<$userdatadomains_fh>) {
         if (/^:/) {
-            $is_broken = 1;
+            print_warn('/etc/userdatadomains: ');
+            print_warning('contains a line that begins with ":". Check the following for accuracy (see 4416539 for examples):');
+            print_magenta("\t \\_ /etc/userdatadomains");
+            print_magenta("\t \\_ /var/cpanel/users/USER (check the ^DNS= lines)");
+            print_magenta("\t \\_ /var/cpanel/userdata/USER/main (check for things like '')");
+            print_magenta("\t \\_ /var/cpanel/userdata/USER/DOMAIN (check serveralias line)");
+            print_magenta("\t \\_ /var/cpanel/userdata/USER/cache (userdatadomains uses this)");
+            print_magenta("\t \\_ /usr/local/apache/conf/httpd.conf (may need rebuilding after fixing userdata)");
             last;
         }
     }
     close $userdatadomains_fh;
-
-    if ( $is_broken == 1 ) {
-        print_warn('/etc/userdatadomains: ');
-        print_warning('contains a line that begins with ":". Check the following for accuracy (see 4416539 for examples):');
-        print_magenta("\t \\_ /etc/userdatadomains");
-        print_magenta("\t \\_ /var/cpanel/users/USER (check the ^DNS= lines)");
-        print_magenta("\t \\_ /var/cpanel/userdata/USER/main (check for things like '')");
-        print_magenta("\t \\_ /var/cpanel/userdata/USER/DOMAIN (check serveralias line)");
-        print_magenta("\t \\_ /var/cpanel/userdata/USER/cache (userdatadomains uses this)");
-        print_magenta("\t \\_ /usr/local/apache/conf/httpd.conf (may need rebuilding after fixing userdata)");
-    }
 }
 
 sub check_ssl_db_perms {
@@ -6770,11 +6704,10 @@ sub check_for_stray_index_php {
 }
 
 sub check_for_port_80_not_apache {
-    my ( $filename, $pid, $cmdline );
-    my $unknown_httpd = 0;
-
     return if !@lsof_80;
     return if scalar @lsof_80 < 2;
+
+    my ( $filename, $pid);
 
     for my $line (@lsof_80) {
         if ( $line =~ m{ \A (\S+) \s+ (\d+) (?:.*) \(LISTEN\) }xms ) {
@@ -6789,31 +6722,25 @@ sub check_for_port_80_not_apache {
     my $cwd = readlink "/proc/${pid}/cwd" or return;
 
     if ( $exe ne '/usr/local/apache/bin/httpd' && $exe ne '/usr/sbin/httpd' ) {
-        $unknown_httpd = 1;
 
         open my $file_fh, '<', "/proc/${pid}/cmdline" or return;
-        $cmdline = readline $file_fh;
+        my $cmdline = readline $file_fh;
         close $file_fh;
 
         return if !$cmdline;
         $cmdline =~ s/\0/ /g;
         $cmdline =~ s/(\s+)$//g;
-    }
 
-    return if !$unknown_httpd;
+        my $ipcs = timed_run( 0, 'ipcs', '-m' );
 
-    my $ipcs = timed_run( 0, 'ipcs', '-m' );
+        print_warn('Port 80: ');
 
-    print_warn('Port 80: ');
-
-    print_warning("something other than Apache is running:");
-    print_magenta("\t \\_ file [$filename]");
-    print_magenta("\t \\_ exe  [$exe]");
-    print_magenta("\t \\_ cmd  [$cmdline]");
-    print_magenta("\t \\_ cwd  [$cwd]");
-
-    if ( $ipcs =~ /nobody/ ) {
-        print_magenta($ipcs);
+        print_warning("something other than Apache is running:");
+        print_magenta("\t \\_ file [$filename]");
+        print_magenta("\t \\_ exe  [$exe]");
+        print_magenta("\t \\_ cmd  [$cmdline]");
+        print_magenta("\t \\_ cwd  [$cwd]");
+        print_magenta($ipcs) if ( $ipcs =~ /nobody/ );
     }
 }
 
@@ -6912,23 +6839,17 @@ sub check_for_pgpass_colon_in_password_field {
     my $pgpass = '/root/.pgpass';
     return if !-f $pgpass;
 
-    my $has_colon = 0;
-
     if ( open my $fh, '<', $pgpass ) {
         while (<$fh>) {
             if (/^\*:\*:\*:postgres:(.*)/) {
                 if ( $1 =~ /:/ ) {
-                    $has_colon = 1;
+                    print_warn("$pgpass: ");
+                    print_warning('password field contains a colon. Seeing Postgres auth issues? See FB-89093');
                     last;
                 }
             }
         }
         close $fh;
-    }
-
-    if ( $has_colon == 1 ) {
-        print_warn("$pgpass: ");
-        print_warning('password field contains a colon. Seeing Postgres auth issues? See FB-89093');
     }
 }
 
@@ -6990,21 +6911,15 @@ sub check_for_allow_update_in_named_conf {
     my $namedconf = '/etc/named.conf';
     return if !-e $namedconf;
 
-    my $has_allow_update = 0;
-
     if ( open my $fh, '<', $namedconf ) {
         while (<$fh>) {
             if (/allow-update/i) {
-                $has_allow_update = 1;
+                print_warn('named.conf: ');
+                print_warning('allow-update found. This can possibly prevent rndc from reloading. See ticket 4717591');
                 last;
             }
         }
         close $fh;
-    }
-
-    if ( $has_allow_update == 1 ) {
-        print_warn('named.conf: ');
-        print_warning('allow-update found. This can possibly prevent rndc from reloading. See ticket 4717591');
     }
 }
 
@@ -7043,11 +6958,9 @@ sub check_for_modsec2_stage_files {
 }
 
 sub check_for_cron_allow {
-    my $warn       = 0;
     my $cron_allow = "/etc/cron.allow";
     my $cron_deny  = "/etc/cron.deny";
 
-    $warn = 1 if -e $cron_allow;
     if ( -s $cron_deny ) {
 
         # By default /etc/cron.deny can contain the "nobody" user.  Checking the contents can be expensive, size will do.
@@ -7067,38 +6980,32 @@ sub check_for_cron_allow {
 
 sub check_for_openssl_heartbleed_bug {
     return if !$openssl_rpm_changelog;
+    return if $openssl_rpm_changelog =~ m{ \sCVE-2014-0160\s }xms;
+
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
     return if !-f $sysinfo_config;
-
-    my $rpm_dist_ver;
 
     open my $fh, '<', $sysinfo_config or return;
     while (<$fh>) {
         if (/^rpm_dist_ver=(\d+)$/) {
-            $rpm_dist_ver = $1;
+            my $rpm_dist_ver = $1;
+            return if !$rpm_dist_ver;
+            return if ( $rpm_dist_ver <= 5 );    # RHEL/CentOS 5 not vuln: http://cpanel.net/heartbleed-vulnerability-information/
             last;
         }
     }
     close $fh or return;
 
-    return if !$rpm_dist_ver;
-    return if ( $rpm_dist_ver <= 5 );    # RHEL/CentOS 5 not vuln: http://cpanel.net/heartbleed-vulnerability-information/
-
     chomp( my $openssl_ver = timed_run( 0, 'openssl', 'version' ) );
     return if !$openssl_ver;
 
     # only 1.0.1[a-f] is vuln (and 1.0.2-beta which no one should be using)
-    if ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)[a-f]/ ) {
-        my ( $maj, $min, $patch ) = ( $1, $2, $3 );
-        return if $maj != 1;
-        return if $min != 0;
-        return if $patch != 1;
-    }
-    else {
-        return;
-    }
+    return unless ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)[a-f]/ );
 
-    return if $openssl_rpm_changelog =~ m{ \sCVE-2014-0160\s }xms;
+    my ( $maj, $min, $patch ) = ( $1, $2, $3 );
+    return if $maj != 1;
+    return if $min != 0;
+    return if $patch != 1;
 
     print_critical();
     print_crit('Heartbleed: ');
@@ -7111,42 +7018,38 @@ sub check_for_openssl_heartbleed_bug {
 
 sub check_for_openssl_secadv_20140605 {
     return if !$openssl_rpm_changelog;
+    return if ( $openssl_rpm_changelog =~ m{ \sCVE-2014-0224\s }xms );
+
     my $sysinfo_config = '/var/cpanel/sysinfo.config';
     return if !-f $sysinfo_config;
-
-    my $rpm_dist_ver;
 
     open my $fh, '<', $sysinfo_config or return;
     while (<$fh>) {
         if (/^rpm_dist_ver=(\d+)$/) {
-            $rpm_dist_ver = $1;
+            my $rpm_dist_ver = $1;
+            return if !$rpm_dist_ver;
+            return if ( $rpm_dist_ver < 5 || $rpm_dist_ver > 6 );    # Only RHEL/CentOS 5 and 6 need apply
             last;
         }
     }
     close $fh or return;
 
-    return if !$rpm_dist_ver;
-    return if ( $rpm_dist_ver < 5 || $rpm_dist_ver > 6 );    # Only RHEL/CentOS 5 and 6 need apply
-
     chomp( my $openssl_ver = timed_run( 0, 'openssl', 'version' ) );
     return if !$openssl_ver;
 
     # fixed in openssl 1.0.1h, 1.0.0m, and 0.9.8za
-    if ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)([a-z])([a-z]?)/ ) {
-        my ( $maj, $min, $patch ) = ( $1, $2, $3 );
+    return unless ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)([a-z])([a-z]?)/ );
 
-        # If we map the alphas into a number and sum the values the version will be compatible with version_compare() and save us a lot of trouble, i.e. h=8, m=13, and za=27
-        my %al2num = map { ( "a" .. "z" )[ $_ - 1 ] => $_ } ( 1 .. 26 );    # Isn't there a better way to do this?
-        my $sub = 0;
-        if ($4) { $sub += $al2num{ lc($4) } }
-        if ($5) { $sub += $al2num{ lc($5) } }
-        my $ver = join( '.', $maj, $min, $patch, $sub );
-        return if version_compare( $ver, qw( >= 1.0.1.8 ) );                # If > 1.0.1h we're done.
-        return if ( version_compare( $ver, qw( < 1.0.1.0 ) ) && version_compare( $ver, qw( >= 1.0.0.13 ) ) );    # If < 1.0.1 and >= 1.0.0m we're done.
-        return if ( version_compare( $ver, qw( < 0.9.9.0 ) ) && version_compare( $ver, qw( >= 0.9.8.27 ) ) );    # If < 0.9.9 and >= 0.9.8za we're done.
-    }
-
-    return if ( $openssl_rpm_changelog =~ m{ \sCVE-2014-0224\s }xms );
+    my ( $maj, $min, $patch ) = ( $1, $2, $3 );
+    # If we map the alphas into a number and sum the values the version will be compatible with version_compare() and save us a lot of trouble, i.e. h=8, m=13, and za=27
+    my %al2num = map { ( "a" .. "z" )[ $_ - 1 ] => $_ } ( 1 .. 26 );    # Isn't there a better way to do this?
+    my $sub = 0;
+    if ($4) { $sub += $al2num{ lc($4) } }
+    if ($5) { $sub += $al2num{ lc($5) } }
+    my $ver = join( '.', $maj, $min, $patch, $sub );
+    return if version_compare( $ver, qw( >= 1.0.1.8 ) );                # If > 1.0.1h we're done.
+    return if ( version_compare( $ver, qw( < 1.0.1.0 ) ) && version_compare( $ver, qw( >= 1.0.0.13 ) ) );    # If < 1.0.1 and >= 1.0.0m we're done.
+    return if ( version_compare( $ver, qw( < 0.9.9.0 ) ) && version_compare( $ver, qw( >= 0.9.8.27 ) ) );    # If < 0.9.9 and >= 0.9.8za we're done.
 
     print_critical();
     print_crit('OpenSSL RPM missing secadv_20140605 patches: ');
@@ -7199,11 +7102,11 @@ sub check_for_broken_mysqldump {
 sub check_for_exim_cve_2016_1531 {
     my $eximbin = '/usr/sbin/exim';
     return if !-x $eximbin;
-    my $eximver;
 
     chomp( my $exim_out = timed_run( 0, $eximbin, '--version' ) );
     return if !$exim_out;
 
+    my $eximver;
     if ( $exim_out =~ m{version (\d+\.\d+(?:[._](\d+))?)}ms ) {
         $eximver = $1;
     }
@@ -7264,10 +7167,11 @@ sub check_for_unsupported_php {
     return if $ea4;
     return if !$ea3_phpversion;
     return if $ea3_phpversion >= 6;
-    my $min_php5 = '5.3.0';
     if ( $ea3_phpversion == 4 ) {
         return if !$ea3_php4version;
     }
+
+    my $min_php5 = '5.3.0';
     if ( $ea3_phpversion == 5 ) {
         return if !$ea3_php5version;
         return if !version_compare( $ea3_php5version, '<', $min_php5 );
@@ -7431,7 +7335,6 @@ sub check_for_jynx2_rootkit {
 }
 
 sub check_for_bg_botnet {
-    my @found_bg_files = ();
 
     # /bin/ps, /bin/netstat, and /usr/sbin/lsof have also been found to be modified
     # This one is causing some rare false-positives:
@@ -7488,11 +7391,7 @@ sub check_for_bg_botnet {
       /tmp/whitptabil
     );
 
-    for my $file (@bg_files) {
-        if ( -e $file ) {
-            push( @found_bg_files, $file );
-        }
-    }
+    my @found_bg_files = grep { -e $_ } @bg_files;
     for my $file (@root_bg_files) {
         if ( -e $file && ( stat $file )[4] eq 0 ) {
             push( @found_bg_files, $file );
@@ -7572,23 +7471,17 @@ sub check_updatelog {
     my $bytes_to_read = 10485760;    # 10M
     $bytes_to_read = $size if $bytes_to_read > $size;
 
-    my $log_data = undef;
-
+    my $log_data;
     open my $file_fh, '<', $log or return;
     read $file_fh, $log_data, $bytes_to_read;
     close $file_fh;
 
-    my $found_rpm_needs_space;
-
     foreach ( split( "\n", $log_data ) ) {
-        $found_rpm_needs_space = 1 if m{ installing .+ needs .+ on .+ filesystem }x;
-    }
-
-    undef $log_data;
-
-    if ($found_rpm_needs_space) {
-        print_warn("WHM update: ");
-        print_warning( $log . ' contains errors which indicate that RPM installation had insufficient free disk space available' );
+        if (m{ installing .+ needs .+ on .+ filesystem }x ) {
+            print_warn("WHM update: ");
+            print_warning( $log . ' contains errors which indicate that RPM installation had insufficient free disk space available' );
+            return;
+        }
     }
 }
 
@@ -7601,7 +7494,6 @@ sub check_updatelog {
 ##############################
 
 sub check_smtp_processes {
-    my $assp_running = 0;
 
     return if scalar keys(%$port_ref) == 0;
     if ( !defined( $port_ref->{"25"} ) && !-f '/etc/eximdisable' ) {
@@ -7619,14 +7511,10 @@ sub check_smtp_processes {
             print_3rdp2( 'a process other than exim is listening on port 25 [' . $href->{IPV} . ' ' . $href->{IP} . '] [USER: ' . $href->{USER} . '] [CMD: ' . $cmd . '] [PID: ' . $pid . ']' );
         }
         if ( $cmd =~ m{ assp\.pl }xms ) {
-            $assp_running = $pid;
+            print_3rdp('ASSP: ');
+            print_3rdp2( 'assp.pl is listening on port 25 [PID: ' . $pid . ']' );
+            print_3rdp2('         \_  SNI is not supported unless enabled in the plugin: http://www.grscripts.com/howtofaq.html -> "Does ASSP Support SNI?"');
         }
-    }
-
-    if ($assp_running) {
-        print_3rdp('ASSP: ');
-        print_3rdp2( 'assp.pl is listening on port 25 [PID: ' . $assp_running . ']' );
-        print_3rdp2('         \_  SNI is not supported unless enabled in the plugin: http://www.grscripts.com/howtofaq.html -> "Does ASSP Support SNI?"');
     }
 }
 
@@ -7648,34 +7536,22 @@ sub check_for_varnish {
 }
 
 sub check_for_nginx {
-    my $nginx = 0;
-
     for my $line (@process_list) {
         if ( $line =~ m{ \A (root|nobody) (?:.*) nginx(:?) }xms ) {
-            $nginx = 1;
+            print_3rdp('nginx: ');
+            print_3rdp2('is running');
             last;
         }
-    }
-
-    if ( $nginx == 1 ) {
-        print_3rdp('nginx: ');
-        print_3rdp2('is running');
     }
 }
 
 sub check_for_mailscanner {
-    my $mailscanner = 0;
-
     for my $line (@process_list) {
         if ( $line =~ m{ \A mailnull (?:.*) MailScanner }xms ) {
-            $mailscanner = 1;
+            print_3rdp('MailScanner: ');
+            print_3rdp2('is running');
             last;
         }
-    }
-
-    if ( $mailscanner == 1 ) {
-        print_3rdp('MailScanner: ');
-        print_3rdp2('is running');
     }
 }
 
@@ -7693,26 +7569,16 @@ sub check_for_csf {
     my $lfd = 0;
     my $csf = timed_run( 0, 'whereis', 'csf' );
 
-    if ( $csf =~ /\// ) {
-        print_3rdp('CSF: ');
-    }
-    else {
-        return;
-    }
+    return unless ( $csf =~ /\// );
+    print_3rdp('CSF: ');
 
     for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) lfd }xms ) {
-            $lfd = 1;
-            last;
+            print_3rdp2('installed, LFD is running');
+            return;
         }
     }
-
-    if ($lfd) {
-        print_3rdp2('installed, LFD is running');
-    }
-    else {
-        print_3rdp2('installed, LFD is not running');
-    }
+    print_3rdp2('installed, LFD is not running');
 }
 
 sub check_for_prm {
@@ -7731,21 +7597,16 @@ sub check_for_les {
 
 sub check_for_1h {
     return unless -d '/usr/local/1h';
-    my $guardian;
+    my $guardian = 'not running';
     my $hive_module = scalar keys %{$apache_modules} ? ( defined $apache_modules->{'hive_module'} ? 'loaded' : 'not active' ) : 'unknown';
 
     if ( -x '/usr/local/1h/sbin/guardian' ) {
         for my $line (@process_list) {
             if ( $line =~ /Guardian/ ) {
                 $guardian = 'running';
-            }
-            else {
-                $guardian = 'not running';
+                last;
             }
         }
-    }
-    else {
-        $guardian = 'not running';
     }
 
     print_3rdp('1H Software: ');
@@ -7753,61 +7614,39 @@ sub check_for_1h {
 }
 
 sub check_for_webmin {
-    my @lsof_10000 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:10000' );
-
-    if (@lsof_10000) {
-        print_3rdp('Webmin: ');
-        print_3rdp2('Port 10000 is listening, webmin may be running');
-    }
+    return unless timed_run( 0, 'lsof', '-n', '-i', 'tcp:10000' );
+    print_3rdp('Webmin: ');
+    print_3rdp2('Port 10000 is listening, webmin may be running');
 }
 
 sub check_for_symantec {
-    my $symantec = 0;
-
     for my $process (@process_list) {
         if ( $process =~ m{ \A root (?:.*) /opt/Symantec/symantec_antivirus }xms ) {
-            $symantec = 1;
+            print_3rdp('Symantec: ');
+            print_3rdp2('found /opt/Symantec/symantec_antivirus in process list');
             last;
         }
-    }
-
-    if ( $symantec == 1 ) {
-        print_3rdp('Symantec: ');
-        print_3rdp2('found /opt/Symantec/symantec_antivirus in process list');
     }
 }
 
 sub check_for_haproxy {
-    my $haproxy = 0;
-
     for my $process (@process_list) {
         if ( $process =~ m{ \A haproxy (?:.*) haproxy }xms ) {
-            $haproxy = 1;
+            print_3rdp('HAProxy: ');
+            print_3rdp2('found haproxy in process list');
             last;
         }
-    }
-
-    if ( $haproxy == 1 ) {
-        print_3rdp('HAProxy: ');
-        print_3rdp2('found haproxy in process list');
     }
 }
 
 sub check_for_newrelic {
-    my $has_newrelic = 0;
-
     for my $process (@process_list) {
         if ( $process =~ /newrelic-daemon/ ) {
-            $has_newrelic = 1;
+            print_3rdp('newrelic-daemon: ');
+            print_3rdp2('found in process list. Caused server stability issues in 4396009');
             last;
         }
     }
-
-    if ( $has_newrelic == 1 ) {
-        print_3rdp('newrelic-daemon: ');
-        print_3rdp2('found in process list. Caused server stability issues in 4396009');
-    }
-
 }
 
 sub check_for_multilevel_reseller {
@@ -7825,21 +7664,15 @@ sub check_for_multilevel_reseller {
 sub check_for_cpremote {
     return if !-e '/var/spool/cron/root';
 
-    my $has_cpremote = 0;
-
     open my $file_fh, '<', '/var/spool/cron/root' or return;
     while (<$file_fh>) {
         if (m#/scripts/cpremotebackup#) {
-            $has_cpremote = 1;
+            print_3rdp('cpremote: ');
+            print_3rdp2('installed. third party backup software (cron job found for root)');
             last;
         }
     }
     close $file_fh;
-
-    if ( $has_cpremote == 1 ) {
-        print_3rdp('cpremote: ');
-        print_3rdp2('installed. third party backup software (cron job found for root)');
-    }
 }
 
 sub check_for_whmxtra {
@@ -7912,8 +7745,6 @@ sub check_for_cdorked_A {
     my $max_bin_size = 10_485_760;    # avoid slurping too much mem
     return if ( ( stat($httpd_bin) )[7] > $max_bin_size );
 
-    my $has_cdorked = 0;
-    my $signature;
     my @apache_bins = ();
     push @apache_bins, $httpd_bin;
 
@@ -7939,32 +7770,26 @@ sub check_for_cdorked_A {
         next if !$httpd;
 
         if ( $httpd =~ /(open_tty|hangout|ptsname|Qkkbal)/ ) {
-            $signature   = $check_bin . ": \"" . $1 . "\"";
-            $has_cdorked = 1;
+            my $signature   = $check_bin . ": \"" . $1 . "\"";
+            print_ebury_cdorked_predef('CDORKED');
+            print_critical("\tString found in $signature (see ticket 4482347)");
+            print_critical();
             last;
         }
-    }
-
-    if ( $has_cdorked == 1 ) {
-        print_ebury_cdorked_predef('CDORKED');
-        print_critical("\tString found in $signature (see ticket 4482347)");
-        print_critical();
     }
 }
 
 sub check_for_cdorked_B {
-    my $has_cdorked_b = 0;
     my @files = ( '/usr/sbin/arpd ', '/usr/sbin/tunelp ', '/usr/bin/s2p ' );
     my $cdorked_files;
 
     for my $file (@files) {
         if ( -e $file ) {
-            $has_cdorked_b = 1;
             $cdorked_files .= "[$file] ";
         }
     }
 
-    if ( $has_cdorked_b == 1 ) {
+    if ( $cdorked_files ) {
         print_ebury_cdorked_predef('CDORKED');
         print_critical("\tThe following files were found (note the spaces at the end of the files):");
         print_critical("\t$cdorked_files");
@@ -8023,8 +7848,6 @@ sub check_for_libkeyutils_filenames {
 sub check_sha1_sigs_libkeyutils {
     my $libkeyutils_files_ref = build_libkeyutils_file_list();
 
-    my $trojaned_lib;
-
     # p67 http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf
     # https://www.welivesecurity.com/2017/10/30/windigo-ebury-update-2/
     my @checksums = qw(
@@ -8075,24 +7898,20 @@ sub check_sha1_sigs_libkeyutils {
         chomp $checksum;
         $checksum =~ s/\s.*//g;
         if ( grep { /$checksum/ } @checksums ) {
-            $trojaned_lib = "$lib\n\tSHA-1 checksum: $checksum";
+            my $trojaned_lib = "$lib\n\tSHA-1 checksum: $checksum";
+            print_ebury_cdorked_predef('EBURY');
+            print_critical('The following file(s) were found:');
+            print_critical( "\t" . $trojaned_lib );
+            print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/ and https://www.welivesecurity.com/2017/10/30/windigo-ebury-update-2/");
+            print_critical();
             last;
         }
-    }
-
-    if ($trojaned_lib) {
-        print_ebury_cdorked_predef('EBURY');
-        print_critical('The following file(s) were found:');
-        print_critical( "\t" . $trojaned_lib );
-        print_critical("\tReference: http://www.welivesecurity.com/2014/02/21/an-in-depth-analysis-of-linuxebury/ and https://www.welivesecurity.com/2017/10/30/windigo-ebury-update-2/");
-        print_critical();
     }
 }
 
 sub check_sha1_sigs_httpd {
     return unless defined $httpd_bin;
     return if !-e $httpd_bin;
-    my $infected = 0;
     return unless my $sha1sum = timed_run( 0, 'sha1sum', $httpd_bin );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
@@ -8124,23 +7943,18 @@ sub check_sha1_sigs_httpd {
 
     for my $sig (@sigs) {
         if ( $sha1sum eq $sig ) {
-            $infected = 1;
+            print_ebury_cdorked_predef('CDORKED');
+            print_critical( "\t" . $httpd_bin . " has a SHA-1 signature of " . $sha1sum );
+            print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
+            print_critical();
             last;
         }
-    }
-
-    if ( $infected == 1 ) {
-        print_ebury_cdorked_predef('CDORKED');
-        print_critical( "\t" . $httpd_bin . " has a SHA-1 signature of " . $sha1sum );
-        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
-        print_critical();
     }
 }
 
 sub check_sha1_sigs_named {
     my $named = '/usr/sbin/named';
     return if !-e $named;
-    my $infected = 0;
     return unless my $sha1sum = timed_run( 0, 'sha1sum', $named );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
@@ -8153,22 +7967,17 @@ sub check_sha1_sigs_named {
 
     for my $sig (@sigs) {
         if ( $sha1sum eq $sig ) {
-            $infected = 1;
+            print_ebury_cdorked_predef('CDORKED');
+            print_critical( "\t" . $named . " has a SHA-1 signature of " . $sha1sum );
+            print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
             last;
         }
-    }
-
-    if ( $infected == 1 ) {
-        print_ebury_cdorked_predef('CDORKED');
-        print_critical( "\t" . $named . " has a SHA-1 signature of " . $sha1sum );
-        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
     }
 }
 
 sub check_sha1_sigs_ssh {
     my $ssh = '/usr/bin/ssh';
     return if !-e $ssh;
-    my $infected = 0;
     return unless my $sha1sum = timed_run( 0, 'sha1sum', $ssh );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
@@ -8181,23 +7990,18 @@ sub check_sha1_sigs_ssh {
 
     for my $sig (@sigs) {
         if ( $sha1sum eq $sig ) {
-            $infected = 1;
+            print_ebury_cdorked_predef('EBURY');
+            print_critical( "\t" . $ssh . " has a SHA-1 signature of " . $sha1sum );
+            print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
+            print_critical();
             last;
         }
-    }
-
-    if ( $infected == 1 ) {
-        print_ebury_cdorked_predef('EBURY');
-        print_critical( "\t" . $ssh . " has a SHA-1 signature of " . $sha1sum );
-        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
-        print_critical();
     }
 }
 
 sub check_sha1_sigs_ssh_add {
     my $ssh_add = '/usr/bin/ssh-add';
     return if !-e $ssh_add;
-    my $infected = 0;
     return unless my $sha1sum = timed_run( 0, 'sha1sum', $ssh_add );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
@@ -8209,22 +8013,18 @@ sub check_sha1_sigs_ssh_add {
 
     for my $sig (@sigs) {
         if ( $sha1sum eq $sig ) {
-            $infected = 1;
+            print_ebury_cdorked_predef('EBURY');
+            print_critical( "\t$ssh_add has a SHA-1 signature of $sha1sum\n");
+            print_critical( "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n");
+            print_critical();
             last;
         }
-    }
-
-    if ( $infected == 1 ) {
-        print_ebury_cdorked_predef('EBURY');
-        print "\t$ssh_add has a SHA-1 signature of $sha1sum\n";
-        print "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n";
     }
 }
 
 sub check_sha1_sigs_sshd {
     my $sshd = '/usr/sbin/sshd';
     return if !-e $sshd;
-    my $infected = 0;
     return unless my $sha1sum = timed_run( 0, 'sha1sum', $sshd );
     if ( $sha1sum =~ m{ \A (\S+) \s }xms ) {
         $sha1sum = $1;
@@ -8239,16 +8039,12 @@ sub check_sha1_sigs_sshd {
 
     for my $sig (@sigs) {
         if ( $sha1sum eq $sig ) {
-            $infected = 1;
+            print_ebury_cdorked_predef('EBURY');
+            print_critical( "\t" . $sshd . " has a SHA-1 signature of " . $sha1sum );
+            print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
+            print_critical();
             last;
         }
-    }
-
-    if ( $infected == 1 ) {
-        print_ebury_cdorked_predef('EBURY');
-        print_critical( "\t" . $sshd . " has a SHA-1 signature of " . $sha1sum );
-        print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf");
-        print_critical();
     }
 }
 
@@ -8388,7 +8184,6 @@ sub check_for_dirtycow_passwd {
 }
 
 sub check_for_cpro {
-    my @bad_paths;
     my @paths = qw(
       /YasITCSP/
       /etc/customcspips
@@ -8406,12 +8201,7 @@ sub check_for_cpro {
       /var/log/updatecp/
     );
 
-    for my $path (@paths) {
-
-        if ( -e $path ) {
-            push @bad_paths, $path;
-        }
-    }
+    my @bad_paths = grep { -e $_ } @paths;
     if (@bad_paths) {
         print_generic_hack_predef('C.PRO');
         print_critical('The following files or directories were found:');
@@ -8422,7 +8212,6 @@ sub check_for_cpro {
 }
 
 sub check_for_fkcplisc {
-    my @bad_paths;
     my @paths = qw(
       /bin/cplicense
       /bin/cplicense-32bit
@@ -8436,12 +8225,7 @@ sub check_for_fkcplisc {
       /usr/local/sectools
     );
 
-    for my $path (@paths) {
-
-        if ( -e $path ) {
-            push @bad_paths, $path;
-        }
-    }
+    my @bad_paths = grep { -e $_ } @paths;
     if (@bad_paths) {
         print_generic_hack_predef('FKCPLISC');
         print_critical('The following files or directories were found:');
@@ -8452,18 +8236,12 @@ sub check_for_fkcplisc {
 }
 
 sub check_for_cgls {
-    my @bad_paths;
     my @paths = qw(
       /etc/cron.d/cgls
       /usr/local/cgls
     );
 
-    for my $path (@paths) {
-        if ( -e $path ) {
-            push @bad_paths, $path;
-        }
-    }
-
+    my @bad_paths = grep { -e $_ } @paths;
     if (@bad_paths) {
         print_generic_hack_predef('CGLS');
         print_critical('The following files or directories were found:');
