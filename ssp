@@ -8545,7 +8545,7 @@ END_OF_TEMPLATE
         if ( $pid == 0 ) {
             close $out_r;
 
-            open STDIN,  '</dev/null';
+            open STDIN,  '<',  '/dev/null';
             open STDOUT, '>&', $out_w or die "Unable to redirect stdout: $!";
             open STDERR, '>&', $out_w or die "Unable to redirect stderr: $!";
 
