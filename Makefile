@@ -5,7 +5,6 @@ PERLCRITIC=perlcritic
 PERLCRITICRC=tools/.perlcriticrc
 PERLTIDY=perltidy
 PERLTIDYRC=tools/.perltidyrc
-EMPTY=
 NEW_VER=$(shell grep 'our $$VERSION' $(PROJECT) | awk '{print $$4}' | sed -e "s/'//g" -e 's/;//')
 
 .DEFAULT: help
@@ -45,7 +44,7 @@ endif
 
 ## Make final commit
 final:
-	git add $(PROJECT) SHA512SUM
+	git add $(PROJECT)
 	git commit -m "$(PROJECT) $(NEW_VER)"
 	echo 'Ready to git push to origin!'
 
