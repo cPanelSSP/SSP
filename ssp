@@ -2278,7 +2278,6 @@ sub get_backup_config {
         close $backupconf_fh;
     }
 
-    #XXX we don't actually use this data anywhere
     if ( -f $old_backup_config && open( my $backupconf_fh, '<', $old_backup_config ) ) {
         local $/ = undef;
         $old = { map { ( split( /\s/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($backupconf_fh) ) };
@@ -2292,13 +2291,8 @@ sub print_backups_info {
     my %new_dest = ();
     my ( $new_backups_cron, $new_backups_status ) = ( 0, 'No Config' );
     my ( $old_backups_cron, $old_backups_status ) = ( 0, 'No Config' );
-    my $warning           = 0;
-    my $new_backup_dir    = '/var/cpanel/backups/';
-    my $new_backup_config = $new_backup_dir . 'config';
-    my $old_backup_config = '/etc/cpbackup.conf';
-
-    #XXX this is REALLY misleading -- $new is the second arg, but we call it $old here!
-    my ( undef, $old ) = get_backup_config();
+    my $warning        = 0;
+    my $new_backup_dir = '/var/cpanel/backups/';
 
     if ( defined( $new_backup_conf->{'BACKUPENABLE'} ) && $new_backup_conf->{'BACKUPENABLE'} =~ /yes/ ) {
         my @dir_contents = ();
@@ -2371,7 +2365,7 @@ sub print_backups_info {
         }
         elsif ( $old_backup_conf->{'BACKUPENABLE'} eq 'yes' ) {
             $old_backups_status = 'Enabled';
-            if ( defined( $old->{'BACKUPACCTS'} ) && $old->{'BACKUPACCTS'} eq 'yes' ) {
+            if ( defined( $old_backup_conf->{'BACKUPACCTS'} ) && $old_backup_conf->{'BACKUPACCTS'} eq 'yes' ) {
                 $old_backups_status .= '/WithAccounts';
             }
             elsif ( defined( $old_backup_conf->{'BACKUPACCTS'} ) && $old_backup_conf->{'BACKUPACCTS'} eq 'no' ) {
