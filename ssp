@@ -33,7 +33,7 @@ use Cwd qw(abs_path);
 use Getopt::Long();
 
 # Application version (IMPORTANT! Increment this before submitting a pull request)
-our $VERSION = '4.99.172';
+our $VERSION = '4.99.173';
 
 # Global variables that alter application runtime
 our $opt_timeout;    # How long to wait for system commands to finish executing
@@ -76,27 +76,27 @@ our $mysql_numeric_version;
 our $mysql_full_version;
 our $mysql_datadir;
 our $mysql_error_log;
-our @mysql_rpm_versions;        # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
-our @extended_rpm_list;         # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n'
-our @rpm_list;                  # rpm -qa
-our %cpconf;                    # cpanel.config
-our $pure_ftpd_conf;            # /etc/pure-ftpd.conf
-our $pro_ftpd_conf;             # /etc/proftpd.conf
-our $exim_local_opts;           # /etc/exim.conf.localopts
-our $old_backup_conf;           # /etc/cpbackup.conf
-our $new_backup_conf;           # /var/cpanel/backups/config
-our $cpupdate_conf;             # /etc/cpupdate.conf
-our @apache_version_output;     # httpd -v
-our $apache_version;            # Version string
-our $apache_built;              # Build date
-our $apache_ea_version;         # EA version which built Apache
-our $apache_modules;            # Hash of Apache modules
+our @mysql_rpm_versions;       # certain installed rpms that begin with MySQL- (e.g., MySQL-server, etc)
+our @extended_rpm_list;        # rpm -qa --queryformat '%{ARCH}\t%{NAME}\t%{VERSION}\t%{RELEASE}\n'
+our @rpm_list;                 # rpm -qa
+our %cpconf;                   # cpanel.config
+our $pure_ftpd_conf;           # /etc/pure-ftpd.conf
+our $pro_ftpd_conf;            # /etc/proftpd.conf
+our $exim_local_opts;          # /etc/exim.conf.localopts
+our $old_backup_conf;          # /etc/cpbackup.conf
+our $new_backup_conf;          # /var/cpanel/backups/config
+our $cpupdate_conf;            # /etc/cpupdate.conf
+our @apache_version_output;    # httpd -v
+our $apache_version;           # Version string
+our $apache_built;             # Build date
+our $apache_ea_version;        # EA version which built Apache
+our $apache_modules;           # Hash of Apache modules
 our ( $lsws_full_version, $lsws_numeric_version );
 our ( $ea3_phpversion, $ea3_php5version, $ea3_php4version, $ea3_php4handler, $ea3_php5handler, $ea3_suexec );
 our @lsof_80;
 our $openssl_rpm_changelog;
 our $original_path;
-our %socket;                    # Dispatcher for optional Socket module usage
+our %socket;                   # Dispatcher for optional Socket module usage
 
 run(@ARGV) unless caller;
 
@@ -163,13 +163,18 @@ sub init {
                     $apache_built = $1;
                     $apache_built =~ s/^\s+//g;
                 }
-                if (m{ \A Cpanel::Easy::Apache \s+ (.*) \z }xms) {
-                    $apache_ea_version = $1;
+                if ( !$ea4 ) {
+                    if (m{ \A Cpanel::Easy::Apache \s+ (.*) \z }xms) {
+                        $apache_ea_version = $1;
+                    }
                 }
             }
-        }
 
-        if ($ea4) { $apache_ea_version = ''; }
+            if ($ea4) {
+                chomp( $apache_ea_version = timed_run( 0, 'rpm', '-qf', $httpd_bin ) );
+                $apache_ea_version =~ s/\.\w\d{1,3}\D+\d+\n//;
+            }
+        }
 
         # TODO: use +c 15 so the entire process name is displayed if >9 chars
         @lsof_80 = split /\n/, timed_run( 0, 'lsof', '-n', '-i', 'tcp:80' );
@@ -265,8 +270,8 @@ sub run {
     check_for_os_release_32bit();
     check_for_ea3();
 
-    new_async_job('long_check_list', \&long_check_list);
-    new_async_job('build_rpm_list' , \&build_rpm_list);
+    new_async_job( 'long_check_list', \&long_check_list );
+    new_async_job( 'build_rpm_list',  \&build_rpm_list );
 
     event_loop();
 
@@ -275,8 +280,8 @@ sub run {
     @extended_rpm_list = map {
         my ( $arch, $name, $version, $release ) = split( /\t/, $_ );
         {
-            'name'    => defined $name ? $name : '',
-            'arch'    => defined $arch ? $arch : '',
+            'name'    => defined $name    ? $name    : '',
+            'arch'    => defined $arch    ? $arch    : '',
             'version' => defined $version ? $version : '',
             'release' => defined $release ? $release : '',
         }
@@ -1752,7 +1757,7 @@ sub print_cpanel_info {
 }
 
 sub check_for_cpanel_update {
-    my ($available_tier_version,$local_tier_name);
+    my ( $available_tier_version, $local_tier_name );
     my $match = 0;
 
     return unless defined $cpupdate_conf->{CPANEL};
@@ -1872,13 +1877,15 @@ sub check_for_clustering {
 }
 
 sub print_apache_info {
-    my $output = 'could not determine Apache info!';
+    my $output;
 
-    if ($ea4) {
-        $output = "[ EA4 ] [ $apache_version ]";
+    $output .= "[ EA4 ] " if $ea4;
+
+    if ( not $apache_version or not $apache_built or not $apache_ea_version ) {
+        $output .= 'could not determine Apache info!';
     }
-    elsif ( $apache_version && $apache_built && $apache_ea_version ) {
-        $output = "[ $apache_version ] [ $apache_built w/ $apache_ea_version ]";
+    else {
+        $output .= "[ $apache_version ] [ $apache_built w/ $apache_ea_version ]";
     }
 
     my ( $apache_uptime, $apache_generations );
@@ -1967,7 +1974,7 @@ sub print_ea3_php_configuration {
         return;
     }
 
-    if (open( my $phpconf_fh, '<', $phpconf) ) {
+    if ( open( my $phpconf_fh, '<', $phpconf ) ) {
         while (<$phpconf_fh>) {
             chomp;
             if (/^phpversion: (\d)/) {
@@ -2067,7 +2074,7 @@ sub print_ea3_php_configuration {
 
 sub print_ea4_php_configuration {
     return if !$ea4;
-    my $info = 'UNKNOWN';
+    my $info            = 'UNKNOWN';
     my $fpm_jail_toggle = '/var/cpanel/feature_toggles/apachefpmjail';
     print_info('PHP Default: ');
     if ( defined($ea4_php) && defined( $ea4_php->{default} ) && defined( $ea4_php->{ $ea4_php->{default} }->{release_version} ) && defined( $ea4_php->{ $ea4_php->{default} }->{handler} ) ) {
@@ -2271,7 +2278,6 @@ sub get_backup_config {
         close $backupconf_fh;
     }
 
-    #XXX we don't actually use this data anywhere
     if ( -f $old_backup_config && open( my $backupconf_fh, '<', $old_backup_config ) ) {
         local $/ = undef;
         $old = { map { ( split( /\s/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($backupconf_fh) ) };
@@ -2285,13 +2291,8 @@ sub print_backups_info {
     my %new_dest = ();
     my ( $new_backups_cron, $new_backups_status ) = ( 0, 'No Config' );
     my ( $old_backups_cron, $old_backups_status ) = ( 0, 'No Config' );
-    my $warning           = 0;
-    my $new_backup_dir    = '/var/cpanel/backups/';
-    my $new_backup_config = $new_backup_dir . 'config';
-    my $old_backup_config = '/etc/cpbackup.conf';
-
-    #XXX this is REALLY misleading -- $new is the second arg, but we call it $old here!
-    my ( undef, $old ) = get_backup_config();
+    my $warning        = 0;
+    my $new_backup_dir = '/var/cpanel/backups/';
 
     if ( defined( $new_backup_conf->{'BACKUPENABLE'} ) && $new_backup_conf->{'BACKUPENABLE'} =~ /yes/ ) {
         my @dir_contents = ();
@@ -2364,7 +2365,7 @@ sub print_backups_info {
         }
         elsif ( $old_backup_conf->{'BACKUPENABLE'} eq 'yes' ) {
             $old_backups_status = 'Enabled';
-            if ( defined( $old->{'BACKUPACCTS'} ) && $old->{'BACKUPACCTS'} eq 'yes' ) {
+            if ( defined( $old_backup_conf->{'BACKUPACCTS'} ) && $old_backup_conf->{'BACKUPACCTS'} eq 'yes' ) {
                 $old_backups_status .= '/WithAccounts';
             }
             elsif ( defined( $old_backup_conf->{'BACKUPACCTS'} ) && $old_backup_conf->{'BACKUPACCTS'} eq 'no' ) {
@@ -2754,7 +2755,7 @@ sub check_for_missing_usr_bin_crontab {
 }
 
 sub check_if_upcp_is_running {
-    my $upcp_running   = 0;
+    my $upcp_running = 0;
 
     for my $line (@process_list) {
         if ( $line =~ m{ \A root (?:.*) cPanel \s Update \s \(upcp\) }xms ) {
@@ -2782,7 +2783,7 @@ sub check_valid_upcp {
     }
     else {
         my $update_now_text = '';
-        if ( open( my $updatenow_fh, '<', $updatenow_static) ) {
+        if ( open( my $updatenow_fh, '<', $updatenow_static ) ) {
             local $/ = undef;
             $update_now_text = readline($updatenow_fh);
             close $updatenow_fh;
@@ -2920,7 +2921,7 @@ sub check_for_custom_opt_mods {
 
     return if !-e $dir;
 
-    my @custom_opt_mods;           # items in /var/cpanel/easy/apache/custom_opt_mods/
+    my @custom_opt_mods;    # items in /var/cpanel/easy/apache/custom_opt_mods/
     find(
         sub {
             # ignore these, Attracta:
@@ -3307,9 +3308,9 @@ sub check_for_non_default_permissions {
         '/etc/trusted_mail_users'               => { mode => ['0640'], group => 'mail'},
         '/etc/trustedmailhosts'                 => { mode => ['0640'], group => 'mail'},
         '/etc/userdomains'                      => { mode => ['0640'], group => 'mail'},
-        '/etc/valiases'                         => { mode => ['0755'] },
+        '/etc/valiases'                         => { mode => ['0755', '0711'] },
         '/etc/vdomainaliases'                   => { mode => ['0711'] },
-        '/etc/vfilters'                         => { mode => ['0755'] },
+        '/etc/vfilters'                         => { mode => ['0755', '0711'] },
         '/etc/webspam'                          => { mode => ['0644'] },
         '/home'                                 => { mode => [ '0755', '0711' ] },
         '/home1'                                => { mode => [ '0755', '0711' ] },
@@ -4133,7 +4134,7 @@ sub check_for_usr_local_cpanel_hooks {
 
     my @usr_local_cpanel_hooks;    # items in /usr/local/cpanel/hooks/
     find(
-        sub  {
+        sub {
             my $file = $File::Find::name;
             if ( -f $file and $file !~ m{ ( README | \.example ) \z }xms ) {
                 $file =~ s#/usr/local/cpanel/hooks/##;
@@ -4260,7 +4261,7 @@ sub check_for_empty_easyapache_profiles {
     my $dir = '/var/cpanel/easy/apache/profile';
     return unless -d $dir;
 
-    my @easyapache_templates;      # items in /var/cpanel/easy/apache/profile/
+    my @easyapache_templates;    # items in /var/cpanel/easy/apache/profile/
     find(
         sub {
             my $file = $File::Find::name;
@@ -4902,7 +4903,7 @@ sub check_for_non_default_modsec_rules {
 
 sub check_etc_hosts_sanity {
     my $hosts = '/etc/hosts';
-    my ($localhost,$httpupdate,$localhost_not_127,$hostname_entry) = (0,0,0,0);
+    my ( $localhost, $httpupdate, $localhost_not_127, $hostname_entry ) = ( 0, 0, 0, 0 );
 
     if ( !-f $hosts ) {
         print_warn("$hosts: ");
@@ -4937,12 +4938,12 @@ sub check_etc_hosts_sanity {
         print_warning('no entry for localhost, or commented out');
     }
 
-    if ( $httpupdate ) {
+    if ($httpupdate) {
         print_warn("$hosts: ");
         print_warning('contains an entry for httpupdate.cpanel.net');
     }
 
-    if ( $localhost_not_127 ) {
+    if ($localhost_not_127) {
         print_warn("$hosts: ");
         print_warning('contains an entry for "localhost" that isn\'t 127.0.0.1! This can break EA and webmail logins');
     }
@@ -5323,7 +5324,7 @@ sub check_for_custom_exim_conf_local {
         close $file_fh;
     }
 
-    if ( $is_customized ) {
+    if ($is_customized) {
         print_warn('Exim: ');
         print_warning("$exim_conf_local contains customizations");
     }
@@ -5479,7 +5480,7 @@ sub check_for_broken_rpm {
 
 sub check_for_ea4_mismatch {
     return unless $ea4;
-    my ($cp_count,$cl_count) = (0,0);
+    my ( $cp_count, $cl_count ) = ( 0, 0 );
     foreach (@rpm_list) {
         $cp_count++ if /^ea-.*\.cpanel/;
         $cl_count++ if /^ea-.*\.cloudlinux/;
@@ -5739,7 +5740,7 @@ sub check_distcache_and_libapr {
         close $profile_fh;
     }
 
-    if ( $has_distcache ) {
+    if ($has_distcache) {
         my @ldd = split /\n/, timed_run( 0, 'ldd', $httpd_bin );
         for my $line (@ldd) {
             if ( $line =~ m{ libapr(?:.*) \s+ => \s+ (\S+) }xms ) {
@@ -5751,7 +5752,7 @@ sub check_distcache_and_libapr {
         }
     }
 
-    if ( $httpd_not_linked_to_system_apr ) {
+    if ($httpd_not_linked_to_system_apr) {
         print_warn('Apache: ');
         print_warning('httpd linked to system APR, not APR in /usr/local/apache/lib/ (see EAL-2551)');
     }
@@ -5775,7 +5776,7 @@ sub check_for_custom_postgres_repo {
         }
     }
 
-    if ( $has_postgres_repo ) {
+    if ($has_postgres_repo) {
         print_warn('PostgreSQL: ');
         print_warning('custom Postgres repo (pgdg-*) found in /etc/yum.repos.d/ . See tickets 3690445, 3568781');
     }
@@ -5785,9 +5786,9 @@ sub check_for_rpm_overrides {
     my $rpm_override_dir = '/var/cpanel/rpm.versions.d/';
     return if !-d $rpm_override_dir;
 
-    my $local_versions   = '/var/cpanel/rpm.versions.d/local.versions';
-    my $easy_versions    = '/var/cpanel/rpm.versions.d/easy.versions';
-    my $cloud_versions   = '/var/cpanel/rpm.versions.d/cloudlinux.versions';
+    my $local_versions = '/var/cpanel/rpm.versions.d/local.versions';
+    my $easy_versions  = '/var/cpanel/rpm.versions.d/easy.versions';
+    my $cloud_versions = '/var/cpanel/rpm.versions.d/cloudlinux.versions';
     my $md5_local;
     my $md5_easy;
     my $md5_cloud;
@@ -5914,7 +5915,7 @@ sub check_var_cpanel_immutable_files {
 }
 
 sub check_for_noxsave_in_grub_conf {
-    my $grub_conf   = '/boot/grub/grub.conf';
+    my $grub_conf = '/boot/grub/grub.conf';
     return if !-f $grub_conf;
 
     if ( open my $grub_fh, '<', $grub_conf ) {
@@ -6537,10 +6538,10 @@ sub check_for_processes_killed_by_oom {
     my $log = "/var/log/messages";
     return unless -e $log;
 
-    my $size           = ( stat($log) )[7];
+    my $size = ( stat($log) )[7];
     return unless defined $size;
 
-    my $seek_position = 0;
+    my $seek_position  = 0;
     my $bytes_to_check = 10485760;
     if ( $size > $bytes_to_check ) {
         $seek_position = ( $size - $bytes_to_check );
@@ -6707,7 +6708,7 @@ sub check_for_port_80_not_apache {
     return if !@lsof_80;
     return if scalar @lsof_80 < 2;
 
-    my ( $filename, $pid);
+    my ( $filename, $pid );
 
     for my $line (@lsof_80) {
         if ( $line =~ m{ \A (\S+) \s+ (\d+) (?:.*) \(LISTEN\) }xms ) {
@@ -7041,6 +7042,7 @@ sub check_for_openssl_secadv_20140605 {
     return unless ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)([a-z])([a-z]?)/ );
 
     my ( $maj, $min, $patch ) = ( $1, $2, $3 );
+
     # If we map the alphas into a number and sum the values the version will be compatible with version_compare() and save us a lot of trouble, i.e. h=8, m=13, and za=27
     my %al2num = map { ( "a" .. "z" )[ $_ - 1 ] => $_ } ( 1 .. 26 );    # Isn't there a better way to do this?
     my $sub = 0;
@@ -7477,7 +7479,7 @@ sub check_updatelog {
     close $file_fh;
 
     foreach ( split( "\n", $log_data ) ) {
-        if (m{ installing .+ needs .+ on .+ filesystem }x ) {
+        if (m{ installing .+ needs .+ on .+ filesystem }x) {
             print_warn("WHM update: ");
             print_warning( $log . ' contains errors which indicate that RPM installation had insufficient free disk space available' );
             return;
@@ -7770,7 +7772,7 @@ sub check_for_cdorked_A {
         next if !$httpd;
 
         if ( $httpd =~ /(open_tty|hangout|ptsname|Qkkbal)/ ) {
-            my $signature   = $check_bin . ": \"" . $1 . "\"";
+            my $signature = $check_bin . ": \"" . $1 . "\"";
             print_ebury_cdorked_predef('CDORKED');
             print_critical("\tString found in $signature (see ticket 4482347)");
             print_critical();
@@ -7789,7 +7791,7 @@ sub check_for_cdorked_B {
         }
     }
 
-    if ( $cdorked_files ) {
+    if ($cdorked_files) {
         print_ebury_cdorked_predef('CDORKED');
         print_critical("\tThe following files were found (note the spaces at the end of the files):");
         print_critical("\t$cdorked_files");
@@ -8014,8 +8016,8 @@ sub check_sha1_sigs_ssh_add {
     for my $sig (@sigs) {
         if ( $sha1sum eq $sig ) {
             print_ebury_cdorked_predef('EBURY');
-            print_critical( "\t$ssh_add has a SHA-1 signature of $sha1sum\n");
-            print_critical( "\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n");
+            print_critical("\t$ssh_add has a SHA-1 signature of $sha1sum\n");
+            print_critical("\tReference: p67-68 from http://www.welivesecurity.com/wp-content/uploads/2014/03/operation_windigo.pdf\n");
             print_critical();
             last;
         }
@@ -8538,7 +8540,7 @@ END_OF_TEMPLATE
         if ( $pid == 0 ) {
             close $out_r;
 
-            open STDIN,  '</dev/null';
+            open STDIN,  '<',  '/dev/null';
             open STDOUT, '>&', $out_w or die "Unable to redirect stdout: $!";
             open STDERR, '>&', $out_w or die "Unable to redirect stderr: $!";
 
