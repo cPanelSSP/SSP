@@ -4272,14 +4272,15 @@ sub check_for_empty_easyapache_profiles {
         },
         $dir
     );
+    if (@easyapache_templates) {
+        my $templates;
+        for my $template (@easyapache_templates) {
+            $templates .= "$template ";
+        }
 
-    my $templates;
-    for my $template (@easyapache_templates) {
-        $templates .= "$template ";
+        print_warn("EA3 Empty template(s) in $dir: ");
+        print_warning($templates);
     }
-
-    print_warn("EA3 Empty template(s) in $dir: ");
-    print_warning($templates);
 }
 
 sub check_for_missing_timezone_from_phpini {
